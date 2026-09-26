@@ -6,7 +6,7 @@ Build a local, autonomous NetHack agent whose long-term success criterion is asc
 
 ## Current status
 
-The deterministic NLE adapter is implemented and covered by real-environment tests. It owns seeded Staircase setup, public zero-copy observations, legal-action validation, lifecycle state, and ttyrec finalization. The observation projector is implemented. The coordinator, persistence, control API, and web UI described below are not yet implemented.
+The deterministic NLE adapter is implemented and covered by real-environment tests. It owns seeded Staircase setup, public zero-copy observations, legal-action validation, lifecycle state, and ttyrec finalization. The observation projector and the structured Ollama decision model are implemented. The coordinator, persistence, control API, and web UI described below are not yet implemented.
 
 ## System context
 
@@ -73,6 +73,16 @@ buffers. Raw arrays do not cross this boundary.
 A state machine, not an open-ended chat loop. It owns run lifecycle (`idle`, `running`, `paused`, `terminal`), current goal, active skill, prompt cadence, inference retries, and action execution. The local model chooses goals or skills. Deterministic code performs prompt handling, validates actions, and executes routine low-level steps where a skill defines them.
 
 If Ollama times out, emits malformed structured output, or proposes no legal action, the coordinator performs one schema-repair retry. A second failure pauses the run, persists diagnostics, and waits for operator resume or stop. It must not silently substitute another policy.
+
+`OllamaDecisionModel` implements the model boundary. It sends the projected
+observation and the legal action table to Ollama with the `DECISION_SCHEMA`
+JSON schema as the structured output format, thinking disabled, temperature 0,
+and a 512-token cap. `parse_action_decision` requires a goal, one to five unique
+legal candidates with scores in [0, 1], a selected legal action that is among
+the candidates with the highest score, and a bounded rationale. A transport or
+validation failure triggers exactly one repair prompt that includes the error;
+a second failure raises `DecisionFailure`. Reported metrics sum tokens and
+latency across both attempts.
 
 ### Knowledge layers
 
