@@ -1,0 +1,200 @@
+{
+  "acceptance": {
+    "checks": {
+      "all_seeds_evaluated": false,
+      "complete_records": true,
+      "fixed_configuration": true,
+      "gate_rejections": true,
+      "inputs_unchanged": true,
+      "invalid_actions": true,
+      "min_task_successes": false,
+      "required_success_seeds": false
+    },
+    "development_model": false,
+    "milestone_accepted": false,
+    "passed": false,
+    "reasons": [
+      "suite incomplete; missing or interrupted seeds [3, 4, 5, 6, 7, 8, 9, 10]",
+      "0 task successes; at least 6 required",
+      "required seeds did not succeed: [6]"
+    ]
+  },
+  "aggregate": {
+    "decision_failures": 0,
+    "decisions": {
+      "failed_decisions": 0,
+      "latency_max_ms": 19139.04,
+      "latency_p50_ms": 6443.283,
+      "latency_p95_ms": 9367.251,
+      "latency_samples": 1158,
+      "model_decisions": 1158,
+      "output_tokens": 277273,
+      "prompt_tokens": 1892933,
+      "repaired_decisions": 6
+    },
+    "evaluated_seeds": 2,
+    "gate_rejections": 0,
+    "integrity_failures": [],
+    "invalid_actions": 0,
+    "outcomes": {
+      "stopped": 1,
+      "truncated": 1
+    },
+    "selection_sources": {
+      "deterministic_prompt": 0,
+      "deterministic_skill": 0,
+      "model_fallback": 1156
+    },
+    "steps": 1156,
+    "task_successes": 0,
+    "total_wall_seconds": 7913.378
+  },
+  "configuration": {
+    "data_directory": "data/evaluations/staircase-v1",
+    "knowledge_version": "staircase-reviewed-v1+sha256:96dd923822c16527cfc9a9e4b3b334e66818375f3faf72d419627b45ae8ee324",
+    "model": "gemma4-nethack:latest",
+    "model_mode": "ollama",
+    "ollama_num_ctx": 8192,
+    "policy_version": "hierarchical-staircase-v1"
+  },
+  "finished_at": "2026-09-26T20:22:18+00:00",
+  "report_schema_version": 2,
+  "requested_seeds": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+  ],
+  "results": [
+    {
+      "configuration": {
+        "character": "val-dwa-law",
+        "environment": "NetHackStaircase-v0",
+        "knowledge_version": "staircase-reviewed-v1+sha256:96dd923822c16527cfc9a9e4b3b334e66818375f3faf72d419627b45ae8ee324",
+        "max_episode_steps": 1000,
+        "model": "gemma4-nethack:latest",
+        "nle_version": "1.3.0",
+        "ollama_num_ctx": 8192,
+        "policy_version": "hierarchical-staircase-v1"
+      },
+      "decision_failures": 0,
+      "decisions": {
+        "failed_decisions": 0,
+        "latency_max_ms": 19139.04,
+        "latency_p50_ms": 6401.844,
+        "latency_p95_ms": 9494.408,
+        "latency_samples": 1001,
+        "model_decisions": 1001,
+        "output_tokens": 240582,
+        "prompt_tokens": 1636689,
+        "repaired_decisions": 6
+      },
+      "ended_by": "episode_end",
+      "error": null,
+      "event_count": 1002,
+      "final_state": "terminal",
+      "gate_rejections": 0,
+      "integrity_ok": true,
+      "integrity_problems": [],
+      "invalid_actions": 0,
+      "ollama_version": "0.34.4",
+      "outcome": "truncated",
+      "run_id": "2d58d89d-2be8-4cad-b91c-779927cf34b9",
+      "seed": 1,
+      "selection_sources": {
+        "deterministic_prompt": 0,
+        "deterministic_skill": 0,
+        "model_fallback": 1000
+      },
+      "steps": 1000,
+      "ttyrec_exists": true,
+      "ttyrec_path": "runs/2d58d89d-2be8-4cad-b91c-779927cf34b9/episode-awqcj9a8/nle.84299.0.ttyrec3.bz2",
+      "wall_seconds": 6860.241
+    },
+    {
+      "configuration": {
+        "character": "val-dwa-law",
+        "environment": "NetHackStaircase-v0",
+        "knowledge_version": "staircase-reviewed-v1+sha256:96dd923822c16527cfc9a9e4b3b334e66818375f3faf72d419627b45ae8ee324",
+        "max_episode_steps": 1000,
+        "model": "gemma4-nethack:latest",
+        "nle_version": "1.3.0",
+        "ollama_num_ctx": 8192,
+        "policy_version": "hierarchical-staircase-v1"
+      },
+      "decision_failures": 0,
+      "decisions": {
+        "failed_decisions": 0,
+        "latency_max_ms": 8767.613,
+        "latency_p50_ms": 6672.838,
+        "latency_p95_ms": 7679.828,
+        "latency_samples": 157,
+        "model_decisions": 157,
+        "output_tokens": 36691,
+        "prompt_tokens": 256244,
+        "repaired_decisions": 0
+      },
+      "ended_by": "interrupted",
+      "error": null,
+      "event_count": 159,
+      "final_state": "stopped",
+      "gate_rejections": 0,
+      "integrity_ok": true,
+      "integrity_problems": [],
+      "invalid_actions": 0,
+      "ollama_version": "0.34.4",
+      "outcome": "stopped",
+      "run_id": "18f6328e-477d-4ad2-b949-f3a6dcbaf20c",
+      "seed": 2,
+      "selection_sources": {
+        "deterministic_prompt": 0,
+        "deterministic_skill": 0,
+        "model_fallback": 156
+      },
+      "steps": 156,
+      "ttyrec_exists": true,
+      "ttyrec_path": "runs/18f6328e-477d-4ad2-b949-f3a6dcbaf20c/episode-j4bna9s4/nle.84299.0.ttyrec3.bz2",
+      "wall_seconds": 1053.137
+    }
+  ],
+  "started_at": "2026-09-26T18:11:51+00:00",
+  "status": "aborted",
+  "status_reason": "policy replaced before completion",
+  "suite": {
+    "acceptance": {
+      "max_gate_rejections": 0,
+      "max_invalid_actions": 0,
+      "min_task_successes": 6,
+      "require_complete_records": true,
+      "required_success_seeds": [
+        6
+      ]
+    },
+    "character": "val-dwa-law",
+    "environment": "NetHackStaircase-v0",
+    "max_episode_steps": 1000,
+    "path": "evaluation/staircase-v1.json",
+    "seed_selection": "Suite seeds 1 through 10 were fixed on 2026-09-27 before any suite episode ran. Seed 6 is the milestone reference seed. Seeds must not be replaced, reordered for reporting, or dropped after results are known; a different seed set requires a new suite_id.",
+    "seeds": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "sha256": "a3adb39b1ce6c7cb098a33a8855b0e2e9b4a5dd2891f4063c031c5f8b74ec0f7",
+    "step_cap_rationale": "1000 NLE steps per episode, fixed before any suite episode ran. It matches the cap of the earlier documented trajectory smoke and bounds a real-model suite at 10000 hierarchical actions, since most exploration steps require one local model fallback decision.",
+    "suite_id": "staircase-v1"
+  }
+}
