@@ -1,0 +1,54 @@
+site_name: NetHack Agent Documentation
+docs_dir: ..
+site_dir: /tmp/nethack-agent-mkdocs-site
+use_directory_urls: true
+exclude_docs: |
+  # Version control, virtual environments, and caches
+  .git/
+  .venv/
+  .pytest_cache/
+  .ruff_cache/
+  .mypy_cache/
+  **/__pycache__/
+  *.pyc
+
+  # External dumps and archives
+  *.xml
+  *.gz
+  *.bz2
+  *.xz
+  *.tar
+  *.zip
+  *.7z
+  docs/external/nethack-wiki-xml-dump/*.xml*
+
+  # Runtime data directories, databases, and artifacts
+  *.sqlite3*
+  *.db*
+  *.ttyrec*
+  nethack-agent/data/
+  nethack-agent/nle_data/
+  **/data/
+  **/nle_data/
+
+  # Application source, tests, scripts, and package manifests
+  nethack-agent/src/
+  nethack-agent/tests/
+  nethack-agent/pyproject.toml
+  nethack-agent/uv.lock
+  _agents/skills/**/scripts/
+  *.py
+
+  # MkDocs configuration
+  docs/mkdocs.yml
+markdown_extensions:
+  - pymdownx.tasklist
+plugins:
+  - search
+  - mermaid2
+theme:
+  name: mkdocs
+validation:
+  omitted_files: ignore
+  absolute_links: ignore
+  unrecognized_links: ignore
