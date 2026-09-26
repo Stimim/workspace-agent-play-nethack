@@ -34,6 +34,12 @@ Before changing behavior, read:
    and seed suite stay fixed during a suite.
 8. Every behavioral change requires an exercised smoke path. Record only
    verification that actually ran.
+9. Commits created by a coding agent must follow
+   [`_agents/skills/omp-commit/SKILL.md`](_agents/skills/omp-commit/SKILL.md).
+   Its deterministic script runs the repository checks, obtains the active OMP
+   conversation UUID from process/session evidence, and writes exactly one
+   `OMP-Conversation: <conversation-uuid>` Git trailer. Never invent or
+   manually substitute an identifier.
 
 ## Knowledge boundaries
 

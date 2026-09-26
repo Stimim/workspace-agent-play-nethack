@@ -27,6 +27,10 @@ Acceptance: the fixed local policy succeeds on at least 6 of 10 committed determ
 - [ ] Evaluate whether Laya improves routine action ranking enough to justify another model runtime.
 - [ ] Progress through NLE tasks that exercise exploration, gold, food, and the Oracle.
 
+### Development tooling
+- [x] Add the `omp-commit` skill: derive the active conversation UUID from
+  unambiguous live OMP evidence, normalize its Git trailer, and run format/lint
+  checks before allowing a commit.
 ## Later: autonomous ascension
 
 - [ ] Establish staged full-game benchmarks and survival metrics.
