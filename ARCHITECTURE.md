@@ -1,0 +1,124 @@
+# Architecture
+
+## Goal
+
+Build a local, autonomous NetHack agent whose long-term success criterion is ascending with the Amulet of Yendor. Development and debugging may use online coding agents; gameplay must remain offline except for loopback communication with local services.
+
+## Current status
+
+The repository is at the developer-ready bootstrap stage. The executable code currently provides environment and model smoke checks. The live agent loop, persistence, and web UI described below are the next implementation milestone, not completed components.
+
+## System context
+
+```mermaid
+flowchart LR
+    NLE[NetHack Learning Environment] --> OBS[Observation projector]
+    OBS --> COORD[Agent coordinator]
+    KB[Curated runtime knowledge] --> COORD
+    OLLAMA[Local Ollama model] <--> COORD
+    COORD --> GATE[Deterministic action gate]
+    GATE --> NLE
+    COORD --> EVENTS[(SQLite event log)]
+    NLE --> TTY[ttyrec artifacts]
+    EVENTS --> API[Local control API and WebSocket]
+    TTY --> API
+    API -->|events and snapshots| UI[Browser UI]
+    UI -->|start, pause, step, stop| API
+    DEV[Coding agent or CLI] -->|same run-control API| API
+    API -->|validated run-control commands| COORD
+```
+
+## Component boundaries
+
+### `nethack-agent/`
+
+The product domain. It owns the Python application, local-model integration, NLE adapter, run data, web service, browser assets, evaluation suites, and compact knowledge supplied to the playing model. It can become a separate repository later without moving unrelated project history.
+
+### NLE adapter
+
+Use the maintained [`NetHack-LE/nle`](https://github.com/NetHack-LE/nle) package through its Gymnasium API. The first task is `NetHackStaircase-v0`; the eventual full-game environment is `NetHackScore-v0` or a narrowly derived environment if a proven requirement appears.
+
+The adapter must:
+
+- pin the NLE release and expose its version in run metadata;
+- select a fixed beginner-friendly character, initially lawful dwarven Valkyrie (`val-dwa-law`);
+- save every evaluated episode as ttyrec;
+- use explicit seeds and deterministic time-derived effects when supported;
+- expose only legitimate observations to the policy; NLE's internal task state must never enter a model prompt;
+- translate model intent into the finite action set and reject invalid actions before calling `env.step`.
+
+### Observation projector
+
+Converts NLE arrays into a compact, typed state: visible map, player statistics, messages, inventory, prompts, and recent changes. Raw arrays remain available to deterministic skills and replay, but prompt construction must avoid repeated copies and unbounded history.
+
+### Agent coordinator
+
+A state machine, not an open-ended chat loop. It owns run lifecycle (`idle`, `running`, `paused`, `terminal`), current goal, active skill, prompt cadence, inference retries, and action execution. The local model chooses goals or skills. Deterministic code performs prompt handling, validates actions, and executes routine low-level steps where a skill defines them.
+
+If Ollama times out, emits malformed structured output, or proposes no legal action, the coordinator performs one schema-repair retry. A second failure pauses the run, persists diagnostics, and waits for operator resume or stop. It must not silently substitute another policy.
+
+### Knowledge layers
+
+Two audiences require separate material:
+
+1. `_agents/skills/` contains tools and procedures for online coding agents working on the repository. These may inspect the ignored NetHackWiki dump and produce reviewed project changes.
+2. `nethack-agent/knowledge/` contains concise, versioned, cited facts suitable for retrieval into the local playing model's context.
+
+The 188 MB wiki XML dump is source material, not a runtime prompt and not committed. Automatic extraction must not become trusted gameplay knowledge without review. Policy, prompts, and knowledge remain fixed throughout an evaluation suite; there is no online self-modification in milestone 1.
+
+### Persistence and replay
+
+SQLite is the authoritative structured event log. Every run will record configuration and version identifiers, seeds, projected observations, goals, candidate actions and scores, chosen action, concise rationale, inference timing and token counts, rewards, errors, and terminal outcome. Large binary arrays should not be duplicated in every event. NLE ttyrec files provide native episode replay and are referenced from the run record.
+
+### Control and observation surface
+
+A local Python service will expose a client-neutral HTTP control/status API and
+stream events over WebSocket. Both the browser UI and coding-agent tools use
+this API; neither communicates with the coordinator directly. A coding agent
+can therefore launch the service, start a run for a specific task and seed,
+observe it, pause or single-step it, and stop it after collecting evidence.
+
+Run creation accepts a typed, validated scenario configuration rather than an
+arbitrary command: environment/task, seed, step cap, and versioned policy,
+model, and knowledge settings. Lifecycle commands are serialized through the
+coordinator state machine. Stop is idempotent and graceful: close NLE, flush
+SQLite events, finalize the ttyrec reference, then report the terminal state.
+
+The first browser UI must show the floor map, player statistics, inventory,
+messages, current goal, candidate actions, chosen action, concise rationale,
+latency, and run status. Controls: start, pause, single-step, and stop. It
+displays structured decision traces, not hidden chain-of-thought.
+
+The service binds to loopback by default and the same control contract must be
+usable without a browser. A coding-agent-orchestrated scenario is a development
+run, not a valid offline evaluation episode; evaluation suites are launched and
+executed without online intervention.
+
+## Runtime constraints
+
+- Python 3.12 and `uv` manage the application environment.
+- NLE 1.3.0 is pinned initially. It supports Python 3.10–3.13, Gymnasium 1.2.0, NetHack 3.6.7, ttyrec output, and the required observations.
+- Ollama is the only model transport in gameplay. The baseline model is `gemma4-nethack:latest`, configurable without code changes.
+- Gameplay must not call cloud APIs, the public web, or remote model endpoints. Configuration rejects non-loopback Ollama URLs.
+- The current RTX 4070 Laptop GPU has 8 GB VRAM while the selected model occupies about 9.6 GB on disk. Partial CPU offload is expected; inference latency must be measured before setting action cadence.
+
+## Evaluation contract: milestone 1
+
+Milestone 1 is complete only when all of the following hold:
+
+- `NetHackStaircase-v0`, fixed lawful dwarven Valkyrie;
+- a committed suite of 10 deterministic seeds;
+- task success on at least 6 seeds, including seed 6;
+- no invalid action reaches NLE;
+- each episode has complete SQLite decision events and a ttyrec reference;
+- gameplay makes no non-loopback network call;
+- the UI remains responsive and its start, pause, step, and stop controls work;
+- prompts, policy, model identifier, and knowledge version are fixed for the entire suite.
+
+A successful Staircase episode means the agent stands on a down staircase, matching NLE's task termination condition; descending is not required.
+
+## Deferred decisions
+
+- Laya or another small decision model may become a reflex or candidate-ranking layer only after the Gemma baseline produces action-level latency and error data.
+- A source fork or submodule of NLE is deferred until a required engine change cannot be implemented cleanly through the public API.
+- Automatic episodic memory, online prompt mutation, and policy training are outside milestone 1 because they undermine reproducibility and are unlikely to help the current local model without an explicit learning design.

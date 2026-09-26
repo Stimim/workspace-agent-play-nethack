@@ -1,0 +1,12 @@
+# Documentation index
+
+- [`../ARCHITECTURE.md`](../ARCHITECTURE.md): current system boundaries, invariants, and milestone contract.
+- [`../TODO_LIST.md`](../TODO_LIST.md): prioritized product work and acceptance criteria.
+- [`development.md`](development.md): reproducible developer setup and checks.
+- [`decisions/`](decisions/): durable architecture decision records.
+- [`notes/`](notes/): chronological development history, discussions, and lessons.
+- [`external/`](external/): instructions for large external source material that is not committed.
+- [`../_agents/`](../_agents/): repository-specific tools and skills for coding agents.
+- [`../nethack-agent/knowledge/`](../nethack-agent/knowledge/): reviewed knowledge made available to the local playing agent.
+
+When behavior or architecture changes, update the relevant canonical document and add a note describing evidence and lessons. Do not use chronological notes as a substitute for correcting stale current documentation.

@@ -1,0 +1,15 @@
+# Large external source material
+docs/external/nethack-wiki-xml-dump/nethackwiki_current.xml
+docs/external/nethack-wiki-xml-dump/*.gz
+docs/external/nethack-wiki-xml-dump/*.xz
+
+# Python and tooling
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.ruff_cache/
+nethack-agent/.venv/
+
+# Runtime data
+nethack-agent/data/
+nethack-agent/nle_data/
