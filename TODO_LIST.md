@@ -2,22 +2,24 @@
 
 This file tracks product work. Completed work and reasoning belong in `docs/notes/`; durable choices belong in `docs/decisions/` and `ARCHITECTURE.md`.
 
-## Now: milestone 1 — Staircase agent
+## Now: milestone 1 — Staircase agent (accepted)
 
 Acceptance: the fixed local policy succeeds on at least 6 of 10 committed deterministic `NetHackStaircase-v0` seeds, including seed 6, with no invalid NLE actions and complete SQLite plus ttyrec replay data.
 
-- [ ] Define typed observation, decision, action, run-state, and event contracts.
+- [x] Define typed observation, decision, action, run-state, and event contracts.
 - [x] Implement the NLE adapter with lawful dwarven Valkyrie, deterministic seeds, ttyrec capture, and explicit legal actions.
 - [x] Build observation projection for map, player statistics, messages, prompts, and inventory.
-- [ ] Build the hierarchical coordinator and deterministic action gate.
+- [x] Build the hierarchical coordinator and deterministic action gate.
 - [x] Add structured Ollama output, one repair retry, then pause-on-failure behavior.
-- [ ] Curate the first local-model knowledge cards from cited NetHackWiki pages.
+- [x] Curate the first local-model knowledge cards from cited NetHackWiki pages.
 - [x] Add SQLite run/event storage and artifact layout.
 - [x] Add the loopback HTTP control/status API and WebSocket event stream; make start, pause, step, stop, and observation usable by both coding-agent tools and the browser.
-- [ ] Add headless scenario commands that launch the service, submit validated run configurations, wait for state transitions, and stop runs gracefully.
-- [ ] Add the dependency-light browser UI: map, status, inventory, structured decisions, and start/pause/step/stop controls.
-- [ ] Commit the 10-seed evaluation suite, including seed 6, and report per-seed outcomes and latency.
-- [ ] Verify gameplay performs no non-loopback network requests.
+- [x] Add headless scenario commands that launch the service, submit validated run configurations, wait for state transitions, and stop runs gracefully.
+- [x] Add the dependency-light browser UI: map, status, inventory, structured decisions, and start/pause/step/stop controls.
+- [x] Commit the 10-seed evaluation suite, including seed 6, with an `eval run` harness that audits SQLite and ttyrec integrity.
+- [x] Report per-seed outcomes and latency for the complete suite with the local model.
+- [x] Meet the milestone acceptance gate on the complete suite.
+- [x] Verify gameplay performs no non-loopback network requests.
 
 ## Next: robust dungeon play
 
@@ -25,6 +27,9 @@ Acceptance: the fixed local policy succeeds on at least 6 of 10 committed determ
 - [ ] Add replay comparison and aggregate run diagnostics.
 - [ ] Add bounded navigation, combat-risk, hunger, inventory, and prompt-handling skills as evidence requires.
 - [ ] Evaluate whether Laya improves routine action ranking enough to justify another model runtime.
+- [ ] Survey the [Janelia FlyEM male CNS connectome](https://www.janelia.org/project-team/flyem/male-cns-connectome) and define a bounded, evidence-driven comparison of any connectome-inspired planning or action-ranking approach against current baselines; this is research, not a production commitment.
+- [ ] Replace the fixed downstairs-only milestone goal with typed traversal goals that can select upstairs, downstairs, and a branch-specific staircase identity; extend memory, intents, and evaluation cases before allowing level changes.
+- [ ] Evaluate model-owned high-level choices when benchmarks expose real trade-offs: descend versus gain resources/levels, pray or use another recovery, and prioritize dangerous visible threats.
 - [ ] Progress through NLE tasks that exercise exploration, gold, food, and the Oracle.
 
 ### Development tooling

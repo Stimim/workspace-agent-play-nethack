@@ -83,10 +83,61 @@ service and wait for state transitions.
   stop, empty post-stop replay, lifespan shutdown, and ttyrec finalization
   without contacting Ollama.
 
-## Known gaps
+## Subsequent status
 
-- Event payloads are untyped JSON; event kinds are strings.
-- Runs left `running` or `paused` in SQLite by a stopped service are not
-  reconciled on restart.
-- Run creation does not allow per-request overrides of task environment, model,
-  character, or knowledge cards; those remain service-level configurations.
+The untyped event payloads and flat one-model-action-per-step loop documented
+above were replaced on 2026-09-27 by discriminated event dataclasses and the
+hierarchical staircase coordinator. Runs left `running` or `paused` in SQLite
+by a stopped service are still not reconciled on restart. Run creation still
+keeps task environment, model, character, and knowledge configuration at the
+service level rather than accepting per-request overrides.
+
+## Verification (2026-09-27 hierarchy and typed events)
+
+- `uv run pytest -q`: 67 tests passed with one upstream Starlette/AnyIO
+  deprecation warning. Coverage includes every event variant and SQLite reopen,
+  corrupt-event rejection, observation/action/decision round trips, route and
+  prompt behavior, model cadence, action gating, cancellation, API event JSON,
+  and current goal/skill status.
+- `uv run ruff check .` and `uv run ruff format --check .` passed for 27 files.
+- A final real-NLE scripted fallback smoke ran seeds 1, 6, and 10. Seed 1
+  truncated at 1,000 steps and seed 6 died at step 943; neither exposed the
+  downstairs to the navigation skill. Seed 10 succeeded in 166 steps: the
+  model selected goal/skill once, supplied 161 ambiguous fallback actions, then
+  deterministic navigation took over for five
+  actions (`N`, `E`, `E`, `NE`, `NE`) from step 162 through task success.
+  This smoke is trajectory evidence, not the milestone 10-seed evaluation.
+
+## Headless orchestration and network-boundary verification
+
+`ControlClient` now validates health, run-state, and paginated-event response
+contracts; iterates complete event histories; and waits with finite monotonic
+deadlines. `nethack-agent scenario run` owns a child service for one strict
+loopback scenario, drives either auto mode or bounded steps, retrieves all
+events, stops an active run, and terminates and reaps its child on every exit
+path. The pre-existing `run` commands remain client-only.
+
+`nethack-agent verify network` installs a recording socket guard during a real
+HTTP-controlled NLE step. It blocks any non-loopback destination and sets proxy
+variables to a non-loopback sentinel, so successful observed control traffic
+also proves that the client ignored environment proxies. Both this verifier and
+the scenario smoke can select the explicit deterministic
+`--development-scripted-model`; normal service execution never falls back to
+it.
+
+Verification on 2026-09-27:
+
+- `uv run pytest -q`: 85 tests passed. New coverage includes readiness and state
+  deadlines, paused/terminal/stopped/error and malformed-state distinctions,
+  complete cursor pagination, bounded and auto scenario execution, interrupt
+  cleanup, child stop/termination/reaping, and rejected non-loopback socket
+  destinations.
+- `uv run ruff check .` and `uv run ruff format --check .` passed for 31 files.
+- A real `scenario run --seed 6 --max-steps 3 --steps 1
+  --development-scripted-model --json` subprocess produced `run_started`,
+  `step`, and `run_stopped`, returned final state `stopped`, finalized a ttyrec,
+  and reaped its service child.
+- `nethack-agent verify network --timeout 20 --json` performed a real scripted
+  NLE step, stopped the run with three events, recorded nine actual HTTP socket
+  destinations, and found all nine at literal `127.0.0.1` despite the
+  non-loopback proxy sentinel. It did not contact Ollama.

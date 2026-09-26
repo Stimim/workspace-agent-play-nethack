@@ -39,22 +39,35 @@ checks.
 
 ## Project status
 
-Developer bootstrap, the deterministic NLE adapter, and a first end-to-end
-agent loop are implemented. The adapter fixes the Staircase character and RNG
-inputs, exposes public typed observations and legal actions, rejects invalid
-actions, and finalizes a ttyrec for every episode. The observation projector
-feeds a flat coordinator whose local Ollama model picks one gated legal action
-per step, with one repair retry and pause on failure. Runs and decision events
-are stored in SQLite and controlled through a loopback HTTP/WebSocket service
-(`nethack-agent serve`) and its CLI client (`nethack-agent run ...`).
+Developer bootstrap, the deterministic NLE adapter, observation projection,
+hierarchical coordinator, reviewed local knowledge cards, typed SQLite event
+contracts, local control surface, headless scenario orchestration, and
+executable network-boundary verification are implemented. The fixed
+`stand_on_downstairs` goal is served by two deterministic skills over a
+per-level terrain memory: `staircase_navigation` routes to a remembered
+reachable `>`, and `explore_level` walks to unexplored space, opens or kicks
+doors, fights adjacent hostiles, and searches for hidden passages. A
+deterministic arbiter switches between them; the local model is consulted at
+the start, when exploration is stuck, and for unhandled prompts. Every action
+passes through a gate that rejects invalid indices and any level change
+(`<` and `>`). Runs expose current goal and skill and stream discriminated typed
+events through the loopback HTTP/WebSocket service and CLI client. The
+`scenario run` command owns a child service for one bounded run, and
+`verify network` records and enforces its runtime socket boundary.
 
-The first product milestone is a hierarchical local agent that succeeds on at
-least 6 of 10 fixed `NetHackStaircase-v0` seeds, including seed 6, while
-recording SQLite events and ttyrecs and streaming a structured decision trace
-to a local web UI. Hierarchical goals and skills, knowledge cards, the UI, and
-the evaluation suite are not implemented yet. Their exact acceptance contract
-and boundaries are in [`ARCHITECTURE.md`](ARCHITECTURE.md); work is tracked in
-[`TODO_LIST.md`](TODO_LIST.md).
+The first product milestone requires this hierarchy to succeed on at least 6
+of 10 fixed `NetHackStaircase-v0` seeds, including seed 6, while recording
+SQLite events and ttyrecs and streaming the decision trace to a local web UI.
+With the local `gemma4-nethack:latest` model, the committed suite
+(`nethack-agent/evaluation/staircase-v1.json`) passed its acceptance gate with
+10/10 task successes and complete records
+(`nethack-agent/evaluation/reports/staircase-v1-20260926T211301Z.md`), and the
+dependency-free browser UI is served by the same loopback service, so milestone
+1 is accepted. A deterministic arbiter picks skills; the model is consulted at
+the start, on stuck exploration, and for unhandled prompts
+([ADR 0002](docs/decisions/0002-deterministic-skill-arbiter.md)). The exact
+acceptance contract and boundaries are in [`ARCHITECTURE.md`](ARCHITECTURE.md);
+work is tracked in [`TODO_LIST.md`](TODO_LIST.md).
 
 ## Documentation
 

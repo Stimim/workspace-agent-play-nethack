@@ -6,7 +6,7 @@ Build a local, autonomous NetHack agent whose long-term success criterion is asc
 
 ## Current status
 
-The deterministic NLE adapter, observation projector, flat single-action coordinator with a deterministic action gate, structured Ollama decision model, SQLite run/event store, and loopback HTTP/WebSocket control service with a CLI client are implemented. Tests use real NLE environments and scripted models; `smoke agent` exercises one real Ollama decision. Hierarchical goals and skills, curated knowledge cards, the browser UI, and the evaluation suite are not yet implemented.
+The deterministic NLE adapter, immutable observation projector, hierarchical goal/skill coordinator with per-level terrain memory, deterministic staircase navigation and level exploration, and an action gate, structured Ollama decision model, reviewed local knowledge bundle, typed SQLite event log, loopback HTTP/WebSocket control service with the dependency-free browser UI, headless scenario orchestrator, executable socket-boundary verifier, and the committed 10-seed evaluation suite with its `eval run` and `eval abort` harness are implemented. Milestone 1 is accepted: the first complete real-model suite run of policy `hierarchical-explore-v1` passed with 10/10 task successes (`nethack-agent/evaluation/reports/staircase-v1-20260926T211301Z.json`).
 
 ## System context
 
@@ -26,6 +26,7 @@ flowchart LR
     UI -->|start, pause, step, stop| API
     DEV[Coding agent or CLI] -->|same run-control API| API
     API -->|validated run-control commands| COORD
+    ORCH[Headless scenario orchestrator] -->|owns child service and run| API
 ```
 
 ## Component boundaries
@@ -74,46 +75,155 @@ retaining NLE buffers. Raw arrays do not cross this boundary.
 
 ### Agent coordinator
 
-A state machine, not an open-ended chat loop. It owns run lifecycle (`idle`, `running`, `paused`, `terminal`), current goal, active skill, prompt cadence, inference retries, and action execution. The local model chooses goals or skills. Deterministic code performs prompt handling, validates actions, and executes routine low-level steps where a skill defines them.
+A state machine, not an open-ended chat loop. It owns run lifecycle (`idle`,
+`running`, `paused`, `terminal`, `stopped`, and `error`), current goal, active
+skill, model cadence, inference retries, and action execution. `Goal` and
+`Skill` are enums; `SkillDecision`, `ActionDecision`, `ActionSelection`, and
+their metrics are immutable typed records. The fixed milestone goal is
+`stand_on_downstairs`, fulfilled by standing on any `>` without issuing the
+descend command. It cannot request upstairs or identify a main-dungeon versus
+branch stair; typed direction and branch identity are roadmap work.
 
-If Ollama times out, emits malformed structured output, or proposes no legal action, the coordinator performs one schema-repair retry. A second failure pauses the run, persists diagnostics, and waits for operator resume or stop. It must not silently substitute another policy.
+Model role ([ADR 0002](docs/decisions/0002-deterministic-skill-arbiter.md)):
+a deterministic arbiter, not the local model, chooses the executing skill on
+every step. The model's start-of-episode goal and skill decision is recorded
+but cannot override the arbiter. Its choice is binding only in a stuck
+consultation, and it supplies actions only for unhandled prompts and stuck
+fallbacks. Later milestones should return genuinely contextual choices to the
+model: resource/risk trade-offs before descending, prayer or recovery,
+high-priority threats, and branch plans. During a fixed episode it may handle
+an unfamiliar state but cannot modify the policy. Between runs or suites,
+coding agents review persisted evidence and either revise reviewed knowledge
+or implement a deterministic skill for a simple recurring case.
 
-`OllamaDecisionModel` implements the model boundary. It sends the projected
-observation and the legal action table to Ollama with the `DECISION_SCHEMA`
-JSON schema as the structured output format, thinking disabled, temperature 0,
-and a 512-token cap. `parse_action_decision` requires a goal, one to five unique
-legal candidates with scores in [0, 1], a selected legal action that is among
-the candidates with the highest score, strict JSON integer action indices, no
-duplicate object keys, and bounded text fields. A transport or validation
-failure triggers exactly one repair prompt that includes the error; a second
-failure raises a structured `DecisionFailure` retaining both attempt errors,
-available final response text, token counts, measured client elapsed durations,
-and reported Ollama durations. Aggregate latency uses Ollama `total_duration`
-when available and wall-clock duration when a failure returns no generation
-metrics.
+`AgentCoordinator` consults the model for goal and skill at the start of an
+episode. A deterministic arbiter then owns skill switching on every step:
+`staircase_navigation` whenever a remembered downstairs is reachable, otherwise
+`explore_level`. The start decision is recorded but cannot override the
+arbiter. Per step, in order:
 
-`AgentCoordinator` is the current, flat implementation: the model selects one
-NLE action per step; goals and skills are not yet separate layers. States are
-`idle`, `running`, `paused`, `terminal`, `stopped`, and `error`. `start` resets
-NLE into `paused`; `advance` performs one decision and action while `running`,
-or one single step while `paused`. An explicit in-flight revision protocol
-allows only one advance to decide from an observation. Model inference runs
-outside the lock, so pause or stop during inference invalidates and discards
-the pending decision. The action gate rejects an index outside the legal action
-table and pauses the run. `DecisionFailure` pauses with structured diagnostics;
-an unexpected model, NLE, projection, or persistence failure moves the run to
-`error`, closes NLE, and finalizes the ttyrec. Truncation, death, and task
-success are terminal and also close NLE.
+1. a pending direction prompt from exploration's own kick is answered;
+2. `SafePromptHandler` acknowledges wait-for-space prompts, cancels text input
+   with an empty response, and declines recognizable yes/no prompts (which
+   includes "Really attack?" for peaceful monsters);
+3. any other prompt goes to the model as a fallback action;
+4. `StaircaseNavigationSkill` routes to the reachable remembered `>` with the
+   shortest breadth-first route; equal distances choose the topmost, then
+   leftmost coordinate. If already standing on any remembered `>`, it waits.
+   It steps straight onto the chosen `>` when adjacent and otherwise first
+   fights an adjacent hostile. It does not model staircase identity or route
+   upward;
+5. `ExploreLevelSkill` acts, or reports a typed `StuckReason`.
+
+Both skills route over `navigation.LevelMemory`, a coordinator-owned,
+per-level record bounded by the 21x79 map. It remembers the last terrain glyph
+of every cell (NetHack draws the hero, monsters, and objects over terrain), the
+cells the hero has been adjacent to, search coverage, learned blocked moves,
+locked doors, kicks, peaceful monster glyphs, abandoned goals, and a short
+position history. It resets on `start` and whenever the dungeon level changes.
+Breadth-first routes follow NetHack 3.6.7 `test_move`: no diagonal move into or
+out of an open or closed door (doorless and broken doorways allow diagonals),
+closed doors are entered orthogonally because moving into one opens it,
+diagonal squeezes between rock are allowed for the medium-sized, lightly loaded
+hero, and boulders and known traps are never routed through. Visible non-pet
+monsters block routes; pets are displaced. Explicit refusal messages ("It's a
+wall.", diagonal-door refusals) block an edge for the level; three unexplained
+failed moves only mark it suspect.
+
+`ExploreLevelSkill` first attacks an adjacent displayed monster unless it is a
+pet, answered a "Really attack?" prompt, or is on a passive-damage list
+(floating eye, gas spore, molds, jellies); NLE's Staircase action set has no
+fight command, so it moves into the monster. It then walks to the nearest
+reachable frontier, a known cell next to never-observed blank space, with
+doorways and corridors winning distance ties and a remembered but unreachable
+`>` biasing the choice toward it. A frontier reachable only past a monster is
+approached, fought, or waited on (bounded). With no frontier it kicks a known
+locked door that leads into unexplored space, only on dungeon level 1, where no
+shopkeeper or watch exists. Otherwise it searches: candidate spots are room
+cells beside straight walls and corridor dead ends, scored by never-observed
+cells near the walls or rock they cover minus twice the travel distance; each
+adjacent cell counts until searched 10 times per round, and the chosen spot
+stays committed until spent. Routing that dithers among at most six cells for
+12 moves, or 100 routed moves without new knowledge, abandons the goal until
+the map changes. When no spot remains the skill reports `search_exhausted` (or
+`monster_blocked`).
+
+A stuck report triggers a model skill consultation, at most once per 20 stuck
+steps. Choosing `explore_level` re-arms exploration (a new search round, cleared
+suspect edges and abandoned goals); choosing `staircase_navigation`, or a
+re-armed exploration that still cannot act, yields a model fallback action.
+
+Every proposal passes through `ActionGate`. It verifies the finite action index
+table and rejects `MiscDirection.UP` and `MiscDirection.DOWN`
+(`decision.FORBIDDEN_ACTION_NAMES`), even when proposed by the model, before
+NLE can receive them: the task never changes level, and `<` on dungeon level 1
+leaves the dungeon. A step records its typed goal and executed skill, the
+action source (`deterministic_skill`, `deterministic_prompt`, or
+`model_fallback`), who selected the skill (`arbiter` or, after a stuck report,
+`model`), the stuck reason if any, and the applicable structured model decisions
+and metrics. A model-selected skill must match the step's model skill
+decision. This is an auditable decision trace, not chain-of-thought.
+
+`OllamaDecisionModel` implements both model boundaries. Skill selection uses
+`SKILL_DECISION_SCHEMA` with skill descriptions, the consultation reason, and,
+when stuck, the visible map; ambiguous action fallback uses
+`ACTION_DECISION_SCHEMA` and only gate-allowed actions, with at most three
+candidates, 100-character candidate reasons, and 200-character rationales.
+Both paths disable thinking, use temperature 0, a 512-token output cap, and an
+explicit `num_ctx` (default 8,192, `NETHACK_AGENT_OLLAMA_NUM_CTX`). A reported
+prompt that leaves less than 512 tokens of that window raises
+`OllamaContextLimitError` as a failed attempt, because Ollama may have
+truncated it silently. Both paths reject duplicate keys and malformed or
+semantically invalid values, and perform exactly one schema-repair retry. A
+second failure raises `DecisionFailure` with both attempt diagnostics, token
+counts, measured client elapsed durations, and reported Ollama durations.
+Aggregate latency uses Ollama `total_duration` when available and wall-clock
+duration when a failure returns no generation metrics. Both prompts include the
+same bounded reviewed-knowledge context. The explicit scripted development model
+does not read or use knowledge; it always chooses `explore_level` and falls
+back to waiting.
+
+`start` resets NLE into `paused`; `advance` performs one hierarchical action
+while `running`, or one single step while `paused`. An explicit in-flight
+revision protocol allows only one advance to decide from an observation. Model
+inference runs outside the lock, so pause or stop during inference invalidates
+and discards the pending skill or action decision. Level memory folds in each
+observation idempotently and learns from an action only after NLE executed it;
+the one exception is a stuck re-arm chosen by the model, which is kept if a
+pause then discards the step because it only widens the search budget.
+`DecisionFailure` and
+action-gate rejection pause with structured diagnostics; an unexpected model,
+NLE, projection, or persistence failure moves the run to `error`, closes NLE,
+and finalizes the ttyrec. Truncation, death, and task success are terminal and
+also close NLE.
 
 ### Knowledge layers
 
 Two audiences require separate material:
 
 1. `_agents/skills/` contains tools and procedures for online coding agents working on the repository. These may inspect the ignored NetHackWiki dump and produce reviewed project changes.
-2. `nethack-agent/knowledge/` contains concise, versioned, cited facts suitable for retrieval into the local playing model's context.
+2. `nethack-agent/knowledge/` contains concise, versioned, cited facts injected into the local playing model's context.
 
-The 188 MB wiki XML dump is source material, not a runtime prompt and not committed. Automatic extraction must not become trusted gameplay knowledge without review. Policy, prompts, and knowledge remain fixed throughout an evaluation suite; there is no online self-modification in milestone 1.
+The 188 MB wiki XML dump is source material, not a runtime prompt and not committed. Automatic extraction must not become trusted gameplay knowledge without review. Policy, prompts, skills, model identity, and knowledge remain fixed throughout an evaluation suite; there is no online self-modification.
 
+`knowledge.load_knowledge_bundle` reads only `knowledge/manifest.json` and the
+direct Markdown cards it allowlists, in manifest order. The manifest pins each
+card's SHA-256; the loader rejects missing, tampered, duplicate, escaping,
+oversized, or malformed cards and requires canonical NetHackWiki sources,
+retrieval date, reviewed dump path, version applicability, uncertainty, and
+CC BY-SA 3.0 attribution. It renders only facts and non-goals, rejects context
+above the manifest bound (at most 6,000 characters) or 1,500 estimated tokens,
+and derives `<bundle_id>+sha256:<digest>` from the canonical manifest plus exact
+card bytes. There is no runtime network access, raw-dump access, or dynamic
+retrieval. `RunManager` loads one bundle at service construction and records
+its version in every run; packaged wheels include the same directory. Explicit
+scripted development runs record the service's bundle version for comparable
+metadata but do not consume its prompt context.
+
+The current `staircase-reviewed-v2` bundle makes scenario `autoopen` explicit,
+records that NLE's one displayed glyph does not reveal stairs under a covering
+object or monster, and documents the additional same-direction stairs at the
+Gnomish Mines and Sokoban branch entrances from local-wiki evidence.
 
 ### Persistence and replay
 
@@ -122,7 +232,9 @@ SQLite is the authoritative structured event log. Every run will record configur
 `RunStore` implements this log in `<data-dir>/runs.sqlite3` (WAL mode with
 foreign keys enabled). Every per-operation SQLite connection is explicitly
 closed. The `runs` table holds scenario configuration, derived seeds,
-environment, character, model, policy, knowledge, NLE and Ollama versions,
+environment, character, model, policy, knowledge, NLE and Ollama versions, the
+Ollama `num_ctx` (`ollama_num_ctx`; stores created before it existed gain the
+column with `NULL` for older runs),
 state, outcome, last error, and the ttyrec path. The `events` table holds
 per-run JSON payloads with contiguous sequence numbers starting at 0. State
 updates and their corresponding events commit in one transaction with
@@ -130,16 +242,33 @@ expected-state guards, so pause or stop cannot be overwritten by a late step.
 Each run's NLE artifacts live in a unique episode directory below
 `<data-dir>/runs/<run-id>/`.
 
-The run manager records `run_started`, `run_resumed`, `run_paused`, `step`,
-`agent_error`, and `run_stopped`. Step events include the decision, candidates,
-metrics, action, reward, termination fields, outcome, and projected
-observation. Event payloads are plain JSON objects; event kinds are not yet a
-typed schema.
+The run manager records six discriminated event variants: `run_started`,
+`run_resumed`, `run_paused`, `step`, `agent_error`, and `run_stopped`. Each
+variant has an immutable dataclass payload and an `EventKind`; free-form event
+kinds and payload dictionaries do not cross the store boundary. Serialization
+occurs when SQLite writes an event, and every read strictly deserializes the
+stored kind and exact payload shape. Unknown kinds, malformed JSON, duplicate
+keys, invalid nested observations or decisions, and semantically inconsistent
+step payloads fail with a clear stored-event contract error. HTTP and WebSocket
+consumers receive the same stable `{sequence, created_at, kind, payload}` JSON
+envelope. Step events include the action selection (source, goal, executed
+skill, skill-selection source, stuck reason), optional model skill/fallback
+decisions and metrics, gated action, reward, termination fields, outcome, and
+the projected observation. Events recorded before the `hierarchical-explore-v1`
+selection fields existed no longer satisfy the strict reader; their evaluation
+reports remain the evidence for those runs.
+
+The exact-field construction helpers and domain parsers remain authoritative
+instead of adding a second runtime JSON Schema validation pass; see
+[ADR 0003](docs/decisions/0003-typed-contract-construction.md). Ollama's two
+JSON Schemas constrain generation but do not replace domain parsing,
+duplicate-key rejection, enum/dataclass construction, contextual errors, or
+cross-field validation.
 
 ### Control and observation surface
 
-A local Python service will expose a client-neutral HTTP control/status API and
-stream events over WebSocket. Both the browser UI and coding-agent tools use
+A local Python service exposes a client-neutral HTTP control/status API and
+streams events over WebSocket. Both the browser UI and coding-agent tools use
 this API; neither communicates with the coordinator directly. A coding agent
 can therefore launch the service, start a run for a specific task and seed,
 observe it, pause or single-step it, and stop it after collecting evidence.
@@ -168,8 +297,8 @@ that at most one worker advances it at a time.
 - `POST /api/runs` with strict typed payload (`seed` as `StrictInt`, optional
   `max_episode_steps` as `StrictInt` default 5000, and optional `auto_start` as
   `StrictBool` default false);
-- `GET /api/runs/{id}` for the run record, coordinator snapshot with current
-  observation, and legal actions;
+- `GET /api/runs/{id}` for the typed run record, coordinator snapshot with
+  current observation, current goal and skill, and legal actions;
 - `GET /api/runs/{id}/events?after=N&limit=M`, where `after` is an exclusive
   sequence cursor, `limit` is 1-1000 (default 100), and the response returns
   `events`, `next_after`, `has_more`, and `limit`;
@@ -190,12 +319,44 @@ lives in memory: after a service restart, earlier runs remain readable but
 cannot be controlled, and their stored state is not reconciled.
 `ControlClient` and
 `nethack-agent run start|status|pause|resume|step|stop|events` use this API from
-the command line.
+the command line. `run` remains client-only and never owns the service.
+`ControlClient` validates health, status, and event-page response shapes,
+iterates every cursor page, applies finite monotonic readiness and state
+deadlines, and reports malformed responses, timeouts, and unexpected paused,
+terminal, stopped, or error states distinctly.
 
-The first browser UI must show the floor map, player statistics, inventory,
-messages, current goal, candidate actions, chosen action, concise rationale,
-latency, and run status. Controls: start, pause, single-step, and stop. It
-displays structured decision traces, not hidden chain-of-thought.
+`nethack-agent scenario run` is the owning headless path. It accepts one strict
+configuration with a positive seed and episode cap, a loopback host and valid
+port, a finite timeout, a data directory, and exactly one of autonomous or
+bounded-step execution. It launches the service as an argument-vector child
+without a shell, waits for health, creates and drives the run, retrieves all
+event pages, and then stops any active run before gracefully signaling and
+reaping the child. The same cleanup runs on API failures, deadline expiry, and
+interrupts. `--json` emits one machine-readable result. The existing `run`
+commands intentionally remain usable against an independently managed service.
+
+`--development-scripted-model` explicitly selects a deterministic no-Ollama
+model for development checks. It is never selected as a fallback, is not
+production gameplay, and does not produce a valid evaluation episode.
+
+The browser UI is a dependency-free single page (plain HTML, CSS, and vanilla
+JavaScript modules in `nethack_agent/ui/`, packaged in the wheel) served by the
+same FastAPI app at `/` with assets under an allowlisted `/ui/{name}` route. It
+uses only this HTTP API and the event WebSocket through page-relative URLs, so
+it works on any loopback host and port. It shows the colored floor map with the
+player highlighted, player statistics, inventory, message, prompt flags, current
+goal and skill, run state, outcome, and last error, the latest structured step
+decision (selection source, goal, skill, model candidates and scores, chosen
+action, and concise rationales), and per-step and streamed-total latency and
+token metrics. Controls start a run (seed, episode cap, auto start), attach to
+an existing run id (also via `#run=<id>`), and pause, resume, single-step, or
+stop it; API error details are displayed. Attaching locates the newest event
+with O(log n) single-event page probes and replays only the last 50 events. The
+stream reconnects with backoff from the last delivered sequence after abnormal
+closure and stops after a 1000 (finished run) or 4404 close. UI responses carry
+a same-origin-only Content-Security-Policy with no inline script or style, and
+all model and game text is inserted as text, never parsed as HTML. It displays
+structured decision traces, not hidden chain-of-thought.
 
 The service binds to loopback by default and the same control contract must be
 usable without a browser. A coding-agent-orchestrated scenario is a development
@@ -208,11 +369,24 @@ executed without online intervention.
 - NLE 1.3.0 is pinned initially. It supports Python 3.10–3.13, Gymnasium 1.2.0, NetHack 3.6.7, ttyrec output, and the required observations.
 - Ollama is the only model transport in gameplay. The baseline model is `gemma4-nethack:latest`, configurable without code changes.
 - Gameplay must not call cloud APIs, the public web, or remote model endpoints. Configuration rejects non-loopback Ollama URLs.
-- The current RTX 4070 Laptop GPU has 8 GB VRAM while the selected model occupies about 9.6 GB on disk. Partial CPU offload is expected; inference latency must be measured before setting action cadence.
+- `nethack-agent verify network` behaviorally enforces this boundary. During a
+  real HTTP-controlled NLE step it replaces socket `connect`/`connect_ex` with
+  a recording guard, blocks non-loopback literal destinations before the
+  connection, and points HTTP proxy variables at a non-loopback sentinel. The
+  verifier uses only the explicit scripted development model, requires observed
+  loopback connections, and fails on any non-loopback attempt without
+  contacting Ollama.
+- The current RTX 4070 Laptop GPU has 8 GB VRAM while the selected model occupies about 9.6 GB on disk. With the Modelfile's 131,072-token default context, Ollama placed it 64% CPU / 36% GPU and the first suite attempt ran at about 6 s per step. With `num_ctx` 8,192, `ollama ps` reports 3.2 GB, 100% GPU. Under policy `hierarchical-staircase-v1`, fallback decisions (up to five candidates, 240-character reasons) measured p50 6.4 s and p95 9.5 s. With at most three candidates and shorter bounds, a warm fallback on seed 1 took 3.1–3.7 s (about 171 output tokens) and a skill consultation about 0.9–1.4 s (about 48 output tokens). Under `hierarchical-explore-v1`, deterministic skills choose almost every action. The complete real-model suite took 34 s with knowledge v1, and 39 s with knowledge v2, whose skill prompts carry about 195 more tokens (latency p50 1.1 s, maximum 1.6 s).
 
 ## Evaluation contract: milestone 1
 
-Milestone 1 is complete only when all of the following hold:
+Milestone 1 is complete only when all of the following hold. It was accepted on
+2026-09-27 by `nethack-agent/evaluation/reports/staircase-v1-20260926T211301Z.json`:
+10/10 task successes including seed 6, zero invalid actions and gate
+rejections, and complete records. The knowledge-v2 rerun
+(`nethack-agent/evaluation/reports/staircase-v1-20260927T065500Z.json`) met
+the same gate. The network boundary is covered by `verify network`, and the
+browser UI controls by `tests/test_ui.py` and a headless-browser check.
 
 - `NetHackStaircase-v0`, fixed lawful dwarven Valkyrie;
 - a committed suite of 10 deterministic seeds;
@@ -224,6 +398,58 @@ Milestone 1 is complete only when all of the following hold:
 - prompts, policy, model identifier, and knowledge version are fixed for the entire suite.
 
 A successful Staircase episode means the agent stands on a down staircase, matching NLE's task termination condition; descending is not required.
+
+### Evaluation harness
+
+`nethack-agent/evaluation/staircase-v1.json` is the committed milestone suite:
+suite seeds 1–10 (chosen before any suite episode ran), a 1,000-step episode
+cap, and acceptance of at least 6 task successes with seed 6 among them, zero
+invalid NLE actions, zero action-gate rejections, and complete SQLite and ttyrec
+records. `evaluation.load_suite` rejects unknown fields, any seed count other
+than 10, duplicate seeds, a suite without seed 6, and an environment or
+character other than the adapter's.
+
+`nethack-agent eval run` drives each seed in-process through one `RunManager`
+with `create_run(auto_start=True)`: the same coordinator, worker loop, action
+gate, SQLite store, and ttyrec capture as the HTTP service, without HTTP or
+child-process failure modes during multi-hour runs. The manager, Ollama
+configuration, knowledge bundle, and policy version are created once for the
+suite. The evaluator never resumes or steers an episode. A run that pauses after
+a decision failure or gate rejection is stopped and scored by its recorded
+outcome. Production mode first verifies that the configured local Ollama model
+is ready.
+
+After each seed the evaluator reads the complete event log back from SQLite. It
+audits contiguous sequences starting with `run_started`, contiguous step
+indices, a final event that matches the final state, nothing after the terminal
+step, the suite seed and step cap, an existing nonempty ttyrec, and every
+stepped action against the recorded legal-action table and the gate's
+forbidden `MiscDirection.UP`/`MiscDirection.DOWN` actions. It
+reports outcome, steps, wall time, model decisions (including failed and
+repaired decisions), nearest-rank p50/p95/max decision latency, token totals,
+selection-source counts, gate rejections, and invalid actions. Gate rejections
+are `agent_error` events in the `paused` state without a decision-failure trace;
+only decision failures and gate rejections pause the coordinator.
+
+Acceptance also requires every suite seed to be evaluated without
+interruption, an identical run configuration across seeds (model, policy,
+knowledge, NLE version, environment, character, step cap, and
+`ollama_num_ctx`), and unchanged suite and knowledge files at the end.
+`--seeds` may reorder execution; a subset
+produces a `partial` report that cannot pass. `--development-scripted-model`
+reports are never milestone evidence. Each invocation reserves a new
+timestamped JSON and Markdown report pair with exclusive creation and rewrites
+only that pair, world-readable (0644), after every seed.
+
+Report schema version 2 records a typed `status` (`running`, `complete`,
+`partial`, `failed`, `interrupted`, or `aborted`) and an optional
+`status_reason`. The Markdown is rendered purely from the JSON payload, so a
+stored report can be re-rendered. `nethack-agent eval abort --report <json>
+--reason <text>` finalizes a `running` or `interrupted` report whose suite the
+operator will not finish, for example because the policy is being replaced:
+it keeps every recorded result, aggregate, and acceptance value verbatim, sets
+status `aborted` with the reason, rewrites both files in place, and never
+creates or deletes files. Aborted reports are never accepted.
 
 ## Deferred decisions
 
