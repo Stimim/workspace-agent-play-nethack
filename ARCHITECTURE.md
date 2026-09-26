@@ -6,7 +6,7 @@ Build a local, autonomous NetHack agent whose long-term success criterion is asc
 
 ## Current status
 
-The deterministic NLE adapter is implemented and covered by real-environment tests. It owns seeded Staircase setup, public zero-copy observations, legal-action validation, lifecycle state, and ttyrec finalization. The observation projector, coordinator, persistence, control API, and web UI described below are not yet implemented.
+The deterministic NLE adapter is implemented and covered by real-environment tests. It owns seeded Staircase setup, public zero-copy observations, legal-action validation, lifecycle state, and ttyrec finalization. The observation projector is implemented. The coordinator, persistence, control API, and web UI described below are not yet implemented.
 
 ## System context
 
@@ -60,7 +60,13 @@ must not retain raw observations as event history.
 
 ### Observation projector
 
-Converts NLE arrays into a compact, typed state: visible map, player statistics, messages, inventory, prompts, and recent changes. Raw arrays remain available to deterministic skills and replay, but prompt construction must avoid repeated copies and unbounded history.
+`ObservationProjector` converts each ephemeral NLE observation into compact,
+immutable state before the next environment call. It copies visible map
+characters plus color and special bytes, all public bottom-line statistics,
+decoded message and inventory strings, prompt flags, and changed map cells.
+The result is JSON-serializable for prompts, persistence, APIs, and UI clients.
+Map deltas are computed against the previous projection without retaining NLE
+buffers. Raw arrays do not cross this boundary.
 
 ### Agent coordinator
 

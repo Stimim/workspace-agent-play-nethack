@@ -8,7 +8,7 @@ Acceptance: the fixed local policy succeeds on at least 6 of 10 committed determ
 
 - [ ] Define typed observation, decision, action, run-state, and event contracts.
 - [x] Implement the NLE adapter with lawful dwarven Valkyrie, deterministic seeds, ttyrec capture, and explicit legal actions.
-- [ ] Build observation projection for map, player statistics, messages, prompts, and inventory.
+- [x] Build observation projection for map, player statistics, messages, prompts, and inventory.
 - [ ] Build the hierarchical coordinator and deterministic action gate.
 - [ ] Add structured Ollama output, one repair retry, then pause-on-failure behavior.
 - [ ] Curate the first local-model knowledge cards from cited NetHackWiki pages.
