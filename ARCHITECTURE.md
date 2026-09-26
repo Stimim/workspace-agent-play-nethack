@@ -6,7 +6,7 @@ Build a local, autonomous NetHack agent whose long-term success criterion is asc
 
 ## Current status
 
-The deterministic NLE adapter is implemented and covered by real-environment tests. It owns seeded Staircase setup, public zero-copy observations, legal-action validation, lifecycle state, and ttyrec finalization. The observation projector, structured Ollama decision model, flat single-action coordinator with a deterministic action gate, and SQLite run/event store are implemented; `smoke agent` exercises one real Ollama decision. Hierarchical goals and skills, the control API, and the web UI described below are not yet implemented.
+The deterministic NLE adapter, observation projector, flat single-action coordinator with a deterministic action gate, structured Ollama decision model, SQLite run/event store, and loopback HTTP/WebSocket control service with a CLI client are implemented. Tests use real NLE environments and scripted models; `smoke agent` exercises one real Ollama decision. Hierarchical goals and skills, curated knowledge cards, the browser UI, and the evaluation suite are not yet implemented.
 
 ## System context
 
@@ -62,11 +62,13 @@ must not retain raw observations as event history.
 
 `ObservationProjector` converts each ephemeral NLE observation into compact,
 immutable state before the next environment call. It copies visible map
-characters plus color and special bytes, all public bottom-line statistics,
-decoded message and inventory strings, prompt flags, and changed map cells.
-The result is JSON-serializable for prompts, persistence, APIs, and UI clients.
-Map deltas are computed against the previous projection without retaining NLE
-buffers. Raw arrays do not cross this boundary.
+characters plus glyph IDs (`glyph_rows`), color, and special bytes, all public
+bottom-line statistics, decoded message and inventory strings, prompt flags
+(`single_character_choice` for single-character prompts, `text_input`, and
+`wait_for_space`), and changed map cells with their updated glyph and character
+data. The result is JSON-serializable for prompts, persistence, APIs, and UI
+clients. Map deltas are computed against the previous projection without
+retaining NLE buffers. Raw arrays do not cross this boundary.
 
 ### Agent coordinator
 
@@ -79,21 +81,27 @@ observation and the legal action table to Ollama with the `DECISION_SCHEMA`
 JSON schema as the structured output format, thinking disabled, temperature 0,
 and a 512-token cap. `parse_action_decision` requires a goal, one to five unique
 legal candidates with scores in [0, 1], a selected legal action that is among
-the candidates with the highest score, and a bounded rationale. A transport or
-validation failure triggers exactly one repair prompt that includes the error;
-a second failure raises `DecisionFailure`. Reported metrics sum tokens and
-latency across both attempts.
+the candidates with the highest score, strict JSON integer action indices, no
+duplicate object keys, and bounded text fields. A transport or validation
+failure triggers exactly one repair prompt that includes the error; a second
+failure raises a structured `DecisionFailure` retaining both attempt errors,
+available final response text, token counts, measured client elapsed durations,
+and reported Ollama durations. Aggregate latency uses Ollama `total_duration`
+when available and wall-clock duration when a failure returns no generation
+metrics.
 
 `AgentCoordinator` is the current, flat implementation: the model selects one
 NLE action per step; goals and skills are not yet separate layers. States are
 `idle`, `running`, `paused`, `terminal`, `stopped`, and `error`. `start` resets
 NLE into `paused`; `advance` performs one decision and action while `running`,
-or one single step while `paused`. Model inference runs outside the lock, so
-pause or stop during inference discards the pending decision. The action gate
-rejects an index outside the legal action table and pauses the run.
-`DecisionFailure` pauses with the error recorded; an NLE failure moves the run
-to `error`. Truncation, death, and task success are terminal and close NLE,
-finalizing the ttyrec.
+or one single step while `paused`. An explicit in-flight revision protocol
+allows only one advance to decide from an observation. Model inference runs
+outside the lock, so pause or stop during inference invalidates and discards
+the pending decision. The action gate rejects an index outside the legal action
+table and pauses the run. `DecisionFailure` pauses with structured diagnostics;
+an unexpected model, NLE, projection, or persistence failure moves the run to
+`error`, closes NLE, and finalizes the ttyrec. Truncation, death, and task
+success are terminal and also close NLE.
 
 ### Knowledge layers
 
@@ -108,12 +116,22 @@ The 188 MB wiki XML dump is source material, not a runtime prompt and not commit
 
 SQLite is the authoritative structured event log. Every run will record configuration and version identifiers, seeds, projected observations, goals, candidate actions and scores, chosen action, concise rationale, inference timing and token counts, rewards, errors, and terminal outcome. Large binary arrays should not be duplicated in every event. NLE ttyrec files provide native episode replay and are referenced from the run record.
 
-`RunStore` implements this log in `<data-dir>/runs.sqlite3` (WAL mode). The
-`runs` table holds scenario configuration, derived seeds, environment,
-character, model, policy, knowledge, NLE and Ollama versions, state, outcome,
-last error, and the ttyrec path. The `events` table holds per-run JSON payloads
-with contiguous sequence numbers starting at 0. Each run's NLE artifacts live
-under `<data-dir>/runs/<run-id>/`.
+`RunStore` implements this log in `<data-dir>/runs.sqlite3` (WAL mode with
+foreign keys enabled). Every per-operation SQLite connection is explicitly
+closed. The `runs` table holds scenario configuration, derived seeds,
+environment, character, model, policy, knowledge, NLE and Ollama versions,
+state, outcome, last error, and the ttyrec path. The `events` table holds
+per-run JSON payloads with contiguous sequence numbers starting at 0. State
+updates and their corresponding events commit in one transaction with
+expected-state guards, so pause or stop cannot be overwritten by a late step.
+Each run's NLE artifacts live in a unique episode directory below
+`<data-dir>/runs/<run-id>/`.
+
+The run manager records `run_started`, `run_resumed`, `run_paused`, `step`,
+`agent_error`, and `run_stopped`. Step events include the decision, candidates,
+metrics, action, reward, termination fields, outcome, and projected
+observation. Event payloads are plain JSON objects; event kinds are not yet a
+typed schema.
 
 ### Control and observation surface
 
@@ -123,11 +141,53 @@ this API; neither communicates with the coordinator directly. A coding agent
 can therefore launch the service, start a run for a specific task and seed,
 observe it, pause or single-step it, and stop it after collecting evidence.
 
-Run creation accepts a typed, validated scenario configuration rather than an
-arbitrary command: environment/task, seed, step cap, and versioned policy,
-model, and knowledge settings. Lifecycle commands are serialized through the
-coordinator state machine. Stop is idempotent and graceful: close NLE, flush
-SQLite events, finalize the ttyrec reference, then report the terminal state.
+Run creation accepts validated run execution parameters (`seed`,
+`max_episode_steps`, and `auto_start`) with strict types (`StrictInt` and
+`StrictBool`, with `extra="forbid"`) rather than arbitrary command lines. The
+environment (`NetHackStaircase-v0`), character (`val-dwa-law`), model
+(`gemma4-nethack:latest`), policy, and knowledge settings are fixed by the
+service configuration (environment variables and process defaults) rather than
+accepted per request, ensuring uniform evaluation conditions across runs.
+Lifecycle commands are serialized through the coordinator state machine. Stop
+is idempotent and graceful: close NLE, flush SQLite events, finalize the ttyrec
+reference, and report the terminal state without duplicating stop events on
+repeated calls.
+
+`nethack-agent serve` implements this service with FastAPI and uvicorn, managing
+graceful shutdown through FastAPI's lifespan context (`manager.close`). It binds
+only to loopback hosts (`127.0.0.1`, `localhost`, or literal IPv6 `::1`), with
+`localhost` pinned specifically to `127.0.0.1`. Both `ControlClient` and
+`OllamaClient` normalize endpoints to literal loopback addresses and bypass
+HTTP proxies. `RunManager` owns at most one active run per process and ensures
+that at most one worker advances it at a time.
+
+- `GET /api/health`;
+- `POST /api/runs` with strict typed payload (`seed` as `StrictInt`, optional
+  `max_episode_steps` as `StrictInt` default 5000, and optional `auto_start` as
+  `StrictBool` default false);
+- `GET /api/runs/{id}` for the run record, coordinator snapshot with current
+  observation, and legal actions;
+- `GET /api/runs/{id}/events?after=N&limit=M`, where `after` is an exclusive
+  sequence cursor, `limit` is 1-1000 (default 100), and the response returns
+  `events`, `next_after`, `has_more`, and `limit`;
+- `POST /api/runs/{id}/pause`, `POST /api/runs/{id}/resume`,
+  `POST /api/runs/{id}/step`, `POST /api/runs/{id}/stop`;
+- `WS /api/runs/{id}/events/ws?after=N&limit=M`, which performs bounded history
+  replay and live event streaming, offloads SQLite queries asynchronously to
+  worker threads (`asyncio.to_thread`), and actively monitors client
+  disconnection; it closes cleanly with code 1000 after the run reaches
+  `terminal`, `stopped`, or `error`.
+
+Unknown HTTP runs return 404 and unknown WebSocket runs close with code 4404.
+Invalid lifecycle transitions and a second active run return 409; model
+decision and action-gate failures return 503; coordinator invariant failures
+return 500. The environment, character, model, policy, and knowledge versions
+are fixed by the service configuration rather than per request. Run control
+lives in memory: after a service restart, earlier runs remain readable but
+cannot be controlled, and their stored state is not reconciled.
+`ControlClient` and
+`nethack-agent run start|status|pause|resume|step|stop|events` use this API from
+the command line.
 
 The first browser UI must show the floor map, player statistics, inventory,
 messages, current goal, candidate actions, chosen action, concise rationale,

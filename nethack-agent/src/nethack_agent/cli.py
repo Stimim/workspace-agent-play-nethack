@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import tempfile
 from pathlib import Path
 from typing import Any
 
+from nethack_agent.api import create_app
+from nethack_agent.control_client import ControlClient, ControlClientError
 from nethack_agent.coordinator import AgentCoordinator
 from nethack_agent.environment import NleEnvironment, ScenarioConfig
 from nethack_agent.model import DecisionFailure, OllamaDecisionModel
 from nethack_agent.observation import ObservationProjector
 from nethack_agent.ollama import OllamaClient, OllamaConfig, OllamaError
+from nethack_agent.run_manager import RunManager
 
 
 class CheckFailure(RuntimeError):
@@ -127,11 +131,57 @@ def _build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("doctor", help="check NLE and local Ollama end to end")
     smoke_parser = subparsers.add_parser("smoke", help="run one integration check")
     smoke_parser.add_argument("target", choices=("nle", "ollama", "agent"))
+
+    serve_parser = subparsers.add_parser("serve", help="run the loopback control API")
+    serve_parser.add_argument(
+        "--host", choices=(("127.0.0.1", "localhost", "::1")), default="127.0.0.1"
+    )
+    serve_parser.add_argument("--port", type=int, default=8000)
+    serve_parser.add_argument("--data-dir", type=Path, default=Path("data"))
+
+    run_parser = subparsers.add_parser("run", help="control a running local service")
+    run_commands = run_parser.add_subparsers(dest="run_command", required=True)
+    start_parser = run_commands.add_parser("start")
+    start_parser.add_argument("--seed", type=int, required=True)
+    start_parser.add_argument("--max-steps", type=int, default=5_000)
+    start_parser.add_argument("--auto", action="store_true")
+    for operation in ("status", "pause", "resume", "step", "stop", "events"):
+        operation_parser = run_commands.add_parser(operation)
+        operation_parser.add_argument("run_id")
+        if operation == "events":
+            operation_parser.add_argument("--after", type=int, default=-1)
+            operation_parser.add_argument("--limit", type=int, default=100)
     return parser
+
+
+def _run_control_command(arguments: argparse.Namespace) -> int:
+    try:
+        client = ControlClient.from_environment()
+        if arguments.run_command == "start":
+            response = client.create_run(
+                seed=arguments.seed,
+                max_episode_steps=arguments.max_steps,
+                auto_start=arguments.auto,
+            )
+        elif arguments.run_command == "status":
+            response = client.status(arguments.run_id)
+        elif arguments.run_command == "events":
+            response = client.events(
+                arguments.run_id, after=arguments.after, limit=arguments.limit
+            )
+        else:
+            response = client.control(arguments.run_id, arguments.run_command)
+    except (ControlClientError, ValueError) as error:
+        print(f"FAIL control API: {error}", file=sys.stderr)
+        return 1
+    print(json.dumps(response, indent=2, sort_keys=True))
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     arguments = _build_parser().parse_args(argv)
+    if arguments.command == "run":
+        return _run_control_command(arguments)
     if arguments.command == "smoke" and arguments.target == "nle":
         return 0 if _run_check("nle", smoke_nle) else 1
 
@@ -141,6 +191,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"FAIL configuration: {error}", file=sys.stderr)
         return 1
 
+    if arguments.command == "serve":
+        import uvicorn
+
+        manager = RunManager(arguments.data_dir, config)
+        uvicorn.run(create_app(manager), host=arguments.host, port=arguments.port)
+        return 0
     if arguments.command == "smoke":
         checks = {
             "ollama": lambda: smoke_ollama(config),

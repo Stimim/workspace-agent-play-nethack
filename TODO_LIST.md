@@ -12,8 +12,8 @@ Acceptance: the fixed local policy succeeds on at least 6 of 10 committed determ
 - [ ] Build the hierarchical coordinator and deterministic action gate.
 - [x] Add structured Ollama output, one repair retry, then pause-on-failure behavior.
 - [ ] Curate the first local-model knowledge cards from cited NetHackWiki pages.
-- [ ] Add SQLite run/event storage and artifact layout.
-- [ ] Add the loopback HTTP control/status API and WebSocket event stream; make start, pause, step, stop, and observation usable by both coding-agent tools and the browser.
+- [x] Add SQLite run/event storage and artifact layout.
+- [x] Add the loopback HTTP control/status API and WebSocket event stream; make start, pause, step, stop, and observation usable by both coding-agent tools and the browser.
 - [ ] Add headless scenario commands that launch the service, submit validated run configurations, wait for state transitions, and stop runs gracefully.
 - [ ] Add the dependency-light browser UI: map, status, inventory, structured decisions, and start/pause/step/stop controls.
 - [ ] Commit the 10-seed evaluation suite, including seed 6, and report per-seed outcomes and latency.

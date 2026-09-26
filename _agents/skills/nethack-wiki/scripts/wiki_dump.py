@@ -26,6 +26,23 @@ class Page:
     text: str
 
 
+def normalize_title(title: str) -> str:
+    """Normalize page titles per MediaWiki `<case>first-letter</case>` policy.
+
+    The NetHackWiki dump specifies `<case>first-letter</case>` in its siteinfo.
+    Under this MediaWiki convention:
+    - Leading and trailing whitespace is stripped.
+    - Underscores are converted to spaces.
+    - Only the initial character is capitalized (e.g. 'stairs' -> 'Stairs').
+    - All subsequent characters preserve their exact case to distinguish
+      distinct legal titles (e.g. 'NetHack' vs 'Nethack', 'God' vs 'GoD').
+    """
+    cleaned = title.strip().replace("_", " ")
+    if not cleaned:
+        return ""
+    return cleaned[:1].upper() + cleaned[1:]
+
+
 def pages(path: Path) -> Iterator[Page]:
     try:
         context = ET.iterparse(path, events=("start", "end"))
@@ -49,31 +66,34 @@ def pages(path: Path) -> Iterator[Page]:
 
 def search(path: Path, query: str, include_text: bool, limit: int) -> int:
     query_folded = query.casefold()
-    matches = 0
+    matching_titles: list[str] = []
     for page in pages(path):
-        haystack = f"{page.title}\n{page.text}" if include_text else page.title
-        if query_folded not in haystack.casefold():
-            continue
-        print(page.title)
-        matches += 1
-        if matches >= limit:
-            break
-    if matches == 0:
+        if len(matching_titles) < limit:
+            haystack = f"{page.title}\n{page.text}" if include_text else page.title
+            if query_folded in haystack.casefold():
+                matching_titles.append(page.title)
+    if not matching_titles:
         print(f"No pages matched {query!r}.", file=sys.stderr)
         return 1
+    for title in matching_titles:
+        print(title)
     return 0
 
 
 def print_page(path: Path, title: str) -> int:
-    title_folded = title.casefold()
+    target = normalize_title(title)
+    found_title: str | None = None
+    found_text: str | None = None
     for page in pages(path):
-        if page.title.casefold() != title_folded:
-            continue
-        print(f"# {page.title}\n")
-        print(page.text)
-        return 0
-    print(f"Page {title!r} was not found.", file=sys.stderr)
-    return 1
+        if found_title is None and normalize_title(page.title) == target:
+            found_title = page.title
+            found_text = page.text
+    if found_title is None or found_text is None:
+        print(f"Page {title!r} was not found.", file=sys.stderr)
+        return 1
+    print(f"# {found_title}\n")
+    print(found_text)
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -107,14 +127,18 @@ def main() -> int:
             file=sys.stderr,
         )
         return 2
-    if arguments.command == "search":
-        if arguments.limit <= 0:
-            print("--limit must be greater than zero.", file=sys.stderr)
-            return 2
-        return search(
-            arguments.dump, arguments.query, arguments.in_text, arguments.limit
-        )
-    return print_page(arguments.dump, arguments.title)
+    try:
+        if arguments.command == "search":
+            if arguments.limit <= 0:
+                print("--limit must be greater than zero.", file=sys.stderr)
+                return 2
+            return search(
+                arguments.dump, arguments.query, arguments.in_text, arguments.limit
+            )
+        return print_page(arguments.dump, arguments.title)
+    except RuntimeError as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

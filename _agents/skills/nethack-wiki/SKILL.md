@@ -8,17 +8,19 @@ Default dump: `docs/external/nethack-wiki-xml-dump/nethackwiki_current.xml`. It 
 
 ## Procedure
 
+All commands run through project `uv run` from the repository root (or prefix the script path with `../` from `nethack-agent/`):
+
 1. Search titles before searching full page text:
    ```bash
-   python _agents/skills/nethack-wiki/scripts/wiki_dump.py search "stair"
+   uv run python _agents/skills/nethack-wiki/scripts/wiki_dump.py search "stair"
    ```
 2. Extract only the likely page:
    ```bash
-   python _agents/skills/nethack-wiki/scripts/wiki_dump.py page "Stairs"
+   uv run python _agents/skills/nethack-wiki/scripts/wiki_dump.py page "Stairs"
    ```
 3. If the title is unknown, search page text explicitly:
    ```bash
-   python _agents/skills/nethack-wiki/scripts/wiki_dump.py search "down staircase" --in-text --limit 10
+   uv run python _agents/skills/nethack-wiki/scripts/wiki_dump.py search "down staircase" --in-text --limit 10
    ```
 4. Check version qualifiers and distinguish vanilla NetHack from variants.
 5. For runtime use, summarize only necessary facts in a focused file under `nethack-agent/knowledge/`. Include source page title, canonical URL, dump date if known, supported game version, and review date.

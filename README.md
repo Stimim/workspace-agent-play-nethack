@@ -39,18 +39,20 @@ checks.
 
 ## Project status
 
-Developer bootstrap and the deterministic NLE adapter are implemented. The
-adapter fixes the Staircase character and RNG inputs, exposes public typed
-observations and legal actions, rejects invalid actions, tracks lifecycle, and
-finalizes a ttyrec for every episode.
+Developer bootstrap, the deterministic NLE adapter, and a first end-to-end
+agent loop are implemented. The adapter fixes the Staircase character and RNG
+inputs, exposes public typed observations and legal actions, rejects invalid
+actions, and finalizes a ttyrec for every episode. The observation projector
+feeds a flat coordinator whose local Ollama model picks one gated legal action
+per step, with one repair retry and pause on failure. Runs and decision events
+are stored in SQLite and controlled through a loopback HTTP/WebSocket service
+(`nethack-agent serve`) and its CLI client (`nethack-agent run ...`).
 
 The first product milestone is a hierarchical local agent that succeeds on at
 least 6 of 10 fixed `NetHackStaircase-v0` seeds, including seed 6, while
 recording SQLite events and ttyrecs and streaming a structured decision trace
-to a local web UI. The observation projector, a structured Ollama decision
-model, a flat coordinator with a deterministic action gate, and SQLite run
-storage are implemented; hierarchical goals, the control API, and UI are not
-implemented yet. Their exact acceptance contract
+to a local web UI. Hierarchical goals and skills, knowledge cards, the UI, and
+the evaluation suite are not implemented yet. Their exact acceptance contract
 and boundaries are in [`ARCHITECTURE.md`](ARCHITECTURE.md); work is tracked in
 [`TODO_LIST.md`](TODO_LIST.md).
 

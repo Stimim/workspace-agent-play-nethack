@@ -25,14 +25,15 @@ The dump present during project initialization was approximately 188 MB.
 From the repository root:
 
 ```bash
-python _agents/skills/nethack-wiki/scripts/wiki_dump.py search "stair"
-python _agents/skills/nethack-wiki/scripts/wiki_dump.py page "Stairs"
-python _agents/skills/nethack-wiki/scripts/wiki_dump.py search \
+uv run python _agents/skills/nethack-wiki/scripts/wiki_dump.py search "stair"
+uv run python _agents/skills/nethack-wiki/scripts/wiki_dump.py page "Stairs"
+uv run python _agents/skills/nethack-wiki/scripts/wiki_dump.py search \
   "down staircase" --in-text --limit 10
 ```
 
 The reader streams the XML and does not load the whole dump into memory. Never
-feed the raw file to a model.
+feed the raw file to a model. The dump is also explicitly excluded from the
+built MkDocs documentation site (`exclude_docs` in `docs/mkdocs.yml`).
 
 ## Licensing and attribution
 

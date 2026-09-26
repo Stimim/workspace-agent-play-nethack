@@ -33,12 +33,41 @@ uv run nethack-agent smoke agent
 decision, executes it through the coordinator's action gate, and finalizes the
 ttyrec. It reports the chosen action, goal, token counts, and latency.
 
+### Local control service
+
+```bash
+uv run nethack-agent serve --data-dir data
+```
+
+`serve` defaults to host `127.0.0.1` and port `8000`; override them with
+`--host` and `--port`. It accepts only loopback hosts. It stores `runs.sqlite3`
+and per-run artifacts under the data directory (`nethack-agent/data/` is
+ignored by Git).
+From another shell:
+
+```bash
+uv run nethack-agent run start --seed 6 --max-steps 200   # paused after reset
+uv run nethack-agent run step RUN_ID                      # one model decision
+uv run nethack-agent run resume RUN_ID                    # run on a worker thread
+uv run nethack-agent run pause RUN_ID
+uv run nethack-agent run status RUN_ID
+uv run nethack-agent run events RUN_ID --after -1
+uv run nethack-agent run stop RUN_ID
+```
+
+`run start --auto` resumes immediately. Commands print the JSON API response
+and exit nonzero on HTTP or connection errors. The service allows one active
+run per process; runs cannot be controlled after a service restart. The API
+and WebSocket endpoints are listed in `ARCHITECTURE.md`.
+
 Configuration is environment-based:
 
 ```bash
 export NETHACK_AGENT_OLLAMA_URL=http://127.0.0.1:11434
 export NETHACK_AGENT_MODEL=gemma4-nethack:latest
 export NETHACK_AGENT_OLLAMA_TIMEOUT_SECONDS=180
+export NETHACK_AGENT_API_URL=http://127.0.0.1:8000       # run commands
+export NETHACK_AGENT_API_TIMEOUT_SECONDS=300             # run commands
 ```
 
 ### Ollama installation or version mismatch
@@ -74,9 +103,10 @@ uv run ruff format --check .
 uv run pytest -q
 ```
 
-Tests use real NLE environments with scripted models; they do not need Ollama.
-Behavioral changes also require a smoke run of the changed path: `smoke agent`
-covers one real model decision.
+Tests use real NLE environments with scripted models and FastAPI's test client;
+they do not need Ollama. Behavioral changes also require a smoke run of the
+changed path: `smoke agent` covers one real model decision, and `serve` plus
+`run` commands cover the control service.
 
 ## Documentation preview
 
@@ -95,14 +125,19 @@ after Markdown changes. It renders task-list checkboxes and Mermaid diagrams.
 Stop it with `Ctrl+C`. The first launch downloads the pinned viewer packages
 through `uvx`; Mermaid's browser library is loaded from `unpkg.com`.
 
+The control service also defaults to port 8000; pass `--port` to one of them
+when running both.
+
 ## NetHackWiki source material
 
-The XML dump is intentionally ignored because it is about 188 MB uncompressed. See `external/nethack-wiki-xml-dump/README.md` for acquisition and licensing, then use the coding-agent skill:
+The XML dump is intentionally ignored because it is about 188 MB uncompressed. See `docs/external/nethack-wiki-xml-dump/README.md` for acquisition and licensing, then use the coding-agent skill from the repository root:
 
 ```bash
-python ../_agents/skills/nethack-wiki/scripts/wiki_dump.py search "stair"
-python ../_agents/skills/nethack-wiki/scripts/wiki_dump.py page "Stairs"
+uv run python _agents/skills/nethack-wiki/scripts/wiki_dump.py search "stair"
+uv run python _agents/skills/nethack-wiki/scripts/wiki_dump.py page "Stairs"
 ```
+
+From `nethack-agent/`, run `uv run python ../_agents/skills/nethack-wiki/scripts/wiki_dump.py ...`.
 
 Do not put the raw dump into a model prompt. Extract a relevant page, verify the supported NetHack version and source, then write a concise cited card under `nethack-agent/knowledge/`.
 
