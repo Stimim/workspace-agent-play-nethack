@@ -1,6 +1,6 @@
 # NetHack agent
 
-This Python application domain contains the deterministic NLE adapter, observation projector, flat coordinator with a deterministic action gate, and structured Ollama decision model, plus real NLE and Ollama diagnostics. Hierarchical skills, knowledge cards, persistence, the control API, the web UI, and the evaluation suite are milestone work tracked in [`../TODO_LIST.md`](../TODO_LIST.md).
+This Python application domain contains the deterministic NLE adapter, observation projector, flat coordinator with a deterministic action gate, structured Ollama decision model, and SQLite run/event store, plus real NLE and Ollama diagnostics. Hierarchical skills, knowledge cards, the control API, the web UI, and the evaluation suite are milestone work tracked in [`../TODO_LIST.md`](../TODO_LIST.md).
 
 ```bash
 uv sync --locked

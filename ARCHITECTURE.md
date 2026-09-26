@@ -6,7 +6,7 @@ Build a local, autonomous NetHack agent whose long-term success criterion is asc
 
 ## Current status
 
-The deterministic NLE adapter is implemented and covered by real-environment tests. It owns seeded Staircase setup, public zero-copy observations, legal-action validation, lifecycle state, and ttyrec finalization. The observation projector, structured Ollama decision model, and a flat single-action coordinator with a deterministic action gate are implemented; `smoke agent` exercises one real Ollama decision. Hierarchical goals and skills, persistence, the control API, and the web UI described below are not yet implemented.
+The deterministic NLE adapter is implemented and covered by real-environment tests. It owns seeded Staircase setup, public zero-copy observations, legal-action validation, lifecycle state, and ttyrec finalization. The observation projector, structured Ollama decision model, flat single-action coordinator with a deterministic action gate, and SQLite run/event store are implemented; `smoke agent` exercises one real Ollama decision. Hierarchical goals and skills, the control API, and the web UI described below are not yet implemented.
 
 ## System context
 
@@ -107,6 +107,13 @@ The 188 MB wiki XML dump is source material, not a runtime prompt and not commit
 ### Persistence and replay
 
 SQLite is the authoritative structured event log. Every run will record configuration and version identifiers, seeds, projected observations, goals, candidate actions and scores, chosen action, concise rationale, inference timing and token counts, rewards, errors, and terminal outcome. Large binary arrays should not be duplicated in every event. NLE ttyrec files provide native episode replay and are referenced from the run record.
+
+`RunStore` implements this log in `<data-dir>/runs.sqlite3` (WAL mode). The
+`runs` table holds scenario configuration, derived seeds, environment,
+character, model, policy, knowledge, NLE and Ollama versions, state, outcome,
+last error, and the ttyrec path. The `events` table holds per-run JSON payloads
+with contiguous sequence numbers starting at 0. Each run's NLE artifacts live
+under `<data-dir>/runs/<run-id>/`.
 
 ### Control and observation surface
 

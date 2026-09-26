@@ -48,8 +48,9 @@ The first product milestone is a hierarchical local agent that succeeds on at
 least 6 of 10 fixed `NetHackStaircase-v0` seeds, including seed 6, while
 recording SQLite events and ttyrecs and streaming a structured decision trace
 to a local web UI. The observation projector, a structured Ollama decision
-model, and a flat coordinator with a deterministic action gate are implemented;
-hierarchical goals, persistence, control API, and UI are not implemented yet. Their exact acceptance contract
+model, a flat coordinator with a deterministic action gate, and SQLite run
+storage are implemented; hierarchical goals, the control API, and UI are not
+implemented yet. Their exact acceptance contract
 and boundaries are in [`ARCHITECTURE.md`](ARCHITECTURE.md); work is tracked in
 [`TODO_LIST.md`](TODO_LIST.md).
 
