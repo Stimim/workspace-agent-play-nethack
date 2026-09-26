@@ -7,11 +7,15 @@ import os
 import socket
 import subprocess
 import sys
+import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Final
+
+from nethack_agent.environment import NleEnvironment, ScenarioConfig
 
 DEFAULT_OLLAMA_URL: Final = "http://127.0.0.1:11434"
 DEFAULT_MODEL: Final = "gemma4-nethack:latest"
@@ -173,43 +177,36 @@ def smoke_ollama(config: RuntimeConfig) -> str:
 
 def smoke_nle() -> str:
     try:
-        import gymnasium as gym
-        import nle  # noqa: F401  # Registers NLE environments.
-    except ImportError as error:
-        raise CheckFailure(f"cannot import NLE runtime: {error}") from error
-
-    environment = None
-    try:
-        environment = gym.make(
-            "NetHackStaircase-v0",
-            character="val-dwa-law",
-            max_episode_steps=10,
-            observation_keys=("chars", "blstats", "message"),
-            render_mode="ansi",
-            fix_moon_phase=True,
-        )
-        observation, _ = environment.reset(seed=6)
-        required_keys = {"chars", "blstats", "message"}
-        missing = required_keys.difference(observation)
-        if missing:
-            raise CheckFailure(
-                f"NLE reset omitted observations: {', '.join(sorted(missing))}"
+        with tempfile.TemporaryDirectory(prefix="nethack-agent-smoke-") as directory:
+            environment = NleEnvironment(
+                ScenarioConfig(
+                    seed=6,
+                    artifact_directory=Path(directory),
+                    max_episode_steps=10,
+                )
             )
-        step_result = environment.step(0)
-        if len(step_result) != 5:
-            raise CheckFailure("NLE step did not return the Gymnasium 5-tuple")
-        action_count = environment.action_space.n
-        rows, columns = observation["chars"].shape
+            with environment:
+                observation = environment.reset()
+                transition = environment.step(0)
+                rows, columns = observation.chars.shape
+                action_count = len(environment.legal_actions)
+                seed_set = environment.seed_set
+                if transition.step_index != 1:
+                    raise CheckFailure("NLE adapter did not advance one step")
+            ttyrec_count = len(environment.ttyrec_files)
+            if ttyrec_count != 1:
+                raise CheckFailure(
+                    f"NLE adapter produced {ttyrec_count} ttyrecs instead of one"
+                )
     except CheckFailure:
         raise
     except Exception as error:
         raise CheckFailure(f"NLE environment smoke failed: {error}") from error
-    finally:
-        if environment is not None:
-            environment.close()
     return (
         "NLE Staircase reset and step completed; "
-        f"map {columns}x{rows}; {action_count} legal action indices"
+        f"map {columns}x{rows}; {action_count} legal action indices; "
+        f"RNG seeds {seed_set.core}/{seed_set.display}/{seed_set.level}; "
+        "one ttyrec finalized"
     )
 
 

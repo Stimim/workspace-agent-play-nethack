@@ -6,7 +6,7 @@ Build a local, autonomous NetHack agent whose long-term success criterion is asc
 
 ## Current status
 
-The repository is at the developer-ready bootstrap stage. The executable code currently provides environment and model smoke checks. The live agent loop, persistence, and web UI described below are the next implementation milestone, not completed components.
+The deterministic NLE adapter is implemented and covered by real-environment tests. It owns seeded Staircase setup, public zero-copy observations, legal-action validation, lifecycle state, and ttyrec finalization. The observation projector, coordinator, persistence, control API, and web UI described below are not yet implemented.
 
 ## System context
 
@@ -46,6 +46,17 @@ The adapter must:
 - use explicit seeds and deterministic time-derived effects when supported;
 - expose only legitimate observations to the policy; NLE's internal task state must never enter a model prompt;
 - translate model intent into the finite action set and reject invalid actions before calling `env.step`.
+
+`NleEnvironment` implements the current boundary. One committed suite seed is
+deterministically expanded into separate core, display, and level-generation
+seeds; NLE reseeding is disabled and time-derived effects use the seed. The
+adapter requests only public observation keys, represents its finite action set
+as typed index/command/name records, and rejects invalid indices before NLE.
+
+NLE reuses its NumPy observation buffers. `NleObservation` therefore exposes
+zero-copy views that are valid only until the next `step` or `reset`. Consumers
+must project or persist needed values before advancing the environment; they
+must not retain raw observations as event history.
 
 ### Observation projector
 

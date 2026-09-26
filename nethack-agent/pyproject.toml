@@ -19,8 +19,12 @@ nethack-agent = "nethack_agent.cli:main"
 
 [dependency-groups]
 dev = [
+    "pytest==8.4.2",
     "ruff==0.13.2",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/nethack_agent"]

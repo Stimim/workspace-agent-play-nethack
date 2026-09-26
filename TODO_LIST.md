@@ -7,7 +7,7 @@ This file tracks product work. Completed work and reasoning belong in `docs/note
 Acceptance: the fixed local policy succeeds on at least 6 of 10 committed deterministic `NetHackStaircase-v0` seeds, including seed 6, with no invalid NLE actions and complete SQLite plus ttyrec replay data.
 
 - [ ] Define typed observation, decision, action, run-state, and event contracts.
-- [ ] Implement the NLE adapter with lawful dwarven Valkyrie, deterministic seeds, ttyrec capture, and explicit legal actions.
+- [x] Implement the NLE adapter with lawful dwarven Valkyrie, deterministic seeds, ttyrec capture, and explicit legal actions.
 - [ ] Build observation projection for map, player statistics, messages, prompts, and inventory.
 - [ ] Build the hierarchical coordinator and deterministic action gate.
 - [ ] Add structured Ollama output, one repair retry, then pause-on-failure behavior.

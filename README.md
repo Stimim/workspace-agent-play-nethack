@@ -39,12 +39,16 @@ checks.
 
 ## Project status
 
-Developer bootstrap is implemented. The first product milestone is a
-hierarchical local agent that succeeds on at least 6 of 10 fixed
-`NetHackStaircase-v0` seeds, including seed 6, while recording SQLite events
-and ttyrecs and streaming a structured decision trace to a local web UI.
+Developer bootstrap and the deterministic NLE adapter are implemented. The
+adapter fixes the Staircase character and RNG inputs, exposes public typed
+observations and legal actions, rejects invalid actions, tracks lifecycle, and
+finalizes a ttyrec for every episode.
 
-The live agent and UI are not implemented yet. Their exact acceptance contract
+The first product milestone is a hierarchical local agent that succeeds on at
+least 6 of 10 fixed `NetHackStaircase-v0` seeds, including seed 6, while
+recording SQLite events and ttyrecs and streaming a structured decision trace
+to a local web UI. The observation projector, live coordinator, persistence,
+control API, and UI are not implemented yet. Their exact acceptance contract
 and boundaries are in [`ARCHITECTURE.md`](ARCHITECTURE.md); work is tracked in
 [`TODO_LIST.md`](TODO_LIST.md).
 
