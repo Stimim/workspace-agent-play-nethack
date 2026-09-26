@@ -6,7 +6,10 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from nethack_agent.coordinator import AgentCoordinator
 from nethack_agent.environment import NleEnvironment, ScenarioConfig
+from nethack_agent.model import DecisionFailure, OllamaDecisionModel
+from nethack_agent.observation import ObservationProjector
 from nethack_agent.ollama import OllamaClient, OllamaConfig, OllamaError
 
 
@@ -64,6 +67,48 @@ def smoke_nle() -> str:
     )
 
 
+def smoke_agent(config: OllamaConfig) -> str:
+    coordinator: AgentCoordinator | None = None
+    try:
+        with tempfile.TemporaryDirectory(prefix="nethack-agent-model-") as directory:
+            environment = NleEnvironment(
+                ScenarioConfig(
+                    seed=6,
+                    artifact_directory=Path(directory),
+                    max_episode_steps=10,
+                )
+            )
+            coordinator = AgentCoordinator(
+                environment,
+                ObservationProjector(),
+                OllamaDecisionModel(OllamaClient(config)),
+            )
+            coordinator.start()
+            record = coordinator.advance(single_step=True)
+            if record is None:
+                raise CheckFailure("coordinator discarded the model decision")
+            coordinator.stop()
+            if len(coordinator.ttyrec_files) != 1:
+                raise CheckFailure("agent smoke did not finalize exactly one ttyrec")
+            decision = record.decision
+            return (
+                f"model chose {record.action.index} ({record.action.name}) for "
+                f"goal {decision.decision.goal!r}; "
+                f"{decision.metrics.prompt_tokens} prompt tokens, "
+                f"{decision.metrics.output_tokens} output tokens, "
+                f"{decision.metrics.latency_ms:.0f} ms"
+            )
+    except (DecisionFailure, OllamaError) as error:
+        raise CheckFailure(str(error)) from error
+    except CheckFailure:
+        raise
+    except Exception as error:
+        raise CheckFailure(f"agent smoke failed: {error}") from error
+    finally:
+        if coordinator is not None:
+            coordinator.stop()
+
+
 def _run_check(name: str, check: Any) -> bool:
     try:
         detail = check()
@@ -81,7 +126,7 @@ def _build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("doctor", help="check NLE and local Ollama end to end")
     smoke_parser = subparsers.add_parser("smoke", help="run one integration check")
-    smoke_parser.add_argument("target", choices=("nle", "ollama"))
+    smoke_parser.add_argument("target", choices=("nle", "ollama", "agent"))
     return parser
 
 
@@ -99,6 +144,7 @@ def main(argv: list[str] | None = None) -> int:
     if arguments.command == "smoke":
         checks = {
             "ollama": lambda: smoke_ollama(config),
+            "agent": lambda: smoke_agent(config),
         }
         return 0 if _run_check(arguments.target, checks[arguments.target]) else 1
 

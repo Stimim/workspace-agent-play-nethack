@@ -6,7 +6,7 @@ Build a local, autonomous NetHack agent whose long-term success criterion is asc
 
 ## Current status
 
-The deterministic NLE adapter is implemented and covered by real-environment tests. It owns seeded Staircase setup, public zero-copy observations, legal-action validation, lifecycle state, and ttyrec finalization. The observation projector and the structured Ollama decision model are implemented. The coordinator, persistence, control API, and web UI described below are not yet implemented.
+The deterministic NLE adapter is implemented and covered by real-environment tests. It owns seeded Staircase setup, public zero-copy observations, legal-action validation, lifecycle state, and ttyrec finalization. The observation projector, structured Ollama decision model, and a flat single-action coordinator with a deterministic action gate are implemented; `smoke agent` exercises one real Ollama decision. Hierarchical goals and skills, persistence, the control API, and the web UI described below are not yet implemented.
 
 ## System context
 
@@ -83,6 +83,17 @@ the candidates with the highest score, and a bounded rationale. A transport or
 validation failure triggers exactly one repair prompt that includes the error;
 a second failure raises `DecisionFailure`. Reported metrics sum tokens and
 latency across both attempts.
+
+`AgentCoordinator` is the current, flat implementation: the model selects one
+NLE action per step; goals and skills are not yet separate layers. States are
+`idle`, `running`, `paused`, `terminal`, `stopped`, and `error`. `start` resets
+NLE into `paused`; `advance` performs one decision and action while `running`,
+or one single step while `paused`. Model inference runs outside the lock, so
+pause or stop during inference discards the pending decision. The action gate
+rejects an index outside the legal action table and pauses the run.
+`DecisionFailure` pauses with the error recorded; an NLE failure moves the run
+to `error`. Truncation, death, and task success are terminal and close NLE,
+finalizing the ttyrec.
 
 ### Knowledge layers
 

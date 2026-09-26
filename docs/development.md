@@ -26,7 +26,12 @@ Run one check in isolation:
 ```bash
 uv run nethack-agent smoke nle
 uv run nethack-agent smoke ollama
+uv run nethack-agent smoke agent
 ```
+
+`smoke agent` resets seed 6, asks the configured model for one structured
+decision, executes it through the coordinator's action gate, and finalizes the
+ttyrec. It reports the chosen action, goal, token counts, and latency.
 
 Configuration is environment-based:
 
@@ -66,9 +71,12 @@ The Ollama URL must resolve to a loopback hostname or address. Gameplay must rem
 cd nethack-agent
 uv run ruff check .
 uv run ruff format --check .
+uv run pytest -q
 ```
 
-Behavioral changes also require a smoke run of the changed path. The full live agent is not implemented at bootstrap, so `doctor` is the current end-to-end executable check.
+Tests use real NLE environments with scripted models; they do not need Ollama.
+Behavioral changes also require a smoke run of the changed path: `smoke agent`
+covers one real model decision.
 
 ## Documentation preview
 

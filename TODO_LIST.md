@@ -10,7 +10,7 @@ Acceptance: the fixed local policy succeeds on at least 6 of 10 committed determ
 - [x] Implement the NLE adapter with lawful dwarven Valkyrie, deterministic seeds, ttyrec capture, and explicit legal actions.
 - [x] Build observation projection for map, player statistics, messages, prompts, and inventory.
 - [ ] Build the hierarchical coordinator and deterministic action gate.
-- [ ] Add structured Ollama output, one repair retry, then pause-on-failure behavior.
+- [x] Add structured Ollama output, one repair retry, then pause-on-failure behavior.
 - [ ] Curate the first local-model knowledge cards from cited NetHackWiki pages.
 - [ ] Add SQLite run/event storage and artifact layout.
 - [ ] Add the loopback HTTP control/status API and WebSocket event stream; make start, pause, step, stop, and observation usable by both coding-agent tools and the browser.
