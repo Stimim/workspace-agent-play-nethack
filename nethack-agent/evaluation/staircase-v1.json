@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "suite_id": "staircase-v1",
+  "environment": "NetHackStaircase-v0",
+  "character": "val-dwa-law",
+  "seeds": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+  "seed_selection": "Suite seeds 1 through 10 were fixed on 2026-09-27 before any suite episode ran. Seed 6 is the milestone reference seed. Seeds must not be replaced, reordered for reporting, or dropped after results are known; a different seed set requires a new suite_id.",
+  "max_episode_steps": 1000,
+  "step_cap_rationale": "1000 NLE steps per episode, fixed before any suite episode ran. It matches the cap of the earlier documented trajectory smoke and bounds a real-model suite at 10000 hierarchical actions, since most exploration steps require one local model fallback decision.",
+  "acceptance": {
+    "min_task_successes": 6,
+    "required_success_seeds": [6],
+    "max_invalid_actions": 0,
+    "max_gate_rejections": 0,
+    "require_complete_records": true
+  }
+}

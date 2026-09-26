@@ -8,10 +8,18 @@ from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Final
+from typing import Final
 
+from nethack_agent.contracts import ContractError, load_json_object
 from nethack_agent.decision import RunOutcome, RunState
 from nethack_agent.environment import ScenarioConfig, SeedSet
+from nethack_agent.events import (
+    EventKind,
+    EventPayload,
+    RunEvent,
+    event_kind,
+    event_payload_from_json,
+)
 
 _SCHEMA = """
 PRAGMA journal_mode = WAL;
@@ -33,6 +41,7 @@ CREATE TABLE IF NOT EXISTS runs (
     policy_version TEXT NOT NULL,
     knowledge_version TEXT NOT NULL,
     nle_version TEXT NOT NULL,
+    ollama_num_ctx INTEGER,
     ollama_version TEXT,
     ttyrec_path TEXT,
     error TEXT
@@ -60,20 +69,8 @@ class RunStateConflictError(RuntimeError):
     pass
 
 
-@dataclass(frozen=True, slots=True)
-class RunEvent:
-    sequence: int
-    created_at: str
-    kind: str
-    payload: dict[str, Any]
-
-    def to_json(self) -> dict[str, object]:
-        return {
-            "sequence": self.sequence,
-            "created_at": self.created_at,
-            "kind": self.kind,
-            "payload": self.payload,
-        }
+class StoredEventError(ContractError):
+    """A stored event cannot be decoded as the stable event contract."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,8 +85,8 @@ class RunRecord:
     id: str
     created_at: str
     updated_at: str
-    state: str
-    outcome: str | None
+    state: RunState
+    outcome: RunOutcome | None
     environment: str
     character: str
     suite_seed: int
@@ -101,12 +98,16 @@ class RunRecord:
     policy_version: str
     knowledge_version: str
     nle_version: str
+    ollama_num_ctx: int | None
     ollama_version: str | None
     ttyrec_path: str | None
     error: str | None
 
     def to_json(self) -> dict[str, object]:
-        return asdict(self)
+        result = asdict(self)
+        result["state"] = self.state.value
+        result["outcome"] = self.outcome.value if self.outcome else None
+        return result
 
 
 class RunStore:
@@ -115,6 +116,12 @@ class RunStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self._connection() as connection:
             connection.executescript(_SCHEMA)
+            columns = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(runs)")
+            }
+            if "ollama_num_ctx" not in columns:
+                connection.execute("ALTER TABLE runs ADD COLUMN ollama_num_ctx INTEGER")
 
     def create_run(
         self,
@@ -127,6 +134,7 @@ class RunStore:
         policy_version: str,
         knowledge_version: str,
         nle_version: str,
+        ollama_num_ctx: int | None,
         run_id: str | None = None,
     ) -> RunRecord:
         run_id = run_id or str(uuid.uuid4())
@@ -138,8 +146,8 @@ class RunStore:
                     id, created_at, updated_at, state, environment, character,
                     suite_seed, core_seed, display_seed, level_seed,
                     max_episode_steps, model, policy_version, knowledge_version,
-                    nle_version
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    nle_version, ollama_num_ctx
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     run_id,
@@ -157,6 +165,7 @@ class RunStore:
                     policy_version,
                     knowledge_version,
                     nle_version,
+                    ollama_num_ctx,
                 ),
             )
             record = self._get_run(connection, run_id)
@@ -192,8 +201,7 @@ class RunStore:
         run_id: str,
         *,
         state: RunState,
-        kind: str,
-        payload: dict[str, object],
+        event: EventPayload,
         outcome: RunOutcome | None = None,
         error: str | None = None,
         ollama_version: str | None = None,
@@ -212,17 +220,15 @@ class RunStore:
                 ttyrec_path=ttyrec_path,
                 expected_states=expected_states,
             )
-            event = self._append_event(connection, run_id, kind, payload)
+            stored_event = self._append_event(connection, run_id, event)
             record = self._get_run(connection, run_id)
-        return record, event
+        return record, stored_event
 
-    def append_event(
-        self, run_id: str, kind: str, payload: dict[str, object]
-    ) -> RunEvent:
+    def append_event(self, run_id: str, event: EventPayload) -> RunEvent:
         with self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
-            event = self._append_event(connection, run_id, kind, payload)
-        return event
+            stored_event = self._append_event(connection, run_id, event)
+        return stored_event
 
     def get_run(self, run_id: str) -> RunRecord:
         with self._connection() as connection:
@@ -326,10 +332,12 @@ class RunStore:
         self,
         connection: sqlite3.Connection,
         run_id: str,
-        kind: str,
-        payload: dict[str, object],
+        payload: EventPayload,
     ) -> RunEvent:
-        serialized = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+        kind = event_kind(payload)
+        serialized = json.dumps(
+            payload.to_json(), separators=(",", ":"), sort_keys=True, allow_nan=False
+        )
         created_at = _now()
         exists = connection.execute(
             "SELECT 1 FROM runs WHERE id = ?", (run_id,)
@@ -346,18 +354,29 @@ class RunStore:
             INSERT INTO events (run_id, sequence, created_at, kind, payload_json)
             VALUES (?, ?, ?, ?, ?)
             """,
-            (run_id, sequence, created_at, kind, serialized),
+            (run_id, sequence, created_at, kind.value, serialized),
         )
-        return RunEvent(sequence, created_at, kind, json.loads(serialized))
+        return RunEvent(sequence, created_at, kind, payload)
 
     @staticmethod
     def _event_from_row(row: sqlite3.Row) -> RunEvent:
-        return RunEvent(
-            sequence=int(row["sequence"]),
-            created_at=str(row["created_at"]),
-            kind=str(row["kind"]),
-            payload=json.loads(row["payload_json"]),
-        )
+        sequence = int(row["sequence"])
+        stored_kind = str(row["kind"])
+        try:
+            kind = EventKind(stored_kind)
+        except ValueError as error:
+            raise StoredEventError(
+                f"stored event {sequence} has unknown kind {stored_kind!r}"
+            ) from error
+        try:
+            name = f"stored {kind.value} event {sequence} payload"
+            raw_payload = load_json_object(str(row["payload_json"]), name)
+            payload = event_payload_from_json(kind, raw_payload)
+            return RunEvent(sequence, str(row["created_at"]), kind, payload)
+        except ContractError as error:
+            raise StoredEventError(
+                f"stored {kind.value} event {sequence} is corrupt: {error}"
+            ) from error
 
     @staticmethod
     def _get_run(connection: sqlite3.Connection, run_id: str) -> RunRecord:
@@ -366,7 +385,17 @@ class RunStore:
         ).fetchone()
         if row is None:
             raise RunNotFoundError(run_id)
-        return RunRecord(**dict(row))
+        values = dict(row)
+        try:
+            values["state"] = RunState(str(values["state"]))
+            values["outcome"] = (
+                None
+                if values["outcome"] is None
+                else RunOutcome(str(values["outcome"]))
+            )
+        except ValueError as error:
+            raise ContractError(f"run {run_id} has invalid lifecycle state") from error
+        return RunRecord(**values)
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:

@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "bundle_id": "staircase-reviewed-v2",
+  "max_context_characters": 6000,
+  "cards": [
+    {
+      "path": "staircase-goal.md",
+      "sha256": "5545ed5992bf5b9b4be9ee02e3736ad1d95ece736e2c9399bf36bf13a6824ece"
+    },
+    {
+      "path": "exploration-map.md",
+      "sha256": "41317e77303d0a39a9f9e8787ecbb17d5744f120e773d257bfefcef1e8fec08b"
+    },
+    {
+      "path": "safe-interaction.md",
+      "sha256": "fcaa4f1c87a8bbd3819f76d53edbefae61f50f5de7f92c270fb4298df0d23bcd"
+    }
+  ]
+}

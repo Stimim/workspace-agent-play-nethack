@@ -11,42 +11,51 @@ from nethack_agent.decision import (
     ActionCandidate,
     ActionDecision,
     DecisionMetrics,
-    ModelDecision,
+    Goal,
+    ModelActionDecision,
+    ModelSkillDecision,
+    RunState,
+    Skill,
+    SkillDecision,
 )
+from nethack_agent.model import DecisionFailure
 from nethack_agent.ollama import OllamaConfig
 from nethack_agent.run_manager import RunManager
 
+_METRICS = DecisionMetrics(1, 1, 1.0, False)
+
 
 class EastModel:
-    def decide(self, *_: object) -> ModelDecision:
-        return ModelDecision(
+    def select_skill(self, *_: object) -> ModelSkillDecision:
+        return ModelSkillDecision(
+            SkillDecision(
+                Goal.STAND_ON_DOWNSTAIRS,
+                Skill.STAIRCASE_NAVIGATION,
+                "Use staircase navigation.",
+            ),
+            _METRICS,
+            "{}",
+        )
+
+    def select_action(self, *_: object) -> ModelActionDecision:
+        return ModelActionDecision(
             ActionDecision(
-                goal="explore east",
                 candidates=(ActionCandidate(2, 1.0, "visible open floor"),),
                 action_index=2,
                 rationale="Move east into visible floor.",
             ),
-            DecisionMetrics(1, 1, 1.0, False),
+            _METRICS,
             "{}",
         )
 
 
-class InvalidActionModel:
-    def decide(self, *_: object) -> ModelDecision:
-        return ModelDecision(
-            ActionDecision(
-                goal="invalid",
-                candidates=(ActionCandidate(999, 1.0, "invalid"),),
-                action_index=999,
-                rationale="Invalid action.",
-            ),
-            DecisionMetrics(1, 1, 1.0, False),
-            "{}",
-        )
+class FailingSkillModel(EastModel):
+    def select_skill(self, *_: object) -> ModelSkillDecision:
+        raise DecisionFailure("malformed after repair")
 
 
-class InvariantFailureModel:
-    def decide(self, *_: object) -> ModelDecision:
+class InvariantFailureModel(EastModel):
+    def select_skill(self, *_: object) -> ModelSkillDecision:
         raise CoordinatorInvariantError("internal invariant failed")
 
 
@@ -67,12 +76,15 @@ def test_api_controls_run_and_persists_step_and_ttyrec(tmp_path: Path) -> None:
     )
     assert created.status_code == 201
     run_id = created.json()["run"]["id"]
+    assert created.json()["coordinator"]["current_goal"] == "stand_on_downstairs"
+    assert created.json()["coordinator"]["current_skill"] is None
     assert created.json()["run"]["state"] == "paused"
 
     stepped = api.post(f"/api/runs/{run_id}/step")
     assert stepped.status_code == 200
     assert stepped.json()["coordinator"]["observation"]["step_index"] == 1
     assert stepped.json()["run"]["state"] == "paused"
+    assert stepped.json()["coordinator"]["current_skill"] == "explore_level"
 
     stopped = api.post(f"/api/runs/{run_id}/stop")
     assert stopped.status_code == 200
@@ -86,8 +98,21 @@ def test_api_controls_run_and_persists_step_and_ttyrec(tmp_path: Path) -> None:
         "step",
         "run_stopped",
     ]
-    assert events[1]["payload"]["action"]["index"] == 2
-
+    step = events[1]["payload"]
+    assert step["skill_decision"]["skill"] == "staircase_navigation"
+    assert step["action_decision"] is None
+    selection = step["selection"]
+    assert selection["action_index"] == step["action"]["index"]
+    assert {
+        key: selection[key]
+        for key in ("source", "goal", "skill", "skill_selection", "stuck_reason")
+    } == {
+        "source": "deterministic_skill",
+        "goal": "stand_on_downstairs",
+        "skill": "explore_level",
+        "skill_selection": "arbiter",
+        "stuck_reason": None,
+    }
     with api.websocket_connect(f"/api/runs/{run_id}/events/ws") as websocket:
         assert websocket.receive_json()["kind"] == "run_started"
 
@@ -170,25 +195,25 @@ def test_disconnected_paused_websocket_and_service_shutdown_finalize_run(
             assert websocket.receive_json()["kind"] == "run_started"
 
     persisted = manager.store.get_run(run_id)
-    assert persisted.state == "stopped"
+    assert persisted.state is RunState.STOPPED
     assert persisted.ttyrec_path is not None
     assert Path(persisted.ttyrec_path).is_file()
 
 
-def test_model_gate_failure_is_503_but_internal_coordinator_failure_is_500(
+def test_model_failure_is_503_but_internal_coordinator_failure_is_500(
     tmp_path: Path,
 ) -> None:
-    gate_manager = RunManager(
-        tmp_path / "gate",
+    failing_manager = RunManager(
+        tmp_path / "model",
         OllamaConfig(model="test-model"),
-        model_factory=lambda _: InvalidActionModel(),
+        model_factory=lambda _: FailingSkillModel(),
     )
-    gate_api = TestClient(create_app(gate_manager), raise_server_exceptions=False)
-    gate_run = gate_api.post("/api/runs", json={"seed": 6}).json()["run"]["id"]
-    gate_response = gate_api.post(f"/api/runs/{gate_run}/step")
-    assert gate_response.status_code == 503
-    assert gate_manager.store.get_run(gate_run).state == "paused"
-    gate_api.post(f"/api/runs/{gate_run}/stop")
+    failing_api = TestClient(create_app(failing_manager), raise_server_exceptions=False)
+    failing_run = failing_api.post("/api/runs", json={"seed": 6}).json()["run"]["id"]
+    failing_response = failing_api.post(f"/api/runs/{failing_run}/step")
+    assert failing_response.status_code == 503
+    assert failing_manager.store.get_run(failing_run).state is RunState.PAUSED
+    failing_api.post(f"/api/runs/{failing_run}/stop")
 
     internal_manager = RunManager(
         tmp_path / "internal",
@@ -201,4 +226,4 @@ def test_model_gate_failure_is_503_but_internal_coordinator_failure_is_500(
     internal_run = internal_api.post("/api/runs", json={"seed": 6}).json()["run"]["id"]
     internal_response = internal_api.post(f"/api/runs/{internal_run}/step")
     assert internal_response.status_code == 500
-    assert internal_manager.store.get_run(internal_run).state == "error"
+    assert internal_manager.store.get_run(internal_run).state is RunState.ERROR

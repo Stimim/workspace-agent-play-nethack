@@ -3,9 +3,11 @@ from __future__ import annotations
 import asyncio
 import sys
 from contextlib import asynccontextmanager, suppress
-from typing import Annotated
+from importlib.resources import files
+from typing import Annotated, Final
 
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 
 from nethack_agent.coordinator import (
@@ -22,6 +24,24 @@ from nethack_agent.storage import (
 )
 
 _TERMINAL_STATES = {"terminal", "stopped", "error"}
+_UI_ASSETS: Final = {
+    "index.html": "text/html; charset=utf-8",
+    "app.css": "text/css; charset=utf-8",
+    "app.js": "text/javascript; charset=utf-8",
+    "client.js": "text/javascript; charset=utf-8",
+    "render.js": "text/javascript; charset=utf-8",
+}
+UI_CONTENT_SECURITY_POLICY: Final = (
+    "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; "
+    "connect-src 'self'; base-uri 'none'; form-action 'none'; "
+    "frame-ancestors 'none'"
+)
+_UI_HEADERS: Final = {
+    "Content-Security-Policy": UI_CONTENT_SECURITY_POLICY,
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "Cache-Control": "no-store",
+}
 
 
 class CreateRunRequest(BaseModel):
@@ -63,6 +83,16 @@ def create_app(manager: RunManager) -> FastAPI:
     @app.get("/api/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/", include_in_schema=False)
+    def ui_index() -> Response:
+        return _ui_asset_response("index.html")
+
+    @app.get("/ui/{name}", include_in_schema=False)
+    def ui_asset(name: str) -> Response:
+        if name not in _UI_ASSETS:
+            raise HTTPException(status_code=404, detail="asset not found")
+        return _ui_asset_response(name)
 
     @app.post("/api/runs", status_code=201)
     def create_run(request: CreateRunRequest) -> dict[str, object]:
@@ -171,3 +201,8 @@ def _error_response(status_code: int, detail: str):  # type: ignore[no-untyped-d
     from fastapi.responses import JSONResponse
 
     return JSONResponse(status_code=status_code, content={"detail": detail})
+
+
+def _ui_asset_response(name: str) -> Response:
+    content = files("nethack_agent").joinpath("ui", name).read_bytes()
+    return Response(content, media_type=_UI_ASSETS[name], headers=_UI_HEADERS)

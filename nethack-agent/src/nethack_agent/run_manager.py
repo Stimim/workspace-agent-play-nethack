@@ -5,7 +5,7 @@ import threading
 import uuid
 from collections.abc import Callable
 from contextlib import suppress
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final
 
@@ -14,14 +14,29 @@ from nethack_agent.coordinator import (
     CoordinatorLifecycleError,
     StepRecord,
 )
-from nethack_agent.decision import RunState
+from nethack_agent.decision import RunOutcome, RunState
 from nethack_agent.environment import (
     STAIRCASE_CHARACTER,
     STAIRCASE_ENVIRONMENT,
     NleEnvironment,
     ScenarioConfig,
 )
-from nethack_agent.model import DecisionFailure, DecisionModel, OllamaDecisionModel
+from nethack_agent.events import (
+    AgentErrorPayload,
+    DecisionFailureTrace,
+    ErrorPhase,
+    RunPausedPayload,
+    RunResumedPayload,
+    RunStartedPayload,
+    RunStoppedPayload,
+    StepPayload,
+)
+from nethack_agent.knowledge import KnowledgeBundle, load_default_knowledge_bundle
+from nethack_agent.model import (
+    DecisionFailure,
+    HierarchicalDecisionModel,
+    OllamaDecisionModel,
+)
 from nethack_agent.observation import ObservationProjector
 from nethack_agent.ollama import OllamaClient, OllamaConfig
 from nethack_agent.storage import (
@@ -34,8 +49,7 @@ from nethack_agent.storage import (
     RunStore,
 )
 
-POLICY_VERSION: Final = "coordinator-v1"
-KNOWLEDGE_VERSION: Final = "none"
+POLICY_VERSION: Final = "hierarchical-explore-v1"
 _ACTIVE_STATES: Final = frozenset({RunState.IDLE, RunState.RUNNING, RunState.PAUSED})
 
 
@@ -43,7 +57,7 @@ class RunControlError(RuntimeError):
     pass
 
 
-ModelFactory = Callable[[OllamaClient], DecisionModel]
+ModelFactory = Callable[[OllamaClient], HierarchicalDecisionModel]
 
 
 @dataclass(slots=True)
@@ -62,13 +76,15 @@ class RunManager:
         ollama_config: OllamaConfig,
         *,
         model_factory: ModelFactory | None = None,
+        knowledge_bundle: KnowledgeBundle | None = None,
     ) -> None:
+        self.knowledge_bundle = knowledge_bundle or load_default_knowledge_bundle()
         self.data_directory = data_directory.expanduser().resolve()
         self.data_directory.mkdir(parents=True, exist_ok=True)
         self.store = RunStore(self.data_directory / "runs.sqlite3")
         self._ollama_config = ollama_config
         self._model_factory = model_factory or (
-            lambda client: OllamaDecisionModel(client)
+            lambda client: OllamaDecisionModel(client, self.knowledge_bundle)
         )
         self._runs: dict[str, ManagedRun] = {}
         self._lock = threading.RLock()
@@ -105,24 +121,25 @@ class RunManager:
                     character=STAIRCASE_CHARACTER,
                     model=self._ollama_config.model,
                     policy_version=POLICY_VERSION,
-                    knowledge_version=KNOWLEDGE_VERSION,
+                    knowledge_version=self.knowledge_bundle.version,
                     nle_version=importlib.metadata.version("nle"),
+                    ollama_num_ctx=self._ollama_config.num_ctx,
                     run_id=run_id,
                 )
                 durable = True
                 managed = ManagedRun(run_id, coordinator, client)
                 self._runs[run_id] = managed
                 observation = coordinator.start()
+                snapshot = coordinator.snapshot()
                 record, _ = self.store.update_run_and_append_event(
                     run_id,
                     state=RunState.PAUSED,
-                    kind="run_started",
-                    payload={
-                        "observation": observation.to_json(),
-                        "legal_actions": [
-                            asdict(action) for action in coordinator.legal_actions
-                        ],
-                    },
+                    event=RunStartedPayload(
+                        observation=observation,
+                        legal_actions=coordinator.legal_actions,
+                        goal=snapshot.current_goal,
+                        skill=snapshot.current_skill,
+                    ),
                     expected_states=frozenset({RunState.IDLE}),
                 )
                 if auto_start:
@@ -154,7 +171,7 @@ class RunManager:
             managed = self._runs.get(run_id)
             snapshot = managed.coordinator.snapshot().to_json() if managed else None
             legal_actions = (
-                [asdict(action) for action in managed.coordinator.legal_actions]
+                [action.to_json() for action in managed.coordinator.legal_actions]
                 if managed
                 else None
             )
@@ -174,8 +191,7 @@ class RunManager:
                 record, _ = self.store.update_run_and_append_event(
                     run_id,
                     state=RunState.PAUSED,
-                    kind="run_paused",
-                    payload={},
+                    event=RunPausedPayload(),
                     expected_states=frozenset({RunState.RUNNING}),
                 )
             except Exception as error:
@@ -232,8 +248,7 @@ class RunManager:
                     error=snapshot.last_error,
                     ollama_version=managed.client.version,
                     ttyrec_path=self._ttyrec_path(managed, RunState.STOPPED),
-                    kind="run_stopped",
-                    payload={"previous_state": before.value},
+                    event=RunStoppedPayload(previous_state=before),
                     expected_states=frozenset({before}),
                 )
         self._join_worker(worker, timeout=0.1)
@@ -292,8 +307,7 @@ class RunManager:
                 managed.id,
                 state=RunState.RUNNING,
                 error=None,
-                kind="run_resumed",
-                payload={},
+                event=RunResumedPayload(),
                 expected_states=frozenset({RunState.PAUSED}),
             )
         except Exception as error:
@@ -370,6 +384,8 @@ class RunManager:
         expected_state: RunState,
     ) -> None:
         state = RunState.TERMINAL if record.outcome is not None else expected_state
+        skill_model = record.skill_model_decision
+        action_model = record.action_model_decision
         self.store.update_run_and_append_event(
             managed.id,
             state=state,
@@ -377,19 +393,21 @@ class RunManager:
             error=None,
             ollama_version=managed.client.version,
             ttyrec_path=self._ttyrec_path(managed, state),
-            kind="step",
-            payload={
-                "decision": record.decision.decision.to_json(),
-                "metrics": asdict(record.decision.metrics),
-                "action": asdict(record.action),
-                "reward": record.transition.reward,
-                "terminated": record.transition.terminated,
-                "truncated": record.transition.truncated,
-                "end_status": record.transition.end_status,
-                "is_ascended": record.transition.is_ascended,
-                "outcome": record.outcome.value if record.outcome else None,
-                "observation": record.after.to_json(),
-            },
+            event=StepPayload(
+                selection=record.selection,
+                skill_decision=skill_model.decision if skill_model else None,
+                skill_metrics=skill_model.metrics if skill_model else None,
+                action_decision=action_model.decision if action_model else None,
+                action_metrics=action_model.metrics if action_model else None,
+                action=record.action,
+                reward=record.transition.reward,
+                terminated=record.transition.terminated,
+                truncated=record.transition.truncated,
+                end_status=record.transition.end_status,
+                is_ascended=record.transition.is_ascended,
+                outcome=record.outcome,
+                observation=record.after,
+            ),
             expected_states=frozenset({expected_state}),
         )
 
@@ -399,12 +417,11 @@ class RunManager:
             return
         if snapshot.state is not RunState.RUNNING:
             managed.run_enabled.clear()
-        payload: dict[str, object] = {
-            "error": str(error),
-            "state": snapshot.state.value,
-        }
-        if isinstance(error, DecisionFailure):
-            payload["decision_failure"] = error.to_json()
+        decision_failure = (
+            DecisionFailureTrace.from_error(error)
+            if isinstance(error, DecisionFailure)
+            else None
+        )
         try:
             self.store.update_run_and_append_event(
                 managed.id,
@@ -413,16 +430,20 @@ class RunManager:
                 error=snapshot.last_error or str(error),
                 ollama_version=managed.client.version,
                 ttyrec_path=self._ttyrec_path(managed, snapshot.state),
-                kind="agent_error",
-                payload=payload,
+                event=AgentErrorPayload(
+                    error=str(error),
+                    state=snapshot.state,
+                    phase=ErrorPhase.ADVANCE,
+                    decision_failure=decision_failure,
+                ),
                 expected_states=frozenset({RunState.RUNNING, RunState.PAUSED}),
             )
         except RunStateConflictError:
             persisted = self.store.get_run(managed.id)
             if persisted.state not in {
-                RunState.STOPPED.value,
-                RunState.TERMINAL.value,
-                RunState.ERROR.value,
+                RunState.STOPPED,
+                RunState.TERMINAL,
+                RunState.ERROR,
             }:
                 raise
 
@@ -433,20 +454,24 @@ class RunManager:
         error: Exception,
     ) -> None:
         persisted = self.store.get_run(run_id)
-        state = RunState(persisted.state)
+        state = persisted.state
         if state not in _ACTIVE_STATES:
             return
+        snapshot = managed.coordinator.snapshot() if managed else None
         self.store.update_run_and_append_event(
             run_id,
             state=RunState.ERROR,
-            outcome=managed.coordinator.snapshot().outcome if managed else None,
+            outcome=snapshot.outcome if snapshot else RunOutcome.ERROR,
             error=str(error),
             ollama_version=managed.client.version if managed else None,
             ttyrec_path=(
                 self._ttyrec_path(managed, RunState.ERROR) if managed else None
             ),
-            kind="agent_error",
-            payload={"error": str(error), "phase": "create_run"},
+            event=AgentErrorPayload(
+                error=str(error),
+                state=RunState.ERROR,
+                phase=ErrorPhase.CREATE_RUN,
+            ),
             expected_states=frozenset({state}),
         )
 

@@ -1,0 +1,537 @@
+from dataclasses import replace
+from pathlib import Path
+
+import pytest
+from nle import nethack
+
+from nethack_agent.coordinator import AgentCoordinator
+from nethack_agent.decision import (
+    FORBIDDEN_ACTION_NAMES,
+    ActionSelectionSource,
+    RunOutcome,
+    Skill,
+    StuckReason,
+)
+from nethack_agent.environment import LegalAction, NleEnvironment, ScenarioConfig
+from nethack_agent.model import ScriptedDevelopmentModel
+from nethack_agent.navigation import (
+    OSCILLATION_WINDOW,
+    ActionKind,
+    ActionRecord,
+    CellKind,
+    LevelMemory,
+    route_tree,
+)
+from nethack_agent.observation import (
+    MapView,
+    ObservationProjector,
+    ProjectedObservation,
+    PromptState,
+)
+from nethack_agent.skills import (
+    SEARCHES_PER_ROUND,
+    ExploreLevelSkill,
+    SafePromptHandler,
+    StaircaseNavigationSkill,
+)
+
+_CMAP = nethack.GLYPH_CMAP_OFF
+_MONSTERS = {nethack.permonst(index).mname: index for index in range(nethack.NUMMONS)}
+_BOULDER = next(
+    index
+    for index in range(nethack.NUM_OBJECTS)
+    if nethack.OBJ_NAME(nethack.objclass(index)) == "boulder"
+)
+_FOOD = next(
+    index
+    for index in range(nethack.NUM_OBJECTS)
+    if nethack.OBJ_NAME(nethack.objclass(index)) == "food ration"
+)
+_GLYPHS = {
+    " ": _CMAP,
+    "|": _CMAP + 1,
+    "-": _CMAP + 2,
+    "D": _CMAP + 12,  # doorless doorway
+    "O": _CMAP + 13,  # open door
+    "+": _CMAP + 15,  # closed door
+    ".": _CMAP + 19,
+    "#": _CMAP + 21,
+    ">": _CMAP + 24,
+    "0": nethack.GLYPH_OBJ_OFF + _BOULDER,
+    "%": nethack.GLYPH_OBJ_OFF + _FOOD,
+    "j": nethack.GLYPH_MON_OFF + _MONSTERS["jackal"],
+    "e": nethack.GLYPH_MON_OFF + _MONSTERS["floating eye"],
+    "f": nethack.GLYPH_PET_OFF + _MONSTERS["kitten"],
+    "@": nethack.GLYPH_MON_OFF + _MONSTERS["valkyrie"],
+}
+
+
+@pytest.fixture
+def template(tmp_path: Path) -> ProjectedObservation:
+    environment = NleEnvironment(
+        ScenarioConfig(seed=6, artifact_directory=tmp_path, max_episode_steps=20)
+    )
+    try:
+        return ObservationProjector().project(environment.reset(), step_index=0)
+    finally:
+        environment.close()
+
+
+@pytest.fixture
+def actions(tmp_path: Path) -> dict[str, LegalAction]:
+    environment = NleEnvironment(
+        ScenarioConfig(seed=6, artifact_directory=tmp_path / "actions")
+    )
+    try:
+        return {
+            action.name: action
+            for action in environment.legal_actions
+            if action.name not in FORBIDDEN_ACTION_NAMES
+        }
+    finally:
+        environment.close()
+
+
+def sketch(
+    template: ProjectedObservation,
+    lines: tuple[str, ...],
+    *,
+    step: int = 0,
+    message: str = "",
+    prompt: PromptState | None = None,
+    dungeon_level: int = 1,
+) -> ProjectedObservation:
+    """Build an observation from an ASCII map; `@` marks the hero."""
+    width = max(len(line) for line in lines)
+    rows = [line.ljust(width) for line in lines]
+    hero = next(
+        (x, y)
+        for y, row in enumerate(rows)
+        for x, char in enumerate(row)
+        if char == "@"
+    )
+    return ProjectedObservation(
+        step_index=step,
+        map=MapView(
+            rows=tuple(rows),
+            glyph_rows=tuple(tuple(_GLYPHS[char] for char in row) for row in rows),
+            color_rows=tuple(bytes(width) for _ in rows),
+            special_rows=tuple(bytes(width) for _ in rows),
+        ),
+        changed_cells=(),
+        player=replace(
+            template.player, x=hero[0], y=hero[1], dungeon_level=dungeon_level
+        ),
+        message=message,
+        prompt=prompt or PromptState(False, False, False),
+        inventory=template.inventory,
+    )
+
+
+def remembered(template: ProjectedObservation, *frames: tuple[str, ...]) -> LevelMemory:
+    memory = LevelMemory()
+    for step, lines in enumerate(frames):
+        memory.observe(sketch(template, lines, step=step))
+    return memory
+
+
+def action_name(actions: dict[str, LegalAction], index: int | None) -> str | None:
+    return next(
+        (name for name, action in actions.items() if action.index == index), None
+    )
+
+
+def test_staircase_skill_routes_multiple_steps_then_waits_on_target(
+    template: ProjectedObservation, actions: dict[str, LegalAction]
+) -> None:
+    skill = StaircaseNavigationSkill()
+    names = []
+    for row in ("|.@..>|", "|..@.>|", "|...@>|"):
+        memory = remembered(template, ("-------", row, "-------"))
+        proposal = skill.select_action(memory, actions)
+        assert proposal is not None
+        names.append(action_name(actions, proposal.action_index))
+    # Memory keeps the `>` the hero now hides.
+    memory = remembered(
+        template,
+        ("-------", "|...@>|", "-------"),
+        ("-------", "|....@|", "-------"),
+    )
+    on_stairs = skill.select_action(memory, actions)
+
+    assert names == [
+        "CompassDirection.E",
+        "CompassDirection.E",
+        "CompassDirection.E",
+    ]
+    assert on_stairs is not None
+    assert action_name(actions, on_stairs.action_index) == "MiscDirection.WAIT"
+
+
+def test_staircase_skill_routes_around_monsters_and_boulders(
+    template: ProjectedObservation, actions: dict[str, LegalAction]
+) -> None:
+    for blocker in ("0", "e"):
+        memory = remembered(
+            template,
+            (
+                "-------",
+                "|.....|",
+                f"|@{blocker}..>|",
+                "|.....|",
+                "-------",
+            ),
+        )
+
+        proposal = StaircaseNavigationSkill().select_action(memory, actions)
+
+        assert proposal is not None
+        # Diagonal steps past a monster or boulder are legal NetHack moves.
+        assert action_name(actions, proposal.action_index) in {
+            "CompassDirection.NE",
+            "CompassDirection.SE",
+        }
+
+
+def test_doorway_diagonal_rules_follow_nethack_test_move(
+    template: ProjectedObservation,
+) -> None:
+    # NetHack 3.6 test_move: no diagonal move into or out of a doorway unless
+    # it is doorless (no door or a broken door). Closed doors open orthogonally.
+    for door, diagonal_allowed in (("D", True), ("O", False), ("+", False)):
+        memory = remembered(
+            template,
+            (
+                "  #   ",
+                f"--{door}---",
+                "|@...|",
+                "------",
+            ),
+        )
+        into = memory.step_allowed((1, 2), (2, 1))
+        out_of = memory.step_allowed((2, 1), (1, 0))
+        assert into is diagonal_allowed, door
+        assert out_of is diagonal_allowed, door
+        assert memory.step_allowed((2, 2), (2, 1)), door
+
+    # A dwarven Valkyrie may squeeze diagonally between two rock cells.
+    squeeze = remembered(template, ("@  ", " # ", "  #"))
+    assert squeeze.step_allowed((0, 0), (1, 1))
+    assert (2, 2) in route_tree(squeeze).distances
+
+
+def test_route_through_open_door_uses_only_orthogonal_steps(
+    template: ProjectedObservation, actions: dict[str, LegalAction]
+) -> None:
+    lines = (
+        "------",
+        "|@...|",
+        "|....|",
+        "---O--",
+        "   #  ",
+        "   #>",
+    )
+    memory = remembered(template, lines)
+    tree = route_tree(memory)
+    path = [(4, 5)]
+    while tree.parents[path[-1]] is not None:
+        path.append(tree.parents[path[-1]])  # type: ignore[arg-type]
+    path.reverse()
+
+    door = path.index((3, 3))
+    for before, after in ((path[door - 1], (3, 3)), ((3, 3), path[door + 1])):
+        assert before[0] == after[0] or before[1] == after[1]
+    assert StaircaseNavigationSkill().select_action(memory, actions) is not None
+
+
+def test_exploration_targets_nearest_frontier_and_opens_closed_doors(
+    template: ProjectedObservation, actions: dict[str, LegalAction]
+) -> None:
+    skill = ExploreLevelSkill()
+    memory = remembered(
+        template,
+        (
+            "           ",
+            " --------- ",
+            " |.......| ",
+            " |......@+ ",
+            " |.......| ",
+            " ----D---- ",
+            "           ",
+        ),
+    )
+
+    opened = skill.select_action(memory, actions)
+
+    assert opened.action is not None
+    assert action_name(actions, opened.action.action_index) == "CompassDirection.E"
+    assert opened.action.record.kind is ActionKind.OPEN_DOOR
+    assert opened.action.record.target == (9, 3)
+
+
+def test_locked_door_is_avoided_then_kicked_when_it_is_the_only_way(
+    template: ProjectedObservation, actions: dict[str, LegalAction]
+) -> None:
+    skill = ExploreLevelSkill()
+
+    def room(door: str) -> tuple[str, ...]:
+        return ("        ", " -----  ", f" |..@{door}  ", " -----  ", "        ")
+
+    memory = LevelMemory()
+    memory.observe(sketch(template, room("+"), step=0))
+    tried = skill.select_action(memory, actions)
+    assert tried.action is not None
+    assert tried.action.record.kind is ActionKind.OPEN_DOOR
+    memory.record(tried.action.record)
+    memory.observe(sketch(template, room("+"), step=1, message="This door is locked."))
+
+    kick = skill.select_action(memory, actions)
+
+    assert (5, 2) in memory.locked_doors
+    assert kick.action is not None
+    assert action_name(actions, kick.action.action_index) == "Command.KICK"
+    memory.record(kick.action.record)
+    prompt = sketch(
+        template,
+        room("+"),
+        step=2,
+        message="In what direction?",
+        prompt=PromptState(True, False, False),
+    )
+    memory.observe(prompt)
+    direction = skill.continue_kick(prompt, memory, actions)
+    assert direction is not None
+    assert action_name(actions, direction.action_index) == "CompassDirection.E"
+    memory.record(direction.record)
+    memory.observe(
+        sketch(
+            template,
+            room("f"),
+            step=3,
+            message="As you kick the door, it crashes open!",
+        )
+    )
+    # The pet now hides the broken door; memory still knows it is doorless.
+    assert memory.kind((5, 2)) is CellKind.DOORWAY
+    assert (5, 2) not in memory.locked_doors
+
+
+def test_exploration_attacks_adjacent_hostiles_but_not_passive_or_pets(
+    template: ProjectedObservation, actions: dict[str, LegalAction]
+) -> None:
+    skill = ExploreLevelSkill()
+
+    def frame(east: str) -> tuple[str, ...]:
+        return (
+            "       ",
+            " ----- ",
+            f" |.@{east}# ",
+            " |.e.| ",
+            " |.f.| ",
+            " ----- ",
+            "       ",
+        )
+
+    hostile = skill.select_action(remembered(template, frame("j")), actions)
+    quiet = skill.select_action(remembered(template, frame(".")), actions)
+
+    assert hostile.action is not None
+    assert action_name(actions, hostile.action.action_index) == "CompassDirection.E"
+    assert hostile.action.record.target_glyph == _GLYPHS["j"]
+    # The floating eye and the kitten are left alone; exploration continues.
+    assert quiet.action is not None
+    assert quiet.action.record.target_glyph is None
+    assert quiet.action.record.goal == (5, 2)
+
+
+def test_object_in_dark_corridor_is_passable_and_door_under_hero_is_open(
+    template: ProjectedObservation, actions: dict[str, LegalAction]
+) -> None:
+    # A monster hid this corridor square; after it died only its corpse shows.
+    memory = remembered(template, ("@#%  ",))
+    assert memory.kind((2, 0)) is CellKind.FLOOR
+    result = ExploreLevelSkill().select_action(memory, actions)
+    assert result.action is not None
+    assert result.action.record.goal == (2, 0)
+
+    door = remembered(
+        template,
+        ("|.+.", "|@.."),
+        ("|.@.", "|..."),
+    )
+    assert door.kind((2, 0)) is CellKind.OPEN_DOOR
+
+
+def test_search_rotates_spots_then_reports_exhaustion(
+    template: ProjectedObservation, actions: dict[str, LegalAction]
+) -> None:
+    skill = ExploreLevelSkill()
+    lines = ("       ", "  ---- ", "  |@.| ", "  ---- ", "       ")
+    memory = LevelMemory()
+    step = 0
+    memory.observe(sketch(template, lines, step=step))
+    searches = 0
+    spots: set[tuple[int, int]] = set()
+    while True:
+        result = skill.select_action(memory, actions)
+        if result.action is None:
+            break
+        record = result.action.record
+        if record.kind is ActionKind.SEARCH:
+            searches += 1
+            spots.add(record.origin)
+        else:
+            hero = record.target
+            assert hero is not None
+            lines = tuple(
+                line.replace("@", ".") if index == 2 else line
+                for index, line in enumerate(lines)
+            )
+            row = list(lines[2])
+            row[hero[0]] = "@"
+            lines = (*lines[:2], "".join(row), *lines[3:])
+        memory.record(record)
+        step += 1
+        memory.observe(sketch(template, lines, step=step))
+        assert step < 200
+
+    assert result.stuck is StuckReason.SEARCH_EXHAUSTED
+    # Each floor cell faces walls the other cannot cover, so both are used.
+    assert spots == {(3, 2), (4, 2)}
+    assert searches == 2 * SEARCHES_PER_ROUND
+
+    memory.rearm()
+    again = skill.select_action(memory, actions)
+    assert again.action is not None
+    assert again.action.record.kind is ActionKind.SEARCH
+
+
+def test_learned_edges_and_oscillation_abandon_goals(
+    template: ProjectedObservation,
+) -> None:
+    lines = ("-----", "|@..|", "-----")
+    memory = LevelMemory()
+    memory.observe(sketch(template, lines, step=0))
+    memory.record(ActionRecord(ActionKind.MOVE, (1, 1), (2, 1), goal=(3, 1)))
+    memory.observe(sketch(template, lines, step=1, message="It's a wall."))
+    assert not memory.step_allowed((1, 1), (2, 1))
+
+    generic = LevelMemory()
+    generic.observe(sketch(template, lines, step=0))
+    for step in range(1, 4):
+        generic.record(ActionRecord(ActionKind.MOVE, (1, 1), (2, 1)))
+        generic.observe(sketch(template, lines, step=step))
+    assert not generic.step_allowed((1, 1), (2, 1))
+    generic.rearm()
+    assert generic.step_allowed((1, 1), (2, 1))
+
+    wobble = LevelMemory()
+    frames = (("-----", "|@..|", "-----"), ("-----", "|.@.|", "-----"))
+    wobble.observe(sketch(template, frames[0], step=0))
+    for step in range(1, OSCILLATION_WINDOW + 3):
+        origin = (1, 1) if step % 2 else (2, 1)
+        target = (2, 1) if step % 2 else (1, 1)
+        wobble.record(ActionRecord(ActionKind.MOVE, origin, target, goal=(3, 1)))
+        wobble.observe(sketch(template, frames[step % 2], step=step))
+        if (3, 1) in wobble.abandoned_goals:
+            break
+    assert (3, 1) in wobble.abandoned_goals
+    assert step == OSCILLATION_WINDOW
+
+
+def test_memory_resets_on_level_change(template: ProjectedObservation) -> None:
+    memory = LevelMemory()
+    memory.observe(sketch(template, ("|@.|",), step=0))
+    memory.record(ActionRecord(ActionKind.SEARCH, (1, 0)))
+    assert memory.search_coverage
+
+    memory.observe(sketch(template, ("|.@|",), step=1, dungeon_level=2))
+
+    assert memory.level == (template.player.dungeon_number, 2)
+    assert memory.visited == {(2, 0)}
+    assert not memory.search_coverage
+
+
+@pytest.mark.parametrize("seed", [2, 4, 58])
+def test_development_policy_explores_real_levels_to_the_downstairs(
+    tmp_path: Path, seed: int
+) -> None:
+    agent = AgentCoordinator(
+        NleEnvironment(
+            ScenarioConfig(
+                seed=seed, artifact_directory=tmp_path, max_episode_steps=300
+            )
+        ),
+        ObservationProjector(),
+        ScriptedDevelopmentModel(),
+    )
+    agent.start()
+    agent.resume()
+    records = []
+    while not records or records[-1].outcome is None:
+        record = agent.advance()
+        assert record is not None
+        records.append(record)
+
+    assert records[-1].outcome is RunOutcome.TASK_SUCCESS
+    assert len(records) > 20
+    assert all(
+        record.selection.source is not ActionSelectionSource.MODEL_FALLBACK
+        and record.action.name not in FORBIDDEN_ACTION_NAMES
+        for record in records
+    )
+    assert {record.selection.skill for record in records} == set(Skill)
+    if seed == 58:
+        # Seed 58 starts in a closed room whose only door is locked.
+        assert any("crashes open" in record.after.message for record in records)
+        assert any(record.action.name == "Command.KICK" for record in records)
+
+
+def test_safe_prompt_handler_acknowledges_or_declines_only_known_prompts(
+    template: ProjectedObservation, tmp_path: Path
+) -> None:
+    environment = NleEnvironment(
+        ScenarioConfig(seed=6, artifact_directory=tmp_path / "prompt")
+    )
+    try:
+        by_name = {action.name: action for action in environment.legal_actions}
+        by_command = {action.command: action for action in environment.legal_actions}
+
+        wait = SafePromptHandler.select_action(
+            replace(template, prompt=PromptState(False, False, True)),
+            by_name,
+            by_command,
+        )
+        text = SafePromptHandler.select_action(
+            replace(template, prompt=PromptState(False, True, False)),
+            by_name,
+            by_command,
+        )
+        decline = SafePromptHandler.select_action(
+            replace(
+                template,
+                prompt=PromptState(True, False, False),
+                message="Really attack the peaceful dwarf? [yn]",
+            ),
+            by_name,
+            by_command,
+        )
+        ambiguous = SafePromptHandler.select_action(
+            replace(
+                template,
+                prompt=PromptState(True, False, False),
+                message="In what direction?",
+            ),
+            by_name,
+            by_command,
+        )
+    finally:
+        environment.close()
+
+    assert wait is not None
+    assert by_name["MiscAction.MORE"].index == wait.action_index
+    assert text is not None
+    assert by_name["MiscAction.MORE"].index == text.action_index
+    assert decline is not None
+    assert by_command[ord("n")].index == decline.action_index
+    assert ambiguous is None

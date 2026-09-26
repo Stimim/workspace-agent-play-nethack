@@ -8,32 +8,54 @@ from nethack_agent.decision import (
     ActionCandidate,
     ActionDecision,
     DecisionMetrics,
-    ModelDecision,
+    Goal,
+    ModelActionDecision,
+    ModelSkillDecision,
+    RunState,
+    Skill,
+    SkillDecision,
 )
+from nethack_agent.events import AgentErrorPayload, EventKind, RunStartedPayload
 from nethack_agent.model import DecisionAttemptDiagnostic, DecisionFailure
 from nethack_agent.ollama import OllamaConfig
 from nethack_agent.run_manager import RunManager
 
+_METRICS = DecisionMetrics(1, 1, 1.0, False)
 
-def east_decision() -> ModelDecision:
-    return ModelDecision(
+
+def skill_decision() -> ModelSkillDecision:
+    return ModelSkillDecision(
+        SkillDecision(
+            Goal.STAND_ON_DOWNSTAIRS,
+            Skill.STAIRCASE_NAVIGATION,
+            "Use staircase navigation.",
+        ),
+        _METRICS,
+        "{}",
+    )
+
+
+def east_decision() -> ModelActionDecision:
+    return ModelActionDecision(
         ActionDecision(
-            goal="explore east",
             candidates=(ActionCandidate(2, 1.0, "open floor"),),
             action_index=2,
             rationale="Move east.",
         ),
-        DecisionMetrics(1, 1, 1.0, False),
+        _METRICS,
         "{}",
     )
 
 
 class EastModel:
-    def decide(self, *_: object) -> ModelDecision:
+    def select_skill(self, *_: object) -> ModelSkillDecision:
+        return skill_decision()
+
+    def select_action(self, *_: object) -> ModelActionDecision:
         return east_decision()
 
 
-class HandoffModel:
+class HandoffModel(EastModel):
     def __init__(self) -> None:
         self.entered = (threading.Event(), threading.Event())
         self.release = (threading.Event(), threading.Event())
@@ -42,7 +64,7 @@ class HandoffModel:
         self.active = 0
         self.maximum_active = 0
 
-    def decide(self, *_: object) -> ModelDecision:
+    def select_skill(self, *_: object) -> ModelSkillDecision:
         with self._lock:
             call = self.calls
             self.calls += 1
@@ -52,30 +74,30 @@ class HandoffModel:
         self.entered[call].set()
         try:
             assert self.release[call].wait(timeout=3)
-            return east_decision()
+            return skill_decision()
         finally:
             with self._lock:
                 self.active -= 1
 
 
-class ExplodingModel:
-    def decide(self, *_: object) -> ModelDecision:
+class ExplodingModel(EastModel):
+    def select_skill(self, *_: object) -> ModelSkillDecision:
         raise RuntimeError("model implementation crashed")
 
 
-class BlockingDecisionFailureModel:
+class BlockingDecisionFailureModel(EastModel):
     def __init__(self) -> None:
         self.entered = threading.Event()
         self.release = threading.Event()
 
-    def decide(self, *_: object) -> ModelDecision:
+    def select_skill(self, *_: object) -> ModelSkillDecision:
         self.entered.set()
         assert self.release.wait(timeout=3)
         raise DecisionFailure("invalid after repair")
 
 
-class StructuredFailureModel:
-    def decide(self, *_: object) -> ModelDecision:
+class StructuredFailureModel(EastModel):
+    def select_skill(self, *_: object) -> ModelSkillDecision:
         attempts = (
             DecisionAttemptDiagnostic(
                 "DecisionError: first",
@@ -128,10 +150,10 @@ def test_pause_resume_handoff_keeps_exactly_one_worker_and_stop_drains(
     stop_thread = threading.Thread(target=lambda: stopped.append(runs.stop(run.id)))
     stop_thread.start()
     for _ in range(100):
-        if runs.store.get_run(run.id).state == "stopped":
+        if runs.store.get_run(run.id).state is RunState.STOPPED:
             break
         threading.Event().wait(0.01)
-    assert runs.store.get_run(run.id).state == "stopped"
+    assert runs.store.get_run(run.id).state is RunState.STOPPED
     stop_thread.join(timeout=1)
     assert not stop_thread.is_alive()
     assert stopped
@@ -140,11 +162,11 @@ def test_pause_resume_handoff_keeps_exactly_one_worker_and_stop_drains(
     assert model.maximum_active == 1
     kinds = [event.kind for event in runs.events_after(run.id)]
     assert kinds == [
-        "run_started",
-        "run_resumed",
-        "run_paused",
-        "run_resumed",
-        "run_stopped",
+        EventKind.RUN_STARTED,
+        EventKind.RUN_RESUMED,
+        EventKind.RUN_PAUSED,
+        EventKind.RUN_RESUMED,
+        EventKind.RUN_STOPPED,
     ]
     runs.stop(run.id)
     assert [event.kind for event in runs.events_after(run.id)] == kinds
@@ -161,7 +183,7 @@ def test_stop_during_decision_failure_does_not_persist_agent_error(
     stop_thread = threading.Thread(target=lambda: runs.stop(run.id))
     stop_thread.start()
     for _ in range(100):
-        if runs.store.get_run(run.id).state == "stopped":
+        if runs.store.get_run(run.id).state is RunState.STOPPED:
             break
         threading.Event().wait(0.01)
     stop_thread.join(timeout=1)
@@ -170,8 +192,8 @@ def test_stop_during_decision_failure_does_not_persist_agent_error(
     runs.close()
 
     kinds = [event.kind for event in runs.events_after(run.id)]
-    assert kinds[-1] == "run_stopped"
-    assert "agent_error" not in kinds
+    assert kinds[-1] is EventKind.RUN_STOPPED
+    assert EventKind.AGENT_ERROR not in kinds
 
 
 def test_unexpected_model_exception_persists_error_artifact_and_frees_capacity(
@@ -184,12 +206,12 @@ def test_unexpected_model_exception_persists_error_artifact_and_frees_capacity(
         runs.step(run.id)
 
     persisted = runs.store.get_run(run.id)
-    assert persisted.state == "error"
+    assert persisted.state is RunState.ERROR
     assert persisted.error == "model implementation crashed"
     assert persisted.ttyrec_path is not None
     assert Path(persisted.ttyrec_path).is_file()
     kinds = [event.kind for event in runs.events_after(run.id)]
-    assert kinds[-1] == "agent_error"
+    assert kinds[-1] is EventKind.AGENT_ERROR
     runs.stop(run.id)
     assert [event.kind for event in runs.events_after(run.id)] == kinds
 
@@ -205,9 +227,9 @@ def test_stop_on_terminal_run_does_not_append_stopped_event(tmp_path: Path) -> N
     before_stop = [event.kind for event in runs.events_after(run.id)]
     runs.stop(run.id)
 
-    assert runs.store.get_run(run.id).state == "terminal"
+    assert runs.store.get_run(run.id).state is RunState.TERMINAL
     assert [event.kind for event in runs.events_after(run.id)] == before_stop
-    assert before_stop == ["run_started", "step"]
+    assert before_stop == [EventKind.RUN_STARTED, EventKind.STEP]
 
 
 def test_decision_failure_diagnostics_are_persisted(tmp_path: Path) -> None:
@@ -218,15 +240,12 @@ def test_decision_failure_diagnostics_are_persisted(tmp_path: Path) -> None:
         runs.step(run.id)
 
     persisted = runs.store.get_run(run.id)
-    assert persisted.state == "paused"
-    failure = runs.events_after(run.id)[-1].payload["decision_failure"]
-    assert failure["metrics"] == {
-        "latency_ms": 8.0,
-        "output_tokens": 6,
-        "prompt_tokens": 8,
-        "repair_attempted": True,
-    }
-    assert [attempt["raw_response"] for attempt in failure["attempts"]] == [
+    assert persisted.state is RunState.PAUSED
+    payload = runs.events_after(run.id)[-1].payload
+    assert isinstance(payload, AgentErrorPayload)
+    assert payload.decision_failure is not None
+    assert payload.decision_failure.metrics == DecisionMetrics(8, 6, 8.0, True)
+    assert [attempt.raw_response for attempt in payload.decision_failure.attempts] == [
         "{}",
         '{"bad":true}',
     ]
@@ -244,7 +263,7 @@ def test_create_run_rolls_back_after_started_event_failure(
 
     def fail_started_event(*args: object, **kwargs: object):  # type: ignore[no-untyped-def]
         nonlocal failed
-        if kwargs.get("kind") == "run_started" and not failed:
+        if isinstance(kwargs.get("event"), RunStartedPayload) and not failed:
             failed = True
             raise OSError("event persistence failed")
         return original(*args, **kwargs)
@@ -255,7 +274,7 @@ def test_create_run_rolls_back_after_started_event_failure(
         runs.create_run(seed=6)
 
     persisted = runs.store.get_run(str(run_uuid))
-    assert persisted.state == "error"
+    assert persisted.state is RunState.ERROR
     assert persisted.ttyrec_path is not None
     assert Path(persisted.ttyrec_path).is_file()
     assert str(run_uuid) not in runs._runs
@@ -277,11 +296,11 @@ def test_create_run_rolls_back_when_worker_thread_cannot_start(
         runs.create_run(seed=7, auto_start=True)
 
     persisted = runs.store.get_run(str(run_uuid))
-    assert persisted.state == "error"
+    assert persisted.state is RunState.ERROR
     assert persisted.ttyrec_path is not None
     assert [event.kind for event in runs.events_after(str(run_uuid))] == [
-        "run_started",
-        "run_resumed",
-        "agent_error",
+        EventKind.RUN_STARTED,
+        EventKind.RUN_RESUMED,
+        EventKind.AGENT_ERROR,
     ]
     assert str(run_uuid) not in runs._runs

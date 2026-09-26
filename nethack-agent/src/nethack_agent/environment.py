@@ -12,10 +12,17 @@ from typing import Any, Final, Self
 import gymnasium as gym
 import nle  # noqa: F401  # Registers the NLE Gymnasium environments.
 import numpy as np
+from nle import nethack
 from numpy.typing import NDArray
+
+from nethack_agent.contracts import integer_value, object_value, string_value
 
 STAIRCASE_ENVIRONMENT: Final = "NetHackStaircase-v0"
 STAIRCASE_CHARACTER: Final = "val-dwa-law"
+# NLE's default option tuple does not name `autoopen`, even though vanilla
+# NetHack currently defaults it on. Pin it so navigation does not depend on an
+# upstream default.
+NLE_OPTIONS: Final = (*nethack.NETHACKOPTIONS, "autoopen")
 PUBLIC_OBSERVATION_KEYS: Final = (
     "glyphs",
     "chars",
@@ -95,6 +102,23 @@ class LegalAction:
     command: int
     name: str
 
+    def __post_init__(self) -> None:
+        integer_value(self.index, "action index", minimum=0)
+        integer_value(self.command, "action command")
+        string_value(self.name, "action name", minimum=1, maximum=120)
+
+    def to_json(self) -> dict[str, object]:
+        return {"index": self.index, "command": self.command, "name": self.name}
+
+    @classmethod
+    def from_json(cls, value: object) -> Self:
+        payload = object_value(value, "legal action", {"index", "command", "name"})
+        return cls(
+            index=integer_value(payload["index"], "action index", minimum=0),
+            command=integer_value(payload["command"], "action command"),
+            name=string_value(payload["name"], "action name", minimum=1, maximum=120),
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class NleObservation:
@@ -164,6 +188,7 @@ class NleEnvironment:
             STAIRCASE_ENVIRONMENT,
             character=STAIRCASE_CHARACTER,
             observation_keys=PUBLIC_OBSERVATION_KEYS,
+            options=NLE_OPTIONS,
             save_ttyrec_every=1,
             savedir=str(self._artifact_directory),
             max_episode_steps=config.max_episode_steps,

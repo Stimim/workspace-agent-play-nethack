@@ -1,12 +1,96 @@
 from __future__ import annotations
 
 import ipaddress
+import socket
+import threading
 import urllib.parse
 import urllib.request
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass, field
 
 
 class LoopbackUrlError(ValueError):
     pass
+
+
+class NonLoopbackConnectionError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class SocketDestination:
+    address: str
+    port: int
+    loopback: bool
+
+    def to_json(self) -> dict[str, object]:
+        return {
+            "address": self.address,
+            "port": self.port,
+            "loopback": self.loopback,
+        }
+
+
+@dataclass(slots=True)
+class ConnectionAudit:
+    destinations: list[SocketDestination] = field(default_factory=list)
+    _lock: threading.Lock = field(
+        default_factory=threading.Lock, init=False, repr=False
+    )
+
+    def record(self, family: int, destination: object) -> None:
+        if family not in {socket.AF_INET, socket.AF_INET6}:
+            raise NonLoopbackConnectionError(
+                f"socket destination uses unsupported address family {family}"
+            )
+        if not isinstance(destination, tuple) or len(destination) < 2:
+            raise NonLoopbackConnectionError("socket destination is malformed")
+        address = str(destination[0])
+        port = destination[1]
+        if isinstance(port, bool) or not isinstance(port, int):
+            raise NonLoopbackConnectionError("socket destination port is invalid")
+        try:
+            loopback = ipaddress.ip_address(address).is_loopback
+        except ValueError as error:
+            raise NonLoopbackConnectionError(
+                f"socket destination {address!r} is not a literal IP address"
+            ) from error
+        attempt = SocketDestination(address, port, loopback)
+        with self._lock:
+            self.destinations.append(attempt)
+        if not loopback:
+            raise NonLoopbackConnectionError(
+                f"blocked non-loopback socket destination {address}:{port}"
+            )
+
+
+_SOCKET_AUDIT_LOCK = threading.Lock()
+
+
+@contextmanager
+def audit_loopback_connections() -> Iterator[ConnectionAudit]:
+    """Record TCP destinations and block any address outside loopback."""
+    audit = ConnectionAudit()
+    original_connect = socket.socket.connect
+    original_connect_ex = socket.socket.connect_ex
+
+    def guarded_connect(sock: socket.socket, address: object) -> None:
+        audit.record(sock.family, address)
+        original_connect(sock, address)  # type: ignore[arg-type]
+
+    def guarded_connect_ex(sock: socket.socket, address: object) -> int:
+        audit.record(sock.family, address)
+        return original_connect_ex(sock, address)  # type: ignore[arg-type]
+
+    with _SOCKET_AUDIT_LOCK:
+        socket.socket.connect = guarded_connect  # type: ignore[method-assign]
+        socket.socket.connect_ex = guarded_connect_ex  # type: ignore[method-assign]
+        try:
+            yield audit
+        finally:
+            socket.socket.connect = original_connect  # type: ignore[method-assign]
+            socket.socket.connect_ex = original_connect_ex  # type: ignore[method-assign]
 
 
 def normalize_loopback_http_url(url: str) -> str:

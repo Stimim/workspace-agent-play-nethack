@@ -50,8 +50,10 @@ The adapter must:
 `NleEnvironment` implements the current boundary. One committed suite seed is
 deterministically expanded into separate core, display, and level-generation
 seeds; NLE reseeding is disabled and time-derived effects use the seed. The
-adapter requests only public observation keys, represents its finite action set
-as typed index/command/name records, and rejects invalid indices before NLE.
+adapter requests only public observation keys, explicitly adds `autoopen` to
+NLE's option list rather than relying on NetHack's default, represents its
+finite action set as typed index/command/name records, and rejects invalid
+indices before NLE.
 
 NLE reuses its NumPy observation buffers. `NleObservation` therefore exposes
 zero-copy views that are valid only until the next `step` or `reset`. Consumers
@@ -111,6 +113,7 @@ Two audiences require separate material:
 2. `nethack-agent/knowledge/` contains concise, versioned, cited facts suitable for retrieval into the local playing model's context.
 
 The 188 MB wiki XML dump is source material, not a runtime prompt and not committed. Automatic extraction must not become trusted gameplay knowledge without review. Policy, prompts, and knowledge remain fixed throughout an evaluation suite; there is no online self-modification in milestone 1.
+
 
 ### Persistence and replay
 

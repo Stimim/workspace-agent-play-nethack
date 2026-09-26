@@ -2,8 +2,12 @@ import json
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
+from nle import nethack
+
+from nethack_agent.contracts import ContractError
 from nethack_agent.environment import NleEnvironment, ScenarioConfig
-from nethack_agent.observation import ObservationProjector
+from nethack_agent.observation import ObservationProjector, ProjectedObservation
 
 
 def test_projection_copies_compact_public_state(tmp_path: Path) -> None:
@@ -27,6 +31,29 @@ def test_projection_copies_compact_public_state(tmp_path: Path) -> None:
         assert "single_character_choice" in serialized["prompt"]
         assert "yes_no" not in serialized["prompt"]
         assert serialized["map"]["glyph_rows"]
+        assert ProjectedObservation.from_json(serialized) == projected
+
+
+def test_nle_map_glyph_is_one_display_category_not_layered_terrain(
+    tmp_path: Path,
+) -> None:
+    with NleEnvironment(
+        ScenarioConfig(seed=6, artifact_directory=tmp_path, max_episode_steps=20)
+    ) as environment:
+        raw = environment.reset()
+        object_glyph = next(
+            int(glyph)
+            for letter, glyph in zip(raw.inv_letters, raw.inv_glyphs, strict=True)
+            if int(letter)
+        )
+
+    downstairs_glyph = nethack.GLYPH_CMAP_OFF + 24
+    assert nethack.glyph_is_cmap(downstairs_glyph)
+    assert not nethack.glyph_is_object(downstairs_glyph)
+    assert nethack.glyph_is_object(object_glyph)
+    assert not nethack.glyph_is_cmap(object_glyph)
+    # Each observed cell is one scalar glyph category. NLE has no public
+    # parallel terrain layer from which a stair under the object can be read.
 
 
 def test_projection_survives_next_nle_step_and_reports_map_delta(
@@ -73,3 +100,16 @@ def test_projection_reports_a_glyph_only_change(tmp_path: Path) -> None:
     assert (change.x, change.y) == (0, 0)
     assert change.glyph == int(glyphs[0, 0])
     assert current.to_json()["changed_cells"][0]["glyph"] == int(glyphs[0, 0])
+
+
+def test_observation_contract_rejects_inconsistent_map_shapes(tmp_path: Path) -> None:
+    projector = ObservationProjector()
+    with NleEnvironment(
+        ScenarioConfig(seed=6, artifact_directory=tmp_path, max_episode_steps=20)
+    ) as environment:
+        projected = projector.project(environment.reset(), step_index=0)
+    serialized = projected.to_json()
+    serialized["map"]["glyph_rows"][0].pop()
+
+    with pytest.raises(ContractError, match="shape does not match"):
+        ProjectedObservation.from_json(serialized)

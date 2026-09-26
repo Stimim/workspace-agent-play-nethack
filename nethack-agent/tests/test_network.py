@@ -1,11 +1,19 @@
+import os
 import socket
 import urllib.request
+from pathlib import Path
 
 import pytest
 
 from nethack_agent.control_client import ControlClient, ControlClientError
-from nethack_agent.network import LoopbackUrlError, normalize_loopback_http_url
+from nethack_agent.network import (
+    LoopbackUrlError,
+    NonLoopbackConnectionError,
+    audit_loopback_connections,
+    normalize_loopback_http_url,
+)
 from nethack_agent.ollama import OllamaClient, OllamaConfig, OllamaError
+from nethack_agent.verification import verify_network_boundary
 
 
 def test_loopback_urls_are_literal_or_safely_pinned_localhost(
@@ -70,3 +78,34 @@ def test_malformed_ports_are_domain_errors() -> None:
         OllamaConfig(url="http://127.0.0.1:not-a-port")
     with pytest.raises(ControlClientError, match="invalid control API URL"):
         ControlClient(base_url="http://[::1]:99999")
+
+
+def test_socket_audit_records_and_blocks_non_loopback_destinations() -> None:
+    with (
+        audit_loopback_connections() as audit,
+        socket.socket(socket.AF_INET, socket.SOCK_STREAM) as outbound,
+        pytest.raises(NonLoopbackConnectionError, match="blocked non-loopback"),
+    ):
+        outbound.connect(("192.0.2.1", 80))
+
+    assert len(audit.destinations) == 1
+    assert audit.destinations[0].address == "192.0.2.1"
+    assert not audit.destinations[0].loopback
+
+
+def test_executable_network_verification_observes_only_loopback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HTTP_PROXY", "http://original.invalid:8080")
+    monkeypatch.setenv("HTTPS_PROXY", "http://original.invalid:8080")
+    monkeypatch.setenv("NO_PROXY", "original.invalid")
+
+    result = verify_network_boundary(data_directory=tmp_path, timeout_seconds=20.0)
+
+    assert result.proxy_bypass_verified
+    assert result.event_count >= 3
+    assert result.destinations
+    assert all(destination.loopback for destination in result.destinations)
+    assert os.environ["HTTP_PROXY"] == "http://original.invalid:8080"
+    assert os.environ["HTTPS_PROXY"] == "http://original.invalid:8080"
+    assert os.environ["NO_PROXY"] == "original.invalid"

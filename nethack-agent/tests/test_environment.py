@@ -4,8 +4,10 @@ import numpy as np
 import pytest
 
 from nethack_agent.environment import (
+    NLE_OPTIONS,
     EnvironmentState,
     EnvironmentStateError,
+    LegalAction,
     NleEnvironment,
     ScenarioConfig,
 )
@@ -30,11 +32,23 @@ def test_episode_exposes_public_state_and_finalizes_ttyrec(tmp_path: Path) -> No
         assert [action.index for action in environment.legal_actions] == list(
             range(len(environment.legal_actions))
         )
+        assert all(
+            LegalAction.from_json(action.to_json()) == action
+            for action in environment.legal_actions
+        )
         transition = environment.step(0)
         assert transition.step_index == 1
 
     assert environment.state is EnvironmentState.CLOSED
     assert len(environment.ttyrec_files) == 1
+
+
+def test_autoopen_is_an_explicit_scenario_option(tmp_path: Path) -> None:
+    assert NLE_OPTIONS.count("autoopen") == 1
+    with NleEnvironment(scenario(tmp_path)) as environment:
+        # This is the option list handed through Gymnasium to the live NLE
+        # engine, not a re-statement of the adapter constant.
+        assert environment._raw_environment.nethack.options.count("autoopen") == 1
 
 
 def test_same_suite_seed_reproduces_initial_observation(tmp_path: Path) -> None:

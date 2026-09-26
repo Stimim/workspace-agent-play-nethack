@@ -33,6 +33,9 @@ testpaths = ["tests"]
 [tool.hatch.build.targets.wheel]
 packages = ["src/nethack_agent"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"knowledge" = "nethack_agent/knowledge"
+
 [tool.ruff]
 target-version = "py312"
 line-length = 88

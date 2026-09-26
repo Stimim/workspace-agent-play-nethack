@@ -3,8 +3,18 @@ from pathlib import Path
 
 import pytest
 
-from nethack_agent.decision import DecisionError, parse_action_decision
+from nethack_agent.decision import (
+    MAX_CANDIDATE_REASON_LENGTH,
+    MAX_FALLBACK_CANDIDATES,
+    DecisionError,
+    Goal,
+    Skill,
+    StuckReason,
+    parse_action_decision,
+    parse_skill_decision,
+)
 from nethack_agent.environment import NleEnvironment, ScenarioConfig
+from nethack_agent.knowledge import load_default_knowledge_bundle
 from nethack_agent.model import DecisionFailure, OllamaDecisionModel
 from nethack_agent.observation import ObservationProjector
 from nethack_agent.ollama import Generation, OllamaError
@@ -21,10 +31,13 @@ class ScriptedClient:
         return Generation(response, 10, 5, 1_000_000)
 
 
-def valid_decision(action_index: int = 2) -> str:
+def model(client):  # type: ignore[no-untyped-def]
+    return OllamaDecisionModel(client, load_default_knowledge_bundle())
+
+
+def valid_action_decision(action_index: int = 2) -> str:
     return json.dumps(
         {
-            "goal": "explore east",
             "candidates": [
                 {
                     "action_index": action_index,
@@ -38,7 +51,17 @@ def valid_decision(action_index: int = 2) -> str:
     )
 
 
-def projected_state(tmp_path: Path):
+def valid_skill_decision() -> str:
+    return json.dumps(
+        {
+            "goal": Goal.STAND_ON_DOWNSTAIRS.value,
+            "skill": Skill.STAIRCASE_NAVIGATION.value,
+            "rationale": "Use deterministic routing when the staircase is visible.",
+        }
+    )
+
+
+def projected_state(tmp_path: Path):  # type: ignore[no-untyped-def]
     environment = NleEnvironment(
         ScenarioConfig(seed=6, artifact_directory=tmp_path, max_episode_steps=20)
     )
@@ -47,8 +70,8 @@ def projected_state(tmp_path: Path):
     return environment, projected
 
 
-def test_decision_requires_selected_highest_scored_legal_candidate() -> None:
-    payload = json.loads(valid_decision())
+def test_action_decision_requires_selected_highest_scored_legal_candidate() -> None:
+    payload = json.loads(valid_action_decision())
     payload["candidates"].append(
         {"action_index": 1, "score": 1.0, "reason": "higher score"}
     )
@@ -57,27 +80,74 @@ def test_decision_requires_selected_highest_scored_legal_candidate() -> None:
         parse_action_decision(json.dumps(payload), frozenset({1, 2}))
 
 
-def test_decision_rejects_duplicate_keys_and_decimal_action_indices() -> None:
+def test_decisions_reject_duplicate_keys_decimal_indices_and_unknown_skills() -> None:
     duplicate = (
-        '{"goal":"explore","goal":"repeat","candidates":'
-        '[{"action_index":2,"score":1,"reason":"open"}],'
-        '"action_index":2,"rationale":"move"}'
+        '{"candidates":[{"action_index":2,"score":1,"reason":"open"}],'
+        '"action_index":2,"action_index":2,"rationale":"move"}'
     )
     with pytest.raises(DecisionError, match="duplicate"):
         parse_action_decision(duplicate, frozenset({2}))
 
-    decimal = json.loads(valid_decision())
+    decimal = json.loads(valid_action_decision())
     decimal["action_index"] = 2.0
     with pytest.raises(DecisionError, match="integer"):
         parse_action_decision(json.dumps(decimal), frozenset({2}))
 
+    bad_skill = json.loads(valid_skill_decision())
+    bad_skill["skill"] = "teleport_to_stairs"
+    with pytest.raises(DecisionError, match="one of"):
+        parse_skill_decision(
+            json.dumps(bad_skill),
+            frozenset({Goal.STAND_ON_DOWNSTAIRS}),
+            frozenset({Skill.STAIRCASE_NAVIGATION}),
+        )
 
-def test_model_repairs_one_invalid_response(tmp_path: Path) -> None:
+    unavailable = json.loads(valid_skill_decision())
+    unavailable["skill"] = Skill.EXPLORE_LEVEL.value
+    with pytest.raises(DecisionError, match="not available"):
+        parse_skill_decision(
+            json.dumps(unavailable),
+            frozenset({Goal.STAND_ON_DOWNSTAIRS}),
+            frozenset({Skill.STAIRCASE_NAVIGATION}),
+        )
+
+
+def test_fallback_decisions_are_bounded_to_three_short_candidates() -> None:
+    too_many = json.loads(valid_action_decision(1))
+    too_many["candidates"] = [
+        {"action_index": index, "score": 0.5, "reason": "open floor"}
+        for index in range(1, MAX_FALLBACK_CANDIDATES + 2)
+    ]
+    with pytest.raises(DecisionError, match="between one and"):
+        parse_action_decision(json.dumps(too_many), frozenset(range(1, 10)))
+
+    long_reason = json.loads(valid_action_decision())
+    long_reason["candidates"][0]["reason"] = "x" * (MAX_CANDIDATE_REASON_LENGTH + 1)
+    with pytest.raises(DecisionError, match="candidate reason"):
+        parse_action_decision(json.dumps(long_reason), frozenset({2}))
+
+    exact = json.loads(valid_action_decision(1))
+    exact["candidates"] = [
+        {"action_index": index, "score": 0.5, "reason": "r" * 100}
+        for index in range(1, MAX_FALLBACK_CANDIDATES + 1)
+    ]
+    assert (
+        len(
+            parse_action_decision(json.dumps(exact), frozenset(range(1, 10))).candidates
+        )
+        == MAX_FALLBACK_CANDIDATES
+    )
+
+
+def test_model_repairs_one_invalid_action_response(tmp_path: Path) -> None:
     environment, observation = projected_state(tmp_path)
-    client = ScriptedClient(["{}", valid_decision()])
+    client = ScriptedClient(["{}", valid_action_decision()])
     try:
-        result = OllamaDecisionModel(client).decide(
-            observation, environment.legal_actions
+        result = model(client).select_action(
+            observation,
+            environment.legal_actions,
+            Goal.STAND_ON_DOWNSTAIRS,
+            Skill.STAIRCASE_NAVIGATION,
         )
     finally:
         environment.close()
@@ -87,12 +157,33 @@ def test_model_repairs_one_invalid_response(tmp_path: Path) -> None:
     assert client.calls == 2
 
 
+def test_model_parses_typed_goal_and_skill(tmp_path: Path) -> None:
+    environment, observation = projected_state(tmp_path)
+    try:
+        result = model(ScriptedClient([valid_skill_decision()])).select_skill(
+            observation,
+            (Goal.STAND_ON_DOWNSTAIRS,),
+            (Skill.STAIRCASE_NAVIGATION, Skill.EXPLORE_LEVEL),
+            StuckReason.SEARCH_EXHAUSTED,
+        )
+    finally:
+        environment.close()
+
+    assert result.decision.goal is Goal.STAND_ON_DOWNSTAIRS
+    assert result.decision.skill is Skill.STAIRCASE_NAVIGATION
+
+
 def test_model_fails_after_exactly_one_repair(tmp_path: Path) -> None:
     environment, observation = projected_state(tmp_path)
     client = ScriptedClient(["{}", "{}"])
     try:
         with pytest.raises(DecisionFailure, match="after one repair"):
-            OllamaDecisionModel(client).decide(observation, environment.legal_actions)
+            model(client).select_skill(
+                observation,
+                (Goal.STAND_ON_DOWNSTAIRS,),
+                (Skill.STAIRCASE_NAVIGATION,),
+                None,
+            )
     finally:
         environment.close()
 
@@ -104,7 +195,12 @@ def test_failed_repair_preserves_both_attempt_diagnostics(tmp_path: Path) -> Non
     client = ScriptedClient(["{}", '{"goal":"still invalid"}'])
     try:
         with pytest.raises(DecisionFailure) as raised:
-            OllamaDecisionModel(client).decide(observation, environment.legal_actions)
+            model(client).select_skill(
+                observation,
+                (Goal.STAND_ON_DOWNSTAIRS,),
+                (Skill.STAIRCASE_NAVIGATION,),
+                None,
+            )
     finally:
         environment.close()
 
@@ -118,7 +214,7 @@ def test_failed_repair_preserves_both_attempt_diagnostics(tmp_path: Path) -> Non
     assert failure.metrics.prompt_tokens == 20
     assert failure.metrics.output_tokens == 10
     assert failure.metrics.latency_ms == 2.0
-    assert failure.to_json()["attempts"][0]["raw_response"] == "{}"
+    assert failure.to_json()["attempts"][0]["raw_response"] == "{}"  # type: ignore[index]
 
 
 class TransportFailureClient:
@@ -136,8 +232,11 @@ def test_transport_failure_uses_wall_clock_duration(
     environment, observation = projected_state(tmp_path)
     try:
         with pytest.raises(DecisionFailure) as raised:
-            OllamaDecisionModel(TransportFailureClient()).decide(
-                observation, environment.legal_actions
+            model(TransportFailureClient()).select_skill(
+                observation,
+                (Goal.STAND_ON_DOWNSTAIRS,),
+                (Skill.STAIRCASE_NAVIGATION,),
+                None,
             )
     finally:
         environment.close()
