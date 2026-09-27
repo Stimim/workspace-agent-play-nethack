@@ -361,6 +361,64 @@ def test_verbose_view_exposes_trace_text_but_not_raw_model_responses() -> None:
     ]
 
 
+@pytest.mark.skipif(NODE is None, reason="Node.js is unavailable")
+def test_messages_view_lists_every_nonblank_game_message() -> None:
+    result = _run_renderer_module(
+        """
+        globalThis.document = {
+          createElement: (tag) => ({
+            tag, className: "", textContent: "", children: [],
+            append(...nodes) { this.children.push(...nodes); },
+          }),
+        };
+        const { gameMessage, renderMessageEntry, verboseDetails } =
+          await import("./render.js");
+        const withMessage = (kind, sequence, step, message) => ({
+          kind, sequence, payload: { observation: { step_index: step, message } },
+        });
+        const events = [
+          withMessage("run_started", 1, 0, "Hello Agent, welcome to NetHack!"),
+          withMessage("step", 2, 1, "You kill the newt!"),
+          withMessage("step", 3, 2, "You kill the newt!"),
+          withMessage("step", 4, 3, "   "),
+          withMessage("step", 5, 4, ""),
+          withMessage("step", 6, 5, "  <b>It hits!</b>  "),
+          { kind: "step", sequence: 7, payload: {} },
+          { kind: "agent_error", sequence: 8, payload: { error: "boom" } },
+        ];
+        const messages = events.map(gameMessage);
+        const row = renderMessageEntry(messages[5]);
+        console.log(JSON.stringify({
+          messages,
+          row: [row.tag, row.className,
+                ...row.children.map((c) => [c.className, c.textContent])],
+          verboseKeepsMessage: verboseDetails(events[1])[0],
+        }));
+        """
+    )
+
+    assert result["messages"] == [
+        {"sequence": 1, "step": 0, "text": "Hello Agent, welcome to NetHack!"},
+        {"sequence": 2, "step": 1, "text": "You kill the newt!"},
+        {"sequence": 3, "step": 2, "text": "You kill the newt!"},
+        None,
+        None,
+        {"sequence": 6, "step": 5, "text": "<b>It hits!</b>"},
+        None,
+        None,
+    ]
+    assert result["row"] == [
+        "li",
+        "agent-row message-row",
+        ["message-meta", "step 5 · #6"],
+        ["message-text", "<b>It hits!</b>"],
+    ]
+    assert result["verboseKeepsMessage"] == {
+        "label": "Game message",
+        "value": "You kill the newt!",
+    }
+
+
 # A minimal DOM for `renderMap`: element children and class/text properties.
 _MAP_DOM = """
 class Node {

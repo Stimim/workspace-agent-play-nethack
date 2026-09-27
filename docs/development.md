@@ -209,9 +209,10 @@ column as an overlay instead of squeezing the map or inventory. The breakpoint
 is the 107rem three-column layout (columns, two gaps, and workspace padding) at
 the 14 px root font size plus 22 px for a vertical scrollbar; `app.css` and
 `NARROW_AGENT_QUERY` in `view.js` must change together. The overlay closes with
-its Close button, the dimmed background, or Escape. Its Events, Tools, and
-Verbose tabs support click and arrow-key navigation. Every tab has an
-independent auto-scroll checkbox.
+its Close button, the dimmed background, or Escape. Its Events, Messages, Tools,
+and Verbose tabs support click and arrow-key navigation. Every tab has an
+independent auto-scroll checkbox. Messages lists each non-blank game message
+(trimmed, repeats kept) with its observation step and event sequence.
 Events and evidenced deterministic-execution rows expand on click; the newest
 step decision is expanded by default. Tools lists only step events that record
 `deterministic_skill` or `deterministic_prompt` as their selection source and

@@ -398,6 +398,17 @@ button:disabled { opacity: 0.45; cursor: default; }
   overflow-wrap: anywhere;
 }
 
+.message-row {
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.35rem 0.45rem;
+}
+.message-meta {
+  flex: none;
+  color: var(--muted);
+}
+.message-text { white-space: pre-wrap; }
+
 .tooltip {
   position: relative;
   display: inline-flex;

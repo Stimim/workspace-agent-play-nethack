@@ -150,7 +150,6 @@ function handleEvent(generation, event) {
 }
 
 
-
 function scheduleStatusRefresh(generation) {
   clearTimeout(state.statusTimer);
   state.statusTimer = setTimeout(() => refreshStatus(generation), STATUS_REFRESH_DELAY_MS);

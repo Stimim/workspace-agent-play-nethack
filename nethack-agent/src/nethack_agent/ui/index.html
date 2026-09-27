@@ -102,6 +102,8 @@
         <div class="tab-list" role="tablist" aria-label="Agent information views">
           <button id="tab-events" class="tab-button" type="button" role="tab"
                   aria-selected="true" aria-controls="panel-events" tabindex="0">Events</button>
+          <button id="tab-messages" class="tab-button" type="button" role="tab"
+                  aria-selected="false" aria-controls="panel-messages" tabindex="-1">Messages</button>
           <button id="tab-tools" class="tab-button" type="button" role="tab"
                   aria-selected="false" aria-controls="panel-tools" tabindex="-1">Tools</button>
           <button id="tab-verbose" class="tab-button" type="button" role="tab"
@@ -114,6 +116,15 @@
             Auto-scroll to latest event</label>
           <ol id="events" class="agent-log tab-body" aria-live="polite">
             <li class="empty-state">No events received.</li>
+          </ol>
+        </section>
+
+        <section id="panel-messages" class="tab-panel" role="tabpanel"
+                 aria-labelledby="tab-messages" hidden>
+          <label class="auto-scroll"><input id="messages-auto-scroll" type="checkbox" checked>
+            Auto-scroll to latest message</label>
+          <ol id="messages" class="agent-log tab-body" aria-live="polite">
+            <li class="empty-state">No game messages received.</li>
           </ol>
         </section>
 

@@ -396,7 +396,7 @@ The browser UI is a dependency-free single page (plain HTML, CSS, and vanilla
 JavaScript modules in `nethack_agent/ui/`, packaged in the wheel) served by the
 same FastAPI app at `/` with assets under an allowlisted `/ui/{name}` route.
 `app.js` owns run/API/stream state, `view.js` owns DOM selection, responsive
-panel/tab behavior, focus, and tooltips, `event-log.js` owns the three bounded
+panel/tab behavior, focus, and tooltips, `event-log.js` owns the four bounded
 logs, `render.js` owns pure DOM rendering, and `client.js` owns HTTP/WebSocket
 transport. It uses only this HTTP API and the event WebSocket through
 page-relative URLs, so it works on any loopback host and port. It shows the
@@ -430,11 +430,14 @@ scrollbar), the third column is hidden
 behind an accessible Agent info control and opens as an overlay over the other
 workspace columns.
 
-Agent information has Events, Tools, and Verbose tabs. Each tab has an
+Agent information has Events, Messages, Tools, and Verbose tabs. Each tab has an
 independent auto-scroll control and scrolling body. Event rows are native
 expand/collapse details; each newly received step becomes the one decision
 expanded by default and exposes the selection, recorded intent (or "none
 recorded"), model decisions, candidates, executed action, reward, and outcome.
+Messages lists one plain-text row, with observation step and event sequence, per
+`run_started` or `step` event whose `observation.message` is non-blank after
+trimming; repeated messages are kept because NetHack repeats them.
 Tools contains expandable rows only for step events whose typed
 `selection.source` is `deterministic_skill` or `deterministic_prompt` and whose
 executed `action` is present; it does not infer tool calls. Verbose groups the

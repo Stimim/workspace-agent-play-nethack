@@ -724,3 +724,28 @@ export function renderVerboseEntry(event, values) {
   entry.append(details);
   return entry;
 }
+
+// NetHack's own top-line text carried by an event's observation. Repeats are
+// kept because the game repeats messages; whitespace-only text is not a
+// message and surrounding whitespace is padding, so both are dropped.
+export function gameMessage(event) {
+  const observation = event?.payload?.observation;
+  const text = typeof observation?.message === "string" ? observation.message.trim() : "";
+  if (!text) {
+    return null;
+  }
+  return { sequence: event.sequence, step: observation.step_index ?? null, text };
+}
+
+export function renderMessageEntry(message) {
+  const entry = document.createElement("li");
+  entry.className = "agent-row message-row";
+  const meta = document.createElement("span");
+  meta.className = "message-meta";
+  meta.textContent = `step ${displayed(message.step)} · #${message.sequence}`;
+  const text = document.createElement("span");
+  text.className = "message-text";
+  text.textContent = message.text;
+  entry.append(meta, text);
+  return entry;
+}

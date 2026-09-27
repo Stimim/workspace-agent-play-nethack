@@ -1,6 +1,8 @@
 import {
   deterministicExecution,
+  gameMessage,
   renderEventEntry,
+  renderMessageEntry,
   renderToolEntry,
   renderVerboseEntry,
   verboseDetails,
@@ -17,6 +19,7 @@ function resetLog(log, text) {
 
 export function resetAgentLogs(view) {
   resetLog(view.events, "No events received.");
+  resetLog(view.messages, "No game messages received.");
   resetLog(view.tools, "No deterministic execution evidenced by an event.");
   resetLog(view.verbose, "No unstructured details received.");
 }
@@ -43,6 +46,11 @@ export function appendEventLog(view, event, actionNames) {
     renderEventEntry(event, actionNames, event.kind === "step"),
     view.eventsAutoScroll,
   );
+
+  const message = gameMessage(event);
+  if (message) {
+    appendLogEntry(view.messages, renderMessageEntry(message), view.messagesAutoScroll);
+  }
 
   const execution = deterministicExecution(event);
   if (execution) {

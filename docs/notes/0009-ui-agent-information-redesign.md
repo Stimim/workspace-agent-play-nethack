@@ -58,6 +58,36 @@ The final browser pass found two more defects, both now fixed:
 Verbose row summaries now preview their first text field instead of showing
 only the event sequence and kind.
 
+## Messages tab
+
+A **Messages** tab now sits between Events and Tools. It lists NetHack's own
+top-line text: one plain-text row per `run_started` or `step` event whose
+`payload.observation.message` is non-blank, showing the observation step, the
+event sequence, and the message. Surrounding whitespace is trimmed and
+whitespace-only messages are skipped; identical consecutive messages are kept
+because NetHack legitimately repeats them. The tab follows the other logs:
+default-on auto-scroll, a scrolling body, reset on attach, and the
+300-entry cap. Game messages still also appear in Verbose. `gameMessage` and
+`renderMessageEntry` in `render.js` implement the row.
+
+Verification:
+
+- `uv run pytest -q tests/test_ui.py`: 13 passed, including a Node-executed test
+  covering repeats, trimming, whitespace-only and missing messages, non-observation
+  events, text-only row rendering, and the message remaining in Verbose.
+- `node --check` for `app.js` and `render.js`, `uv run ruff check .`, and
+  `uv run ruff format --check .`: passed.
+- Live scripted seed 6 (`--max-steps 100 --auto`, port 8031): 102 events; the
+  shipped `gameMessage` over them yielded 14 messages, starting with
+  `step 0 · #0 You are lucky!  Full moon tonight.` and
+  `step 12 · #13 You kill the grid bug!`.
+- Headless Windows Edge over CDP attached to that run (last 50 events replayed)
+  and selected Messages with ArrowRight from Events: Messages selected and
+  focused, auto-scroll checked, 6 rows from `step 87 · #88 You miss the sewer
+  rat.  The sewer rat bites!` (repeated at `#89`) to `step 96 · #97`, body at
+  bottom, Verbose still holding 6 game-message rows, no error banner.
+  Screenshot: `C:\Temp\nethack-messages-tab.png`.
+
 ## Verification
 
 - `uv run pytest -q`: 178 passed (includes the 9 `tests/test_ui.py` tests: the

@@ -40,6 +40,8 @@ export const view = {
   tabs: Array.from(document.querySelectorAll('[role="tab"]')),
   events: element("events"),
   eventsAutoScroll: element("events-auto-scroll"),
+  messages: element("messages"),
+  messagesAutoScroll: element("messages-auto-scroll"),
   tools: element("tools"),
   toolsAutoScroll: element("tools-auto-scroll"),
   verbose: element("verbose"),
@@ -185,6 +187,7 @@ export function initializeView() {
   }
   for (const [log, checkbox] of [
     [view.events, view.eventsAutoScroll],
+    [view.messages, view.messagesAutoScroll],
     [view.tools, view.toolsAutoScroll],
     [view.verbose, view.verboseAutoScroll],
   ]) {
