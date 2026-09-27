@@ -16,14 +16,11 @@ from nethack_agent.contracts import (
     optional_enum_value,
     string_value,
 )
+from nethack_agent.traversal import GOAL_TYPES, Goal, goal_from_json
 
 # Level changes are never part of the staircase task. `<` on dungeon level 1
 # leaves the dungeon and ends the game; `>` descends instead of standing on `>`.
 FORBIDDEN_ACTION_NAMES: Final = frozenset({"MiscDirection.UP", "MiscDirection.DOWN"})
-
-
-class Goal(Enum):
-    STAND_ON_DOWNSTAIRS = "stand_on_downstairs"
 
 
 class Skill(Enum):
@@ -67,20 +64,24 @@ MAX_DECISION_RATIONALE_LENGTH: Final = 200
 # A shortest route never revisits a cell, so it fits within NetHack's 21x79 map.
 MAX_INTENT_PATH_LENGTH: Final = 21 * 79
 
-SKILL_DECISION_SCHEMA: Final[dict[str, object]] = {
-    "type": "object",
-    "additionalProperties": False,
-    "required": ["goal", "skill", "rationale"],
-    "properties": {
-        "goal": {"type": "string", "enum": [goal.value for goal in Goal]},
-        "skill": {"type": "string", "enum": [skill.value for skill in Skill]},
-        "rationale": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": MAX_DECISION_RATIONALE_LENGTH,
+
+def skill_decision_schema(goals: tuple[Goal, ...]) -> dict[str, object]:
+    """The Ollama generation schema offering exactly these goals by token."""
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["goal", "skill", "rationale"],
+        "properties": {
+            "goal": {"type": "string", "enum": [goal.token for goal in goals]},
+            "skill": {"type": "string", "enum": [skill.value for skill in Skill]},
+            "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": MAX_DECISION_RATIONALE_LENGTH,
+            },
         },
-    },
-}
+    }
+
 
 ACTION_DECISION_SCHEMA: Final[dict[str, object]] = {
     "type": "object",
@@ -158,8 +159,8 @@ class SkillDecision:
     rationale: str
 
     def __post_init__(self) -> None:
-        if not isinstance(self.goal, Goal):
-            raise TypeError("goal must be a Goal")
+        if not isinstance(self.goal, GOAL_TYPES):
+            raise TypeError("goal must be a typed Goal")
         if not isinstance(self.skill, Skill):
             raise TypeError("skill must be a Skill")
         _decision_text(
@@ -168,7 +169,7 @@ class SkillDecision:
 
     def to_json(self) -> dict[str, object]:
         return {
-            "goal": self.goal.value,
+            "goal": self.goal.to_json(),
             "skill": self.skill.value,
             "rationale": self.rationale,
         }
@@ -177,7 +178,7 @@ class SkillDecision:
     def from_json(cls, value: object) -> Self:
         payload = object_value(value, "skill decision", {"goal", "skill", "rationale"})
         return cls(
-            goal=enum_value(payload["goal"], "skill decision goal", Goal),
+            goal=goal_from_json(payload["goal"], "skill decision goal"),
             skill=enum_value(payload["skill"], "skill decision skill", Skill),
             rationale=_decision_text(
                 payload["rationale"],
@@ -563,8 +564,8 @@ class ActionSelection:
     def __post_init__(self) -> None:
         if not isinstance(self.source, ActionSelectionSource):
             raise TypeError("source must be an ActionSelectionSource")
-        if not isinstance(self.goal, Goal):
-            raise TypeError("goal must be a Goal")
+        if not isinstance(self.goal, GOAL_TYPES):
+            raise TypeError("goal must be a typed Goal")
         if not isinstance(self.skill, Skill):
             raise TypeError("skill must be a Skill")
         if not isinstance(self.skill_selection, SkillSelectionSource):
@@ -597,7 +598,7 @@ class ActionSelection:
     def to_json(self) -> dict[str, object]:
         return {
             "source": self.source.value,
-            "goal": self.goal.value,
+            "goal": self.goal.to_json(),
             "skill": self.skill.value,
             "skill_selection": self.skill_selection.value,
             "stuck_reason": self.stuck_reason.value if self.stuck_reason else None,
@@ -629,7 +630,7 @@ class ActionSelection:
             source=enum_value(
                 payload["source"], "action selection source", ActionSelectionSource
             ),
-            goal=enum_value(payload["goal"], "action selection goal", Goal),
+            goal=goal_from_json(payload["goal"], "action selection goal"),
             skill=enum_value(payload["skill"], "action selection skill", Skill),
             skill_selection=enum_value(
                 payload["skill_selection"],
@@ -655,16 +656,31 @@ class ActionSelection:
 
 def parse_skill_decision(
     text: str,
-    available_goals: frozenset[Goal],
+    available_goals: tuple[Goal, ...],
     available_skills: frozenset[Skill],
 ) -> SkillDecision:
+    """Parse a model skill decision that names one offered goal by its token."""
     payload = _load_model_json(text)
+    offered = {goal.token: goal for goal in available_goals}
     try:
-        decision = SkillDecision.from_json(payload)
+        fields = object_value(payload, "skill decision", {"goal", "skill", "rationale"})
+        token = string_value(fields["goal"], "skill decision goal")
+        goal = offered.get(token)
+        if goal is None:
+            raise DecisionError(f"goal {token!r} is not available")
+        decision = SkillDecision(
+            goal=goal,
+            skill=enum_value(fields["skill"], "skill decision skill", Skill),
+            rationale=_decision_text(
+                fields["rationale"],
+                "skill decision rationale",
+                maximum=MAX_DECISION_RATIONALE_LENGTH,
+            ),
+        )
+    except DecisionError:
+        raise
     except ContractError as error:
         raise DecisionError(str(error)) from error
-    if decision.goal not in available_goals:
-        raise DecisionError(f"goal {decision.goal.value!r} is not available")
     if decision.skill not in available_skills:
         raise DecisionError(f"skill {decision.skill.value!r} is not available")
     return decision

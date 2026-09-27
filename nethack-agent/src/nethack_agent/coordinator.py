@@ -10,7 +10,6 @@ from nethack_agent.decision import (
     FORBIDDEN_ACTION_NAMES,
     ActionSelection,
     ActionSelectionSource,
-    Goal,
     ModelActionDecision,
     ModelSkillDecision,
     RunOutcome,
@@ -30,6 +29,7 @@ from nethack_agent.skills import (
     SkillAction,
     StaircaseNavigationSkill,
 )
+from nethack_agent.traversal import STAND_ON_DOWNSTAIRS, Goal
 
 # While exploration stays stuck after a stuck consultation, the model chooses
 # fallback actions and is asked to reselect a skill at most this often.
@@ -122,7 +122,7 @@ class CoordinatorSnapshot:
             "state": self.state.value,
             "outcome": self.outcome.value if self.outcome else None,
             "observation": self.observation.to_json() if self.observation else None,
-            "current_goal": self.current_goal.value,
+            "current_goal": self.current_goal.to_json(),
             "current_skill": self.current_skill.value if self.current_skill else None,
             "last_error": self.last_error,
         }
@@ -158,7 +158,7 @@ class AgentCoordinator:
         self._state = RunState.IDLE
         self._outcome: RunOutcome | None = None
         self._observation: ProjectedObservation | None = None
-        self._goal = Goal.STAND_ON_DOWNSTAIRS
+        self._goal: Goal = STAND_ON_DOWNSTAIRS
         self._skill_decision: SkillDecision | None = None
         self._current_skill: Skill | None = None
         self._last_error: str | None = None
@@ -553,9 +553,9 @@ class AgentCoordinator:
             self._last_error = f"{error}; environment close failed: {close_error}"
 
     def _validate_skill_decision(self, decision: SkillDecision) -> None:
-        if decision.goal is not self._goal:
+        if decision.goal != self._goal:
             raise CoordinatorInvariantError(
-                f"model selected unavailable goal {decision.goal.value}"
+                f"model selected unavailable goal {decision.goal.token}"
             )
 
     @staticmethod

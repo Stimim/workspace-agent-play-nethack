@@ -11,7 +11,7 @@ const FIELD_HELP = Object.freeze({
   Outcome: "The terminal task result, when the run has ended.",
   Seed: "The suite seed and configured maximum episode step count.",
   Model: "The local model identity and fixed policy version recorded for this run.",
-  Goal: "The typed objective from the Goal enum in decision.py.",
+  Goal: "The typed goal the objective planner set: its kind (stand on or traverse stairs) and the stair direction and main/branch target, shown as kind:direction:connection[:dungeon].",
   Skill: "The typed executing skill from the Skill enum in decision.py.",
   Stream: "The browser's WebSocket connection state, including reconnects and normal closure.",
   "Last error": "The latest coordinator or persisted run error.",
@@ -74,7 +74,6 @@ const FIELD_HELP = Object.freeze({
 });
 
 const VALUE_HELP = Object.freeze({
-  stand_on_downstairs: "Goal.STAND_ON_DOWNSTAIRS: stand on a downstairs tile (>) without issuing the descend command.",
   staircase_navigation: "Skill.STAIRCASE_NAVIGATION: route to the nearest remembered reachable downstairs, handling an adjacent hostile first.",
   explore_level: "Skill.EXPLORE_LEVEL: explore unseen space, handle doors and adjacent hostiles, and search for hidden passages.",
   arbiter: "The deterministic arbiter selected the skill for this step.",
@@ -135,12 +134,45 @@ export function setText(element, value) {
   element.textContent = displayed(value);
 }
 
-export function setExplainedText(element, value) {
+export function setExplainedText(element, value, help = undefined) {
   const text = displayed(value);
   replaceExplained(element, text, () => {
     element.replaceChildren();
-    appendTooltip(element, text, VALUE_HELP[text]);
+    appendTooltip(element, text, help ?? VALUE_HELP[text]);
   });
+}
+
+const GOAL_HELP = Object.freeze({
+  stand_on_stairs: "Goal stand_on_stairs: stand on a remembered staircase that matches the target without using it.",
+  traverse_stairs: "Goal traverse_stairs: reach a remembered staircase that matches the target and use it to change level.",
+});
+
+const CONNECTION_HELP = Object.freeze({
+  any: "any staircase of that direction",
+  main: "the staircase to the adjacent level of the current dungeon",
+  branch: "the staircase into another dungeon",
+});
+
+// Text and tooltip for a typed goal. The text is the goal's token, the same
+// identifier the model is offered: kind:direction:connection[:dungeon].
+export function goalFact(goal) {
+  if (!goal?.target) {
+    return { text: null, help: undefined };
+  }
+  const { direction, connection, dungeon_number: dungeon } = goal.target;
+  const hasDungeon = dungeon !== null && dungeon !== undefined;
+  const parts = [goal.kind, direction, connection, ...(hasDungeon ? [String(dungeon)] : [])];
+  const glyph = direction === "down" ? ">" : "<";
+  const into = hasDungeon ? ` (dungeon ${dungeon})` : "";
+  return {
+    text: parts.join(":"),
+    help: `${GOAL_HELP[goal.kind] ?? `Goal ${goal.kind}.`} Target: ${direction}stairs (${glyph}), ${CONNECTION_HELP[connection] ?? connection}${into}.`,
+  };
+}
+
+function goalPair(goal) {
+  const fact = goalFact(goal);
+  return ["Goal", fact.text, { valueHelp: fact.help }];
 }
 
 export function installFieldTooltips(root) {
@@ -472,7 +504,7 @@ export function renderDecision(list, candidateBody, stepEvent, actionNames) {
   const { selection, action } = payload;
   const pairs = [
     ["Source", selection.source],
-    ["Goal", selection.goal],
+    goalPair(selection.goal),
     ["Skill", selection.skill],
     ["Skill selected by", selection.skill_selection],
     ["Action", `${action.name} (#${action.index}, command ${action.command})`],
@@ -552,7 +584,7 @@ export function eventSummary(event) {
   const prefix = `#${event.sequence} ${time} ${event.kind}`;
   switch (event.kind) {
     case "run_started":
-      return `${prefix} goal=${payload.goal} skill=${payload.skill ?? "-"}`;
+      return `${prefix} goal=${goalFact(payload.goal).text ?? "-"} skill=${payload.skill ?? "-"}`;
     case "step": {
       const outcome = payload.outcome ? ` outcome=${payload.outcome}` : "";
       return `${prefix} ${payload.action?.name} via ${payload.selection?.source} reward=${payload.reward}${outcome}`;
@@ -605,7 +637,7 @@ function renderEventDetails(container, event, actionNames) {
   switch (event.kind) {
     case "run_started":
       setFacts(facts, [
-        ["Goal", payload.goal],
+        goalPair(payload.goal),
         ["Skill", payload.skill],
         ["Observation step", payload.observation?.step_index],
         ["Legal actions", payload.legal_actions?.length],
@@ -688,7 +720,7 @@ export function renderToolEntry(execution) {
   setFacts(facts, [
     ["Evidence", `event.payload.selection.source = ${source}`],
     ["Action", `${action.name} (#${action.index}, command ${action.command})`],
-    ["Goal", selection.goal],
+    goalPair(selection.goal),
     ["Skill", selection.skill],
     ["Skill selected by", selection.skill_selection],
     ["Rationale", selection.rationale],

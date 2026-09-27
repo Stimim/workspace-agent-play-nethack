@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from nethack_agent.decision import Goal, Skill, StuckReason
+from nethack_agent.decision import Skill, StuckReason
 from nethack_agent.environment import NleEnvironment, ScenarioConfig
 from nethack_agent.knowledge import (
     KnowledgeBoundError,
@@ -21,6 +21,7 @@ from nethack_agent.model import OllamaDecisionModel
 from nethack_agent.observation import ObservationProjector
 from nethack_agent.ollama import Generation, OllamaConfig
 from nethack_agent.run_manager import RunManager
+from nethack_agent.traversal import STAND_ON_DOWNSTAIRS
 
 KNOWLEDGE_DIRECTORY = Path(__file__).resolve().parents[1] / "knowledge"
 
@@ -198,7 +199,7 @@ def test_ollama_prompts_include_bounded_cards_without_source_leakage(
         skill_client = RecordingClient(
             json.dumps(
                 {
-                    "goal": Goal.STAND_ON_DOWNSTAIRS.value,
+                    "goal": STAND_ON_DOWNSTAIRS.token,
                     "skill": Skill.STAIRCASE_NAVIGATION.value,
                     "rationale": "Use reviewed staircase facts.",
                 }
@@ -206,7 +207,7 @@ def test_ollama_prompts_include_bounded_cards_without_source_leakage(
         )
         OllamaDecisionModel(skill_client, bundle).select_skill(
             observation,
-            (Goal.STAND_ON_DOWNSTAIRS,),
+            (STAND_ON_DOWNSTAIRS,),
             (Skill.STAIRCASE_NAVIGATION, Skill.EXPLORE_LEVEL),
             StuckReason.SEARCH_EXHAUSTED,
         )
@@ -229,7 +230,7 @@ def test_ollama_prompts_include_bounded_cards_without_source_leakage(
         OllamaDecisionModel(action_client, bundle).select_action(
             observation,
             environment.legal_actions,
-            Goal.STAND_ON_DOWNSTAIRS,
+            STAND_ON_DOWNSTAIRS,
             Skill.STAIRCASE_NAVIGATION,
         )
     finally:

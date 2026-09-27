@@ -15,7 +15,6 @@ from nethack_agent.decision import (
     ActionDecision,
     ActionSelectionSource,
     DecisionMetrics,
-    Goal,
     ModelActionDecision,
     ModelSkillDecision,
     RunOutcome,
@@ -28,6 +27,7 @@ from nethack_agent.decision import (
 from nethack_agent.environment import LegalAction, NleEnvironment, ScenarioConfig
 from nethack_agent.model import DecisionFailure, HierarchicalDecisionModel
 from nethack_agent.observation import ObservationProjector
+from nethack_agent.traversal import STAND_ON_DOWNSTAIRS, Goal
 
 _METRICS = DecisionMetrics(1, 1, 1.0, False)
 
@@ -35,7 +35,7 @@ _METRICS = DecisionMetrics(1, 1, 1.0, False)
 def skill_decision() -> ModelSkillDecision:
     return ModelSkillDecision(
         SkillDecision(
-            Goal.STAND_ON_DOWNSTAIRS,
+            STAND_ON_DOWNSTAIRS,
             Skill.STAIRCASE_NAVIGATION,
             "Use safe deterministic staircase routing.",
         ),
@@ -119,7 +119,7 @@ class ConsultingModel:
         self.consultations.append(stuck)
         skill = Skill.EXPLORE_LEVEL if stuck is None else self.stuck_skill
         return ModelSkillDecision(
-            SkillDecision(Goal.STAND_ON_DOWNSTAIRS, skill, "Scripted consultation."),
+            SkillDecision(STAND_ON_DOWNSTAIRS, skill, "Scripted consultation."),
             _METRICS,
             "{}",
         )
@@ -184,7 +184,7 @@ def test_hierarchy_consults_model_at_start_then_explores_deterministically(
     assert model.skill_calls == 1
     assert model.action_calls == 0
     snapshot = agent.snapshot()
-    assert snapshot.current_goal is Goal.STAND_ON_DOWNSTAIRS
+    assert snapshot.current_goal == STAND_ON_DOWNSTAIRS
     assert snapshot.current_skill is Skill.EXPLORE_LEVEL
     assert snapshot.state is RunState.PAUSED
     agent.stop()

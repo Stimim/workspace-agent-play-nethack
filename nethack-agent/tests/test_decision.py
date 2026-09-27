@@ -7,17 +7,24 @@ from nethack_agent.decision import (
     MAX_CANDIDATE_REASON_LENGTH,
     MAX_FALLBACK_CANDIDATES,
     DecisionError,
-    Goal,
     Skill,
     StuckReason,
     parse_action_decision,
     parse_skill_decision,
+    skill_decision_schema,
 )
 from nethack_agent.environment import NleEnvironment, ScenarioConfig
 from nethack_agent.knowledge import load_default_knowledge_bundle
 from nethack_agent.model import DecisionFailure, OllamaDecisionModel
 from nethack_agent.observation import ObservationProjector
 from nethack_agent.ollama import Generation, OllamaError
+from nethack_agent.traversal import (
+    STAND_ON_DOWNSTAIRS,
+    StairConnection,
+    StairDirection,
+    StairTarget,
+    TraverseStairsGoal,
+)
 
 
 class ScriptedClient:
@@ -54,7 +61,7 @@ def valid_action_decision(action_index: int = 2) -> str:
 def valid_skill_decision() -> str:
     return json.dumps(
         {
-            "goal": Goal.STAND_ON_DOWNSTAIRS.value,
+            "goal": STAND_ON_DOWNSTAIRS.token,
             "skill": Skill.STAIRCASE_NAVIGATION.value,
             "rationale": "Use deterministic routing when the staircase is visible.",
         }
@@ -98,7 +105,7 @@ def test_decisions_reject_duplicate_keys_decimal_indices_and_unknown_skills() ->
     with pytest.raises(DecisionError, match="one of"):
         parse_skill_decision(
             json.dumps(bad_skill),
-            frozenset({Goal.STAND_ON_DOWNSTAIRS}),
+            (STAND_ON_DOWNSTAIRS,),
             frozenset({Skill.STAIRCASE_NAVIGATION}),
         )
 
@@ -107,9 +114,40 @@ def test_decisions_reject_duplicate_keys_decimal_indices_and_unknown_skills() ->
     with pytest.raises(DecisionError, match="not available"):
         parse_skill_decision(
             json.dumps(unavailable),
-            frozenset({Goal.STAND_ON_DOWNSTAIRS}),
+            (STAND_ON_DOWNSTAIRS,),
             frozenset({Skill.STAIRCASE_NAVIGATION}),
         )
+
+
+def test_model_names_one_offered_goal_by_token() -> None:
+    descend = TraverseStairsGoal(
+        StairTarget(StairDirection.DOWN, StairConnection.MAIN, None)
+    )
+    offered = (descend, STAND_ON_DOWNSTAIRS)
+    schema = skill_decision_schema(offered)
+    assert schema["properties"]["goal"]["enum"] == [  # type: ignore[index]
+        "traverse_stairs:down:main",
+        "stand_on_stairs:down:any",
+    ]
+
+    response = json.loads(valid_skill_decision())
+    response["goal"] = descend.token
+    decision = parse_skill_decision(
+        json.dumps(response), offered, frozenset({Skill.STAIRCASE_NAVIGATION})
+    )
+    assert decision.goal == descend
+    assert decision.to_json()["goal"] == descend.to_json()
+
+    # A goal the coordinator did not offer, or the pre-token enum value, is
+    # rejected rather than guessed.
+    for token in (descend.token, "stand_on_downstairs"):
+        response["goal"] = token
+        with pytest.raises(DecisionError, match="not available"):
+            parse_skill_decision(
+                json.dumps(response),
+                (STAND_ON_DOWNSTAIRS,),
+                frozenset({Skill.STAIRCASE_NAVIGATION}),
+            )
 
 
 def test_fallback_decisions_are_bounded_to_three_short_candidates() -> None:
@@ -146,7 +184,7 @@ def test_model_repairs_one_invalid_action_response(tmp_path: Path) -> None:
         result = model(client).select_action(
             observation,
             environment.legal_actions,
-            Goal.STAND_ON_DOWNSTAIRS,
+            STAND_ON_DOWNSTAIRS,
             Skill.STAIRCASE_NAVIGATION,
         )
     finally:
@@ -162,14 +200,14 @@ def test_model_parses_typed_goal_and_skill(tmp_path: Path) -> None:
     try:
         result = model(ScriptedClient([valid_skill_decision()])).select_skill(
             observation,
-            (Goal.STAND_ON_DOWNSTAIRS,),
+            (STAND_ON_DOWNSTAIRS,),
             (Skill.STAIRCASE_NAVIGATION, Skill.EXPLORE_LEVEL),
             StuckReason.SEARCH_EXHAUSTED,
         )
     finally:
         environment.close()
 
-    assert result.decision.goal is Goal.STAND_ON_DOWNSTAIRS
+    assert result.decision.goal == STAND_ON_DOWNSTAIRS
     assert result.decision.skill is Skill.STAIRCASE_NAVIGATION
 
 
@@ -180,7 +218,7 @@ def test_model_fails_after_exactly_one_repair(tmp_path: Path) -> None:
         with pytest.raises(DecisionFailure, match="after one repair"):
             model(client).select_skill(
                 observation,
-                (Goal.STAND_ON_DOWNSTAIRS,),
+                (STAND_ON_DOWNSTAIRS,),
                 (Skill.STAIRCASE_NAVIGATION,),
                 None,
             )
@@ -197,7 +235,7 @@ def test_failed_repair_preserves_both_attempt_diagnostics(tmp_path: Path) -> Non
         with pytest.raises(DecisionFailure) as raised:
             model(client).select_skill(
                 observation,
-                (Goal.STAND_ON_DOWNSTAIRS,),
+                (STAND_ON_DOWNSTAIRS,),
                 (Skill.STAIRCASE_NAVIGATION,),
                 None,
             )
@@ -234,7 +272,7 @@ def test_transport_failure_uses_wall_clock_duration(
         with pytest.raises(DecisionFailure) as raised:
             model(TransportFailureClient()).select_skill(
                 observation,
-                (Goal.STAND_ON_DOWNSTAIRS,),
+                (STAND_ON_DOWNSTAIRS,),
                 (Skill.STAIRCASE_NAVIGATION,),
                 None,
             )

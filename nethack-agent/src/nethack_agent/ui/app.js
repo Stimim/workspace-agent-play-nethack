@@ -1,6 +1,7 @@
 import { ApiError, EventStream, findLastSequence, request, runPath } from "./client.js";
 import { appendEventLog, resetAgentLogs } from "./event-log.js";
 import {
+  goalFact,
   observationIntent,
   promptText,
   renderInventory,
@@ -300,7 +301,8 @@ function render() {
   setText(view.runOutcome, run?.outcome);
   setText(view.runSeed, run ? `${run.suite_seed} (max ${run.max_episode_steps} steps)` : null);
   setText(view.runModel, run ? `${run.model}; policy ${run.policy_version}` : null);
-  setExplainedText(view.runGoal, state.goal);
+  const goal = goalFact(state.goal);
+  setExplainedText(view.runGoal, goal.text, goal.help);
   setExplainedText(view.runSkill, state.skill);
   setText(view.runError, state.lastError);
   setText(view.streamState, state.streamState);

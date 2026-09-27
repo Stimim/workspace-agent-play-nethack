@@ -10,6 +10,13 @@ from fastapi.testclient import TestClient
 from nethack_agent.api import UI_CONTENT_SECURITY_POLICY, create_app
 from nethack_agent.ollama import OllamaConfig
 from nethack_agent.run_manager import RunManager
+from nethack_agent.traversal import (
+    STAND_ON_DOWNSTAIRS,
+    StairConnection,
+    StairDirection,
+    StairTarget,
+    TraverseStairsGoal,
+)
 
 UI_DIR = Path(__file__).parents[1] / "src" / "nethack_agent" / "ui"
 CONTENT_TYPES = {
@@ -287,7 +294,10 @@ def test_tools_include_only_event_evidenced_deterministic_execution() -> None:
           payload: {
             selection: {
               source: "deterministic_skill",
-              goal: "stand_on_downstairs",
+              goal: {
+                kind: "stand_on_stairs",
+                target: { direction: "down", connection: "any", dungeon_number: null },
+              },
               skill: "explore_level",
               skill_selection: "arbiter",
               rationale: "Walk to the nearest frontier.",
@@ -652,3 +662,29 @@ def test_map_intent_comes_only_from_the_step_that_produced_the_observation() -> 
     assert "(" not in result["legacyFact"]["text"]
     assert "(57, 11)" in result["fact"]["text"]
     assert "(56, 10)" in result["fact"]["text"]
+
+
+@pytest.mark.skipif(NODE is None, reason="Node.js is unavailable")
+def test_goal_text_is_the_token_the_model_is_offered() -> None:
+    goals = [
+        STAND_ON_DOWNSTAIRS,
+        TraverseStairsGoal(StairTarget(StairDirection.UP, StairConnection.MAIN, None)),
+        TraverseStairsGoal(StairTarget(StairDirection.DOWN, StairConnection.BRANCH, 2)),
+    ]
+    result = _run_renderer_module(
+        f"""
+        const {{ goalFact }} = await import("./render.js");
+        const goals = {json.dumps([goal.to_json() for goal in goals])};
+        console.log(JSON.stringify({{
+          facts: goals.map(goalFact),
+          missing: goalFact(null),
+        }}));
+        """
+    )
+
+    facts = result["facts"]
+    assert [fact["text"] for fact in facts] == [goal.token for goal in goals]  # type: ignore[index]
+    assert "without using it" in facts[0]["help"]  # type: ignore[index]
+    assert "upstairs (<)" in facts[1]["help"]  # type: ignore[index]
+    assert "(dungeon 2)" in facts[2]["help"]  # type: ignore[index]
+    assert result["missing"] == {"text": None}

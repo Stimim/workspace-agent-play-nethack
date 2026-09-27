@@ -20,7 +20,6 @@ from nethack_agent.decision import (
     ActionSelection,
     ActionSelectionSource,
     DecisionMetrics,
-    Goal,
     RunOutcome,
     RunState,
     Skill,
@@ -30,6 +29,7 @@ from nethack_agent.decision import (
 from nethack_agent.environment import LegalAction
 from nethack_agent.model import DecisionAttemptDiagnostic, DecisionFailure
 from nethack_agent.observation import ProjectedObservation
+from nethack_agent.traversal import GOAL_TYPES, Goal, goal_from_json
 
 
 class EventKind(Enum):
@@ -113,8 +113,8 @@ class RunStartedPayload:
         indices = [action.index for action in self.legal_actions]
         if indices != list(range(len(indices))):
             raise ContractError("run_started legal_actions must be contiguous")
-        if not isinstance(self.goal, Goal):
-            raise TypeError("run_started goal must be a Goal")
+        if not isinstance(self.goal, GOAL_TYPES):
+            raise TypeError("run_started goal must be a typed Goal")
         if self.skill is not None and not isinstance(self.skill, Skill):
             raise TypeError("run_started skill must be a Skill or None")
 
@@ -122,7 +122,7 @@ class RunStartedPayload:
         return {
             "observation": self.observation.to_json(),
             "legal_actions": [action.to_json() for action in self.legal_actions],
-            "goal": self.goal.value,
+            "goal": self.goal.to_json(),
             "skill": self.skill.value if self.skill else None,
         }
 
@@ -141,7 +141,7 @@ class RunStartedPayload:
                     payload["legal_actions"], "run_started legal_actions"
                 )
             ),
-            goal=enum_value(payload["goal"], "run_started goal", Goal),
+            goal=goal_from_json(payload["goal"], "run_started goal"),
             skill=optional_enum_value(payload["skill"], "run_started skill", Skill),
         )
 
@@ -212,7 +212,7 @@ class StepPayload:
         if self.selection.action_index != self.action.index:
             raise ContractError("step selection and action indices must match")
         if self.skill_decision is not None and (
-            self.skill_decision.goal is not self.selection.goal
+            self.skill_decision.goal != self.selection.goal
             or (
                 self.selection.skill_selection is SkillSelectionSource.MODEL
                 and self.skill_decision.skill is not self.selection.skill

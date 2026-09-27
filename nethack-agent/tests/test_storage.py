@@ -11,7 +11,6 @@ from nethack_agent.decision import (
     ActionSelectionSource,
     DecisionMetrics,
     DestinationKind,
-    Goal,
     IntentDestination,
     MapCell,
     RunOutcome,
@@ -39,6 +38,7 @@ from nethack_agent.storage import (
     RunStore,
     StoredEventError,
 )
+from nethack_agent.traversal import STAND_ON_DOWNSTAIRS
 
 
 def create_stored_run(store: RunStore, tmp_path: Path):  # type: ignore[no-untyped-def]
@@ -66,7 +66,7 @@ def event_fixtures(tmp_path: Path):  # type: ignore[no-untyped-def]
         metrics = DecisionMetrics(3, 2, 4.0, False)
         selection = ActionSelection(
             ActionSelectionSource.DETERMINISTIC_SKILL,
-            Goal.STAND_ON_DOWNSTAIRS,
+            STAND_ON_DOWNSTAIRS,
             Skill.EXPLORE_LEVEL,
             SkillSelectionSource.ARBITER,
             None,
@@ -83,7 +83,7 @@ def event_fixtures(tmp_path: Path):  # type: ignore[no-untyped-def]
             RunStartedPayload(
                 observation,
                 environment.legal_actions,
-                Goal.STAND_ON_DOWNSTAIRS,
+                STAND_ON_DOWNSTAIRS,
                 None,
             ),
             RunResumedPayload(),
@@ -91,7 +91,7 @@ def event_fixtures(tmp_path: Path):  # type: ignore[no-untyped-def]
             StepPayload(
                 selection=selection,
                 skill_decision=SkillDecision(
-                    Goal.STAND_ON_DOWNSTAIRS,
+                    STAND_ON_DOWNSTAIRS,
                     Skill.STAIRCASE_NAVIGATION,
                     "Use deterministic navigation.",
                 ),

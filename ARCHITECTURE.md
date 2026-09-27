@@ -98,13 +98,20 @@ legacy pet observations.
 
 A state machine, not an open-ended chat loop. It owns run lifecycle (`idle`,
 `running`, `paused`, `terminal`, `stopped`, and `error`), current goal, active
-skill, model cadence, inference retries, and action execution. `Goal` and
-`Skill` are enums; `SkillDecision`, `ActionDecision`, `ActionSelection`, and
-their metrics are immutable typed records. The fixed milestone goal is
-`stand_on_downstairs`, fulfilled by standing on any `>` without issuing the
-descend command. It cannot request upstairs or identify a main-dungeon versus
-branch stair; typed direction and branch identity are designed in
-[ADR 0004](docs/decisions/0004-traversal-goals-and-task-progression.md).
+skill, model cadence, inference retries, and action execution. `Skill` is an
+enum; `SkillDecision`, `ActionDecision`, `ActionSelection`, and their metrics
+are immutable typed records. Goals are the typed `traversal.Goal` union
+([ADR 0004](docs/decisions/0004-traversal-goals-and-task-progression.md)):
+`stand_on_stairs` or `traverse_stairs`, each with a `StairTarget` (direction
+`up`/`down` and connection `any`, `main`, or `branch` with a dungeon number).
+They persist as objects such as
+`{"kind": "stand_on_stairs", "target": {"direction": "down", "connection": "any", "dungeon_number": null}}`;
+the string `stand_on_downstairs` stored before typed goals reads as exactly that
+goal. The model is offered goals by token (`stand_on_stairs:down:any`) through
+a per-call generation schema, and the parser maps a token back to the offered
+goal. The current goal is still fixed to stand on any `>` without issuing the
+descend command; traversal goals, stair identity, and level changes follow the
+rest of ADR 0004.
 
 Model role ([ADR 0002](docs/decisions/0002-deterministic-skill-arbiter.md)):
 a deterministic arbiter, not the local model, chooses the executing skill on

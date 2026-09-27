@@ -8,7 +8,6 @@ from nethack_agent.decision import (
     ActionCandidate,
     ActionDecision,
     DecisionMetrics,
-    Goal,
     ModelActionDecision,
     ModelSkillDecision,
     RunState,
@@ -19,6 +18,7 @@ from nethack_agent.events import AgentErrorPayload, EventKind, RunStartedPayload
 from nethack_agent.model import DecisionAttemptDiagnostic, DecisionFailure
 from nethack_agent.ollama import OllamaConfig
 from nethack_agent.run_manager import RunManager
+from nethack_agent.traversal import STAND_ON_DOWNSTAIRS
 
 _METRICS = DecisionMetrics(1, 1, 1.0, False)
 
@@ -26,7 +26,7 @@ _METRICS = DecisionMetrics(1, 1, 1.0, False)
 def skill_decision() -> ModelSkillDecision:
     return ModelSkillDecision(
         SkillDecision(
-            Goal.STAND_ON_DOWNSTAIRS,
+            STAND_ON_DOWNSTAIRS,
             Skill.STAIRCASE_NAVIGATION,
             "Use staircase navigation.",
         ),

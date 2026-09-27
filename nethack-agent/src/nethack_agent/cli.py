@@ -123,7 +123,7 @@ def smoke_agent(config: OllamaConfig) -> str:
             latency_ms = sum(item.metrics.latency_ms for item in decisions)
             return (
                 f"{record.selection.source.value} chose {record.action.index} "
-                f"({record.action.name}) for goal {record.goal.value!r} with "
+                f"({record.action.name}) for goal {record.goal.token!r} with "
                 f"skill {record.skill.value!r}; {prompt_tokens} prompt tokens, "
                 f"{output_tokens} output tokens, {latency_ms:.0f} ms"
             )

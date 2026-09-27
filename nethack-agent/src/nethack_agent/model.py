@@ -16,12 +16,10 @@ from nethack_agent.decision import (
     ACTION_DECISION_SCHEMA,
     MAX_CANDIDATE_REASON_LENGTH,
     MAX_FALLBACK_CANDIDATES,
-    SKILL_DECISION_SCHEMA,
     ActionCandidate,
     ActionDecision,
     DecisionError,
     DecisionMetrics,
-    Goal,
     ModelActionDecision,
     ModelSkillDecision,
     Skill,
@@ -29,6 +27,7 @@ from nethack_agent.decision import (
     StuckReason,
     parse_action_decision,
     parse_skill_decision,
+    skill_decision_schema,
 )
 from nethack_agent.environment import LegalAction
 from nethack_agent.knowledge import KnowledgeBundle
@@ -38,6 +37,12 @@ from nethack_agent.ollama import (
     OllamaClient,
     OllamaContextLimitError,
     OllamaError,
+)
+from nethack_agent.traversal import (
+    Goal,
+    StairConnection,
+    StairDirection,
+    StandOnStairsGoal,
 )
 
 
@@ -130,10 +135,10 @@ class ScriptedDevelopmentModel:
         stuck: StuckReason | None,
     ) -> ModelSkillDecision:
         del observation
-        goal = Goal.STAND_ON_DOWNSTAIRS
-        skill = Skill.EXPLORE_LEVEL
-        if goal not in available_goals or skill not in available_skills:
+        if not available_goals or Skill.EXPLORE_LEVEL not in available_skills:
             raise DecisionFailure("development goal or skill is unavailable")
+        goal = available_goals[0]
+        skill = Skill.EXPLORE_LEVEL
         rationale = (
             "Explore deterministically during development verification."
             if stuck is None
@@ -181,7 +186,6 @@ class OllamaDecisionModel:
         available_skills: tuple[Skill, ...],
         stuck: StuckReason | None,
     ) -> ModelSkillDecision:
-        goals = frozenset(available_goals)
         skills = frozenset(available_skills)
         decision, metrics, raw_response = self._request_decision(
             _skill_prompt(
@@ -191,8 +195,8 @@ class OllamaDecisionModel:
                 stuck,
                 self._knowledge_bundle.prompt_context,
             ),
-            SKILL_DECISION_SCHEMA,
-            lambda text: parse_skill_decision(text, goals, skills),
+            skill_decision_schema(available_goals),
+            lambda text: parse_skill_decision(text, available_goals, skills),
         )
         return ModelSkillDecision(decision, metrics, raw_response)
 
@@ -341,6 +345,25 @@ _STUCK_DESCRIPTIONS: Final = {
         "unsafe-to-melee monster that has not moved"
     ),
 }
+_STAIR_NAMES: Final = {
+    StairDirection.DOWN: ("downstairs", "`>`", "descending"),
+    StairDirection.UP: ("upstairs", "`<`", "climbing"),
+}
+
+
+def describe_goal(goal: Goal) -> str:
+    """Plain-language goal text for prompts, derived only from the typed goal."""
+    target = goal.target
+    name, glyph, verb = _STAIR_NAMES[target.direction]
+    if target.connection is StairConnection.ANY:
+        stairs = f"a {name} tile ({glyph})"
+    elif target.connection is StairConnection.MAIN:
+        stairs = f"the {name} ({glyph}) to the next level of the current dungeon"
+    else:
+        stairs = f"the {name} ({glyph}) into dungeon {target.dungeon_number}"
+    if isinstance(goal, StandOnStairsGoal):
+        return f"stand on {stairs} without {verb}"
+    return f"reach {stairs} and use it"
 
 
 def _skill_prompt(
@@ -368,9 +391,10 @@ def _skill_prompt(
         )
         map_section = f"\nVisible map:\n```text\n{map_text}\n```\n"
     return f"""You control a lawful dwarven Valkyrie in NetHack.
-Choose the current goal and skill. The task is to stand on the downstairs tile (`>`)
-without descending. A deterministic arbiter runs staircase_navigation whenever a
-downstairs is known and reachable and explore_level otherwise; you are consulted
+Choose the current goal and skill. The current goal is to
+{describe_goal(available_goals[0])}. A deterministic arbiter runs
+staircase_navigation whenever a matching staircase is known and reachable and
+explore_level otherwise; you are consulted
 at the start and when exploration is stuck. Return only one JSON object with
 exactly goal, skill, and rationale. Use one of the supplied identifiers. Keep the
 rationale to one short sentence; do not provide hidden chain-of-thought.
@@ -383,7 +407,7 @@ Skills:
 Situation: {situation}
 Step: {observation.step_index}
 Message: {observation.message or "(none)"}
-Available goals: {json.dumps([goal.value for goal in available_goals])}
+Available goals: {json.dumps([goal.token for goal in available_goals])}
 Available skills: {json.dumps([skill.value for skill in available_skills])}
 {map_section}"""
 
@@ -409,7 +433,8 @@ def _action_prompt(
     ]
     return f"""You control a lawful dwarven Valkyrie in NetHack.
 The deterministic {skill.value} skill cannot select an unambiguous routine action.
-Choose exactly one supplied fallback action for goal {goal.value}. Never change level.
+Choose exactly one supplied fallback action for goal {goal.token}
+({describe_goal(goal)}). Never change level.
 Return only one JSON object with exactly candidates, action_index, and rationale.
 Supply 1-{MAX_FALLBACK_CANDIDATES} candidate objects with exactly action_index,
 score, and reason. Candidate indices must be unique legal JSON integers; scores must

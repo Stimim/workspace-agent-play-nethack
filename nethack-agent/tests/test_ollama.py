@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from nethack_agent.decision import Goal, Skill
+from nethack_agent.decision import Skill
 from nethack_agent.environment import NleEnvironment, ScenarioConfig
 from nethack_agent.knowledge import load_default_knowledge_bundle
 from nethack_agent.model import DecisionFailure, OllamaDecisionModel
@@ -18,6 +18,7 @@ from nethack_agent.ollama import (
     OllamaContextLimitError,
     OllamaError,
 )
+from nethack_agent.traversal import STAND_ON_DOWNSTAIRS
 
 
 class RecordingClient(OllamaClient):
@@ -38,7 +39,7 @@ class RecordingClient(OllamaClient):
         return {
             "response": json.dumps(
                 {
-                    "goal": Goal.STAND_ON_DOWNSTAIRS.value,
+                    "goal": STAND_ON_DOWNSTAIRS.token,
                     "skill": Skill.STAIRCASE_NAVIGATION.value,
                     "rationale": "route to stairs",
                 }
@@ -106,7 +107,7 @@ def test_context_overflow_counts_as_failed_attempts(tmp_path: Path) -> None:
     with pytest.raises(DecisionFailure) as raised:
         OllamaDecisionModel(client, load_default_knowledge_bundle()).select_skill(
             observation,
-            (Goal.STAND_ON_DOWNSTAIRS,),
+            (STAND_ON_DOWNSTAIRS,),
             (Skill.STAIRCASE_NAVIGATION,),
             None,
         )

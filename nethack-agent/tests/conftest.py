@@ -25,10 +25,25 @@ def _rewrite_events(
     return rewritten
 
 
+_STAIRCASE_GOAL = {
+    "kind": "stand_on_stairs",
+    "target": {"direction": "down", "connection": "any", "dungeon_number": None},
+}
+
+
+def _legacy_goals(payload: dict[str, object]) -> None:
+    """Write the milestone-1 goal back as the string recorded before typed goals."""
+    owners = [payload, payload.get("selection"), payload.get("skill_decision")]
+    for owner in owners:
+        if isinstance(owner, dict) and owner.get("goal") == _STAIRCASE_GOAL:
+            owner["goal"] = "stand_on_downstairs"
+
+
 def _milestone_1_event(payload: dict[str, object]) -> bool:
     observation = payload.get("observation")
     if observation is None:
         return False
+    _legacy_goals(payload)
     del observation["map"]["pet_rows"]  # type: ignore[index]
     for cell in observation["changed_cells"]:  # type: ignore[index]
         del cell["pet"]
@@ -45,6 +60,7 @@ def _pathless_intent_event(payload: dict[str, object]) -> bool:
     intent = None if selection is None else selection["intent"]  # type: ignore[index]
     if intent is None:
         return False
+    _legacy_goals(payload)
     del intent["path"]
     return True
 

@@ -1,3 +1,5 @@
+import json
+import sqlite3
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -12,7 +14,6 @@ from nethack_agent.decision import (
     ActionCandidate,
     ActionDecision,
     DecisionMetrics,
-    Goal,
     ModelActionDecision,
     ModelSkillDecision,
     RunState,
@@ -22,6 +23,7 @@ from nethack_agent.decision import (
 from nethack_agent.model import DecisionFailure
 from nethack_agent.ollama import OllamaConfig
 from nethack_agent.run_manager import RunManager
+from nethack_agent.traversal import STAND_ON_DOWNSTAIRS
 
 _METRICS = DecisionMetrics(1, 1, 1.0, False)
 
@@ -30,7 +32,7 @@ class EastModel:
     def select_skill(self, *_: object) -> ModelSkillDecision:
         return ModelSkillDecision(
             SkillDecision(
-                Goal.STAND_ON_DOWNSTAIRS,
+                STAND_ON_DOWNSTAIRS,
                 Skill.STAIRCASE_NAVIGATION,
                 "Use staircase navigation.",
             ),
@@ -77,7 +79,9 @@ def test_api_controls_run_and_persists_step_and_ttyrec(tmp_path: Path) -> None:
     )
     assert created.status_code == 201
     run_id = created.json()["run"]["id"]
-    assert created.json()["coordinator"]["current_goal"] == "stand_on_downstairs"
+    assert created.json()["coordinator"]["current_goal"] == (
+        STAND_ON_DOWNSTAIRS.to_json()
+    )
     assert created.json()["coordinator"]["current_skill"] is None
     assert created.json()["run"]["state"] == "paused"
 
@@ -109,7 +113,7 @@ def test_api_controls_run_and_persists_step_and_ttyrec(tmp_path: Path) -> None:
         for key in ("source", "goal", "skill", "skill_selection", "stuck_reason")
     } == {
         "source": "deterministic_skill",
-        "goal": "stand_on_downstairs",
+        "goal": STAND_ON_DOWNSTAIRS.to_json(),
         "skill": "explore_level",
         "skill_selection": "arbiter",
         "stuck_reason": None,
@@ -247,6 +251,16 @@ def test_events_stored_in_the_milestone_1_shape_remain_readable(
     api.post(f"/api/runs/{run_id}/step")
     api.post(f"/api/runs/{run_id}/stop")
     assert to_milestone_1_shape(tmp_path / "runs.sqlite3") == 2
+    with sqlite3.connect(tmp_path / "runs.sqlite3") as connection:
+        stored = [
+            json.loads(text)
+            for (text,) in connection.execute(
+                "SELECT payload_json FROM events ORDER BY sequence"
+            )
+        ]
+    assert stored[0]["goal"] == "stand_on_downstairs"
+    assert stored[1]["selection"]["goal"] == "stand_on_downstairs"
+    assert stored[1]["skill_decision"]["goal"] == "stand_on_downstairs"
 
     # A restarted service reads the legacy records through the strict store.
     restarted = client(tmp_path)
@@ -261,6 +275,11 @@ def test_events_stored_in_the_milestone_1_shape_remain_readable(
     assert all(cell["pet"] is None for cell in step["changed_cells"])
     # No intent was recorded, so none is served.
     assert events[1]["payload"]["selection"]["intent"] is None
+    # The legacy goal string is the typed goal it always meant.
+    staircase_goal = STAND_ON_DOWNSTAIRS.to_json()
+    assert events[0]["payload"]["goal"] == staircase_goal
+    assert events[1]["payload"]["selection"]["goal"] == staircase_goal
+    assert events[1]["payload"]["skill_decision"]["goal"] == staircase_goal
     assert restarted.get(f"/api/runs/{run_id}").status_code == 200
 
 
