@@ -36,6 +36,12 @@ Acceptance: the fixed local policy succeeds on at least 6 of 10 committed determ
 - [x] Add the `omp-commit` skill: derive the active conversation UUID from
   unambiguous live OMP evidence, normalize its Git trailer, and run format/lint
   checks before allowing a commit.
+
+- [ ] After `/restart` reloads the persistent OMP settings, rerun one bounded
+  `vibe_spawn cli=fast` task and require turn metadata to show
+  `ollama/omp-coder-smol:latest` after the real Antigravity quota 429. Fresh
+  direct OMP processes already fall back; OMP 18.3.2 did not refresh the
+  already-running conversation's worker-launcher snapshot ([0008](docs/notes/0008-omp-local-coding-fallback.md)).
 ## Later: autonomous ascension
 
 - [ ] Establish staged full-game benchmarks and survival metrics.

@@ -35,6 +35,135 @@ requests one fallback action, executes it through the action gate, and
 finalizes the ttyrec. It reports action-selection source, action, goal, skill,
 aggregate token counts, and latency.
 
+### OMP local coding fallback
+
+OMP 18.3.2 keeps the online Gemini Flash models as the primary `smol` and
+`tiny` roles. `ollama/omp-coder-smol:latest` is their ordered local fallback;
+it is developer tooling, separate from `gemma4-nethack:latest`, and is never
+used by the playing agent.
+
+The reproducible model definition lives with the other coding-agent resources:
+
+```text
+_agents/models/omp-coder-smol/Modelfile
+```
+
+Build or refresh its derived tag from the repository root, then refresh OMP's
+cached model catalog:
+
+```bash
+ollama create omp-coder-smol:latest \
+  --file _agents/models/omp-coder-smol/Modelfile
+omp models refresh
+```
+
+The definition derives from the installed generic `gemma4:e4b` 8B Q4 model
+without downloading another model and fixes `num_ctx` at 8,192. On the
+reference RTX 4070 Laptop GPU, a live request reports 3.2 GB and 100% GPU
+residency. A larger default context caused the same model family to spill onto
+CPU.
+
+OMP caches model discovery. Until `omp models refresh` runs, the valid Ollama
+tag can still be rejected as unknown and no fallback chain can advance to it.
+
+The persistent OMP settings are global on the reference workstation
+(`omp config path` prints `~/.omp/agent`; `modelRoleStorage` is `global`).
+The Gemini primaries remain unchanged:
+
+```yaml
+modelRoles:
+  smol: google-antigravity/gemini-3.8-flash:auto
+  tiny: google/gemini-3.5-flash-lite:auto
+retry:
+  modelFallback: true
+  waitForUsageReset: false
+  fallbackChains:
+    smol:
+      - ollama/omp-coder-smol:latest
+    tiny:
+      - ollama/omp-coder-smol:latest
+    google-antigravity/gemini-3.8-flash:
+      - ollama/omp-coder-smol:latest
+    google/gemini-3.5-flash-lite:
+      - ollama/omp-coder-smol:latest
+```
+
+The persisted record also repeats the Antigravity chain for the resolved
+`:minimal`, `:low`, `:medium`, `:high`, and configured `:auto` selectors, and
+the Google chain for `:off`, `:minimal`, `:low`, `:medium`, `:high`, and
+`:auto`. Real `cli=fast` worker metadata has selected Antigravity `:low`,
+`:medium`, and `:high`; the explicit keys protect those stable resolved
+selectors. The role and bare-model keys remain so ordinary role resolution and
+fresh OMP processes do not depend on a particular effort. Preserve unrelated
+chains, including the default model's chain, whenever editing this record.
+
+Confirm the persistent values and locally discoverable selector:
+
+```bash
+omp config get modelRoles --json
+omp config get retry.modelFallback --json
+omp config get retry.waitForUsageReset --json
+omp config get retry.fallbackChains --json
+omp models ollama
+```
+
+`retry.modelFallback` is OMP's switch for advancing to configured models.
+`waitForUsageReset: false` prevents an unattended worker from sleeping until a
+multi-hour quota reset instead of trying its chain. OMP 18.3.2 exposes no
+separate user-configurable error-class list. Its built-in recovery recognizes
+transport errors and provider HTTP 429 usage exhaustion; authentication and
+configuration failures do not become availability fallbacks. Administratively
+disabling a primary provider is rejected before chain recovery and is not a
+valid fallback test.
+
+To exercise the persisted `tiny` chain without using a real Google credential,
+route only cloud HTTP through a closed loopback port while leaving Ollama
+reachable:
+
+```bash
+env GEMINI_API_KEY=invalid-for-fallback-smoke \
+  HTTPS_PROXY=http://127.0.0.1:9 \
+  HTTP_PROXY=http://127.0.0.1:9 \
+  NO_PROXY=127.0.0.1,localhost \
+  timeout 60s omp \
+    --model @tiny \
+    --no-session \
+    --no-tools \
+    --thinking off \
+    --max-time 45s \
+    --mode json \
+    -p 'Reply with exactly GOOGLE_TINY_FALLBACK_OK.'
+```
+
+Inspect the JSON `message_end` records rather than trusting marker text alone.
+The exercised run first recorded the failed
+`provider=google, model=gemini-3.5-flash-lite` request, then the successful
+`provider=ollama, model=omp-coder-smol:latest` response. On the currently
+quota-exhausted Antigravity account, the analogous bounded run with
+`--model google-antigravity/gemini-3.8-flash:low` recorded the real
+`RESOURCE_EXHAUSTED` HTTP 429 followed by the same Ollama provider/model.
+
+OMP loads settings into a running session. An external `omp config set` updates
+the persistent file but does not update the already-running conversation's
+`vibe_spawn cli=fast` launcher. In this conversation, two exact fast-worker
+smokes still stopped at the `google-antigravity/gemini-3.8-flash:low` 429 with
+zero tool calls, while fresh direct OMP processes used the new exact chain.
+After changing these settings, run `/restart` in OMP; that supported command
+relaunches OMP with its original flags and resumes the current session in
+place, loading the persistent configuration. A new OMP conversation also loads
+it. Verify the next session with one bounded `vibe_spawn cli=fast` task and
+require its turn metadata to name
+`model="ollama/omp-coder-smol:latest"` before considering the worker path
+proved.
+
+The 8,192-token window is enough for OMP's local tool protocol on bounded work:
+an exercised local task used `read` on a two-line Python file, used `write` to
+produce a corrected copy, and that copy executed successfully. Large delegated
+tasks can still exceed this intentionally small window, and the local 8B model
+is less capable than the primary. Keep fallback assignments focused and
+concise. Ollama remains bound to loopback, so this fallback introduces no
+additional cloud provider.
+
 ### Local control service
 
 ```bash

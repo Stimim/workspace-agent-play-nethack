@@ -15,7 +15,7 @@ playing agent uses local models and must remain offline.
 │   ├── decisions/     # durable architecture decision records
 │   ├── notes/         # chronological development history and lessons
 │   └── external/      # acquisition notes for uncommitted source material
-├── _agents/           # skills and tools for online coding agents
+├── _agents/           # skills, tools, and model recipes for online coding agents
 └── nethack-agent/     # local player application and runtime knowledge
 ```
 
