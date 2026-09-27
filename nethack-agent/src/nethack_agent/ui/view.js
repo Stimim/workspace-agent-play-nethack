@@ -27,6 +27,7 @@ export const view = {
   runError: element("run-error"),
   streamState: element("stream-state"),
   map: element("map"),
+  showPath: element("show-path"),
   mapStep: element("map-step"),
   message: element("message"),
   prompt: element("prompt"),
@@ -48,11 +49,28 @@ export const view = {
   verboseAutoScroll: element("verbose-auto-scroll"),
 };
 
+const SHOW_PATH_KEY = "nethack-agent.showPath";
 const TOOLTIP_GAP_PX = 6;
 const TOOLTIP_MARGIN_PX = 8;
 const agentMedia = window.matchMedia(NARROW_AGENT_QUERY);
 let agentPanelOpen = false;
 let activeTooltip = null;
+
+function readShowPath() {
+  try {
+    return localStorage.getItem(SHOW_PATH_KEY) !== "false";
+  } catch {
+    return true;
+  }
+}
+
+function writeShowPath(show) {
+  try {
+    localStorage.setItem(SHOW_PATH_KEY, String(show));
+  } catch {
+    // Not persisted; the checkbox still applies to this page.
+  }
+}
 
 function syncAgentPanel() {
   const narrow = agentMedia.matches;
@@ -161,7 +179,7 @@ export function repositionShownTooltip() {
   }
 }
 
-export function initializeView() {
+export function initializeView(onShowPathChange) {
   view.agentToggle.addEventListener("click", () => setAgentPanelOpen(!agentPanelOpen));
   view.agentClose.addEventListener("click", () => setAgentPanelOpen(false, true));
   view.agentScrim.addEventListener("click", () => setAgentPanelOpen(false, true));
@@ -197,6 +215,11 @@ export function initializeView() {
       }
     });
   }
+  view.showPath.checked = readShowPath();
+  view.showPath.addEventListener("change", () => {
+    writeShowPath(view.showPath.checked);
+    onShowPathChange();
+  });
 
   installFieldTooltips(document);
   syncAgentPanel();

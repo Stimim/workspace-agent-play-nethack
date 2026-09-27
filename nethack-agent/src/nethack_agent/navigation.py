@@ -529,15 +529,20 @@ class RouteTree:
     parents: dict[Point, Point | None]
     distances: dict[Point, int]
 
-    def first_step(self, target: Point) -> Point | None:
+    def route(self, target: Point) -> tuple[Point, ...] | None:
+        """The shortest route's cells after the origin, ending at `target`.
+
+        None when `target` is unreachable or is the origin itself.
+        """
         if target not in self.parents or target == self.origin:
             return None
-        current = target
-        parent = self.parents[current]
+        cells = [target]
+        parent = self.parents[target]
         while parent is not None and parent != self.origin:
-            current = parent
-            parent = self.parents[current]
-        return current
+            cells.append(parent)
+            parent = self.parents[parent]
+        cells.reverse()
+        return tuple(cells)
 
 
 def route_tree(

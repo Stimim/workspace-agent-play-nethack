@@ -19,6 +19,7 @@ from nethack_agent.decision import (
 from nethack_agent.environment import LegalAction, NleEnvironment, ScenarioConfig
 from nethack_agent.model import ScriptedDevelopmentModel
 from nethack_agent.navigation import (
+    MOVE_ACTION_NAMES,
     OSCILLATION_WINDOW,
     ActionKind,
     ActionRecord,
@@ -36,7 +37,9 @@ from nethack_agent.skills import (
     SEARCHES_PER_ROUND,
     ExploreLevelSkill,
     SafePromptHandler,
+    SkillAction,
     StaircaseNavigationSkill,
+    _past_monster,
 )
 
 _CMAP = nethack.GLYPH_CMAP_OFF
@@ -149,19 +152,38 @@ def action_name(actions: dict[str, LegalAction], index: int | None) -> str | Non
     )
 
 
+def cells(*points: tuple[int, int]) -> tuple[MapCell, ...]:
+    return tuple(MapCell(*point) for point in points)
+
+
+def assert_followed_route(action: SkillAction, hero: tuple[int, int]) -> None:
+    """The recorded route starts with the cell the action moves into."""
+    assert action.intent is not None
+    path = action.intent.path
+    assert path is not None
+    first = path[0]
+    assert max(abs(first.x - hero[0]), abs(first.y - hero[1])) == 1
+    assert (first.x, first.y) == action.record.target
+    assert (path[-1].x, path[-1].y) == action.record.goal
+
+
 def test_staircase_skill_routes_multiple_steps_then_waits_on_target(
     template: ProjectedObservation, actions: dict[str, LegalAction]
 ) -> None:
     skill = StaircaseNavigationSkill()
-    stairs = ActionIntent(IntentDestination(DestinationKind.DOWNSTAIRS, 5, 1), None)
+    downstairs = IntentDestination(DestinationKind.DOWNSTAIRS, 5, 1)
     names = []
-    for row in ("|.@..>|", "|..@.>|", "|...@>|"):
+    for hero, row in ((2, "|.@..>|"), (3, "|..@.>|"), (4, "|...@>|")):
         memory = remembered(template, ("-------", row, "-------"))
         proposal = skill.select_action(memory, actions)
         assert proposal is not None
         names.append(action_name(actions, proposal.action_index))
-        # The intent names the remembered `>`, not the cell stepped into.
-        assert proposal.intent == stairs
+        # The intent names the remembered `>`, not the cell stepped into, and
+        # the remaining route to it.
+        assert proposal.intent == ActionIntent(
+            downstairs, None, cells(*((x, 1) for x in range(hero + 1, 6)))
+        )
+        assert_followed_route(proposal, (hero, 1))
     # Memory keeps the `>` the hero now hides.
     memory = remembered(
         template,
@@ -177,7 +199,33 @@ def test_staircase_skill_routes_multiple_steps_then_waits_on_target(
     ]
     assert on_stairs is not None
     assert action_name(actions, on_stairs.action_index) == "MiscDirection.WAIT"
-    assert on_stairs.intent == stairs
+    # Waiting follows no route.
+    assert on_stairs.intent == ActionIntent(downstairs, None, None)
+
+
+def test_staircase_skill_uses_route_distance_then_row_and_column_for_multiple_stairs(
+    template: ProjectedObservation, actions: dict[str, LegalAction]
+) -> None:
+    memory = remembered(
+        template,
+        (
+            "---------",
+            "|>.....>|",
+            "|...@...|",
+            "|>......|",
+            "---------",
+        ),
+    )
+
+    proposal = StaircaseNavigationSkill().select_action(memory, actions)
+
+    assert proposal is not None
+    assert action_name(actions, proposal.action_index) == "CompassDirection.W"
+    assert proposal.intent == ActionIntent(
+        IntentDestination(DestinationKind.DOWNSTAIRS, 1, 1),
+        None,
+        cells((3, 2), (2, 2), (1, 1)),
+    )
 
 
 def test_staircase_defense_keeps_the_chosen_downstairs_as_destination(
@@ -189,8 +237,9 @@ def test_staircase_defense_keeps_the_chosen_downstairs_as_destination(
 
     assert proposal is not None
     assert action_name(actions, proposal.action_index) == "CompassDirection.NE"
+    # The attack leaves the route, so no path is recorded for this step.
     assert proposal.intent == ActionIntent(
-        IntentDestination(DestinationKind.DOWNSTAIRS, 5, 2), MapCell(2, 1)
+        IntentDestination(DestinationKind.DOWNSTAIRS, 5, 2), MapCell(2, 1), None
     )
 
 
@@ -206,7 +255,76 @@ def test_exploration_intent_names_the_frontier_route_goal(
     assert result.action.record.target == (3, 1)
     # Seven steps away: the doorway facing never-observed space.
     assert result.action.intent == ActionIntent(
-        IntentDestination(DestinationKind.FRONTIER, 9, 1), None
+        IntentDestination(DestinationKind.FRONTIER, 9, 1),
+        None,
+        cells(*((x, 1) for x in range(3, 10))),
+    )
+    assert_followed_route(result.action, (2, 1))
+
+
+def test_route_bends_around_a_boulder_and_through_an_open_door(
+    template: ProjectedObservation, actions: dict[str, LegalAction]
+) -> None:
+    memory = remembered(
+        template,
+        (
+            "------ ",
+            "|@0..| ",
+            "|....| ",
+            "---O-- ",
+            "   #   ",
+            "   #>  ",
+        ),
+    )
+
+    proposal = StaircaseNavigationSkill().select_action(memory, actions)
+
+    assert proposal is not None
+    assert proposal.intent is not None
+    # The door is passed orthogonally; the first step bends diagonally past
+    # the boulder.
+    assert proposal.intent.path == cells((2, 2), (3, 2), (3, 3), (3, 4), (4, 5))
+    assert_followed_route(proposal, (1, 1))
+
+
+def test_monster_blocked_route_is_recorded_while_approaching_not_waiting(
+    template: ProjectedObservation, actions: dict[str, LegalAction]
+) -> None:
+    skill = StaircaseNavigationSkill()
+    downstairs = IntentDestination(DestinationKind.DOWNSTAIRS, 5, 1)
+
+    # Memory keeps the floor a monster later stands on.
+    seen = ("-------", "|@...>|", "-------")
+    far = remembered(template, seen, ("-------", "|@.e.>|", "-------"))
+    approach = skill.select_action(far, actions)
+    near = remembered(template, seen, ("-------", "|.@e.>|", "-------"))
+    wait = skill.select_action(near, actions)
+
+    assert approach is not None
+    assert "monster currently blocks" in approach.rationale
+    # The route runs through the floating eye that blocks it further ahead.
+    assert approach.intent == ActionIntent(
+        downstairs, None, cells((2, 1), (3, 1), (4, 1), (5, 1))
+    )
+    assert_followed_route(approach, (1, 1))
+    assert wait is not None
+    assert action_name(actions, wait.action_index) == "Command.SEARCH"
+    assert wait.intent == ActionIntent(downstairs, None, None)
+
+    # Attacking a hostile blocker steps into the route's first cell. Adjacent-
+    # hostile defense normally runs first, so call the route branch directly.
+    hostile = remembered(template, seen, ("-------", "|.@j.>|", "-------"))
+    attack = _past_monster(
+        hostile,
+        route_tree(hostile, through_monsters=True),
+        actions,
+        (5, 1),
+        "downstairs",
+        downstairs,
+    )
+    assert attack is not None
+    assert attack.intent == ActionIntent(
+        downstairs, MapCell(3, 1), cells((3, 1), (4, 1), (5, 1))
     )
 
 
@@ -329,7 +447,11 @@ def test_locked_door_is_avoided_then_kicked_when_it_is_the_only_way(
 
     kick = skill.select_action(memory, actions)
 
-    door = ActionIntent(IntentDestination(DestinationKind.LOCKED_DOOR, 5, 2), None)
+    # Kicking happens in place, so neither the kick nor its direction follows
+    # a route.
+    door = ActionIntent(
+        IntentDestination(DestinationKind.LOCKED_DOOR, 5, 2), None, None
+    )
     assert (5, 2) in memory.locked_doors
     assert kick.action is not None
     assert action_name(actions, kick.action.action_index) == "Command.KICK"
@@ -361,6 +483,27 @@ def test_locked_door_is_avoided_then_kicked_when_it_is_the_only_way(
     assert (5, 2) not in memory.locked_doors
 
 
+def test_route_to_a_locked_door_ends_beside_it(
+    template: ProjectedObservation, actions: dict[str, LegalAction]
+) -> None:
+    memory = remembered(
+        template, ("        ", " -----  ", " |@..+  ", " -----  ", "        ")
+    )
+    memory.locked_doors.add((5, 2))
+
+    result = ExploreLevelSkill().select_action(memory, actions)
+
+    assert result.action is not None
+    assert result.action.rationale.startswith("Move beside the locked door")
+    # The destination is the door; the route ends where the hero kicks it.
+    assert result.action.intent == ActionIntent(
+        IntentDestination(DestinationKind.LOCKED_DOOR, 5, 2),
+        None,
+        cells((3, 2), (4, 2)),
+    )
+    assert_followed_route(result.action, (2, 2))
+
+
 def test_exploration_attacks_adjacent_hostiles_but_not_passive_or_pets(
     template: ProjectedObservation, actions: dict[str, LegalAction]
 ) -> None:
@@ -384,13 +527,13 @@ def test_exploration_attacks_adjacent_hostiles_but_not_passive_or_pets(
     assert action_name(actions, hostile.action.action_index) == "CompassDirection.E"
     assert hostile.action.record.target_glyph == _GLYPHS["j"]
     # Exploration fights before choosing a frontier, so there is no destination.
-    assert hostile.action.intent == ActionIntent(None, MapCell(4, 2))
+    assert hostile.action.intent == ActionIntent(None, MapCell(4, 2), None)
     # The floating eye and the kitten are left alone; exploration continues.
     assert quiet.action is not None
     assert quiet.action.record.target_glyph is None
     assert quiet.action.record.goal == (5, 2)
     assert quiet.action.intent == ActionIntent(
-        IntentDestination(DestinationKind.FRONTIER, 5, 2), None
+        IntentDestination(DestinationKind.FRONTIER, 5, 2), None, cells((4, 2), (5, 2))
     )
 
 
@@ -428,9 +571,14 @@ def test_search_rotates_spots_then_reports_exhaustion(
             break
         record = result.action.record
         assert record.search_spot is not None
-        assert result.action.intent == ActionIntent(
-            IntentDestination(DestinationKind.SEARCH_SPOT, *record.search_spot), None
-        )
+        spot = IntentDestination(DestinationKind.SEARCH_SPOT, *record.search_spot)
+        if record.kind is ActionKind.SEARCH:
+            assert result.action.intent == ActionIntent(spot, None, None)
+        else:
+            assert result.action.intent == ActionIntent(
+                spot, None, cells(record.search_spot)
+            )
+            assert_followed_route(result.action, record.origin)
         if record.kind is ActionKind.SEARCH:
             searches += 1
             spots.add(record.origin)
@@ -535,6 +683,21 @@ def test_development_policy_explores_real_levels_to_the_downstairs(
         for record in records
     )
     assert {record.selection.skill for record in records} == set(Skill)
+    routed = 0
+    for record in records:
+        intent = record.selection.intent
+        if intent is None or intent.path is None:
+            continue
+        routed += 1
+        # The recorded route starts with the move this step actually made.
+        first = intent.path[0]
+        hero = (record.before.player.x, record.before.player.y)
+        delta = (first.x - hero[0], first.y - hero[1])
+        assert MOVE_ACTION_NAMES.get(delta) == record.action.name
+        after = (record.after.player.x, record.after.player.y)
+        if record.outcome is None and after != hero:
+            assert after == (first.x, first.y)
+    assert routed > len(records) // 2
     if seed == 58:
         # Seed 58 starts in a closed room whose only door is locked.
         assert any("crashes open" in record.after.message for record in records)

@@ -252,6 +252,21 @@ decision in Events shows the same **Intent** with an explanatory tooltip. Model
 fallbacks, prompt answers, and runs recorded before intents existed (such as the
 milestone 1 suite data) show "none recorded" and no boxes; the UI never derives
 a target from the action direction or rationale.
+
+When the step followed a route, the map also tints the recorded path: the
+cells from the one the hero stepped into to the destination (for a locked
+door, the cell beside it), with a faint accent background and dotted
+underline. It is the breadth-first route the skill computed and moved along
+on that step, not a route rebuilt in the browser. The player, attack-target,
+and destination highlights win over the tint, and a pet keeps its fill under
+it. The **Show path** checkbox beside the legend hides only the tint; it is on
+by default, remembered per browser in `localStorage`
+(`nethack-agent.showPath`), and redraws without refetching. The expanded step
+decision shows a **Path** row such as `8 steps: (44, 4) to (37, 5)`. Waiting,
+searching, kicking, adjacent-hostile defense, prompt answers, model fallbacks,
+and events recorded before paths existed (including intents recorded without
+a `path`) show "none recorded" and no tint.
+
 For a no-Ollama UI check, serve with the scripted development model on a
 scratch data directory:
 
@@ -269,8 +284,8 @@ connections, so do not add inline scripts, inline `style`/`on*` attributes, or
 external URLs, and insert model or game text with `textContent`.
 `tests/test_ui.py` enforces the headers and full served module graph, checks
 these asset rules, and executes renderer classification, ability labels,
-inventory BUC cues, map highlight precedence, and intent selection behavior
-with Node.js when Node is available.
+inventory BUC cues, map highlight precedence, path tint and toggle, and intent
+selection behavior with Node.js when Node is available.
 
 ### Owned headless scenarios
 
@@ -364,8 +379,9 @@ uv run nethack-agent eval run \
 
 Use a fresh data directory per policy version: the strict event reader does not
 accept step events recorded before the `hierarchical-explore-v1` selection
-fields. Later optional additions (pet evidence and step intents) keep older
-`hierarchical-explore-v1` data, including the milestone 1 suite, readable.
+fields. Later optional additions (pet evidence, step intents, and intent paths)
+keep older `hierarchical-explore-v1` data, including the milestone 1 suite,
+readable.
 
 Progress lines go to stderr every `--progress-interval` seconds (default 30).
 Each invocation reserves a new `<suite>-<UTC timestamp>.json` and `.md` pair in

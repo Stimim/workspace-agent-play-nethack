@@ -67,9 +67,10 @@ const FIELD_HELP = Object.freeze({
   "Event kind": "The discriminated event variant from the typed event contract.",
   Evidence: "The exact typed event field that qualifies this row as deterministic execution.",
   Player: "The hero's cell from the projected player coordinates. This highlight wins over every other map highlight.",
-  Pet: "A cell whose glyph NLE identifies as a pet (the observation's pet_rows). Observations recorded before pet evidence existed show none. The fill stays visible beneath a destination or attack-target box.",
+  Pet: "A cell whose glyph NLE identifies as a pet (the observation's pet_rows). Observations recorded before pet evidence existed show none. The fill stays visible beneath a destination box, attack-target box, or path tint.",
   Destination: "The cell the latest step's deterministic skill works toward: a frontier, remembered downstairs, search spot, or locked door. Usually not the adjacent cell stepped into; hidden when it is the player's own cell.",
   "Attack target": "The displayed hostile monster the latest step's deterministic skill attacks by moving into it. Its box wins over a destination box on the same cell.",
+  Path: "The breadth-first route a deterministic skill's step followed, in order from the cell it stepped into to its destination (for a locked door, the cell beside it where the hero kicks). The map tints it beneath the destination and attack-target boxes; the player's cell hides it. Show path turns the map tint off. Waiting, searching, kicking, adjacent-hostile defense, prompt answers, model fallbacks, and steps recorded before routes existed have none.",
 });
 
 const VALUE_HELP = Object.freeze({
@@ -220,11 +221,13 @@ function atCell(cell, x, y) {
 
 // Groups each row into spans of equal highlight and NetHack color. Precedence:
 // the player cell gets only its own highlight; otherwise the attack-target box
-// wins over the destination box, and the pet fill (only from the API's
-// explicit pet evidence) combines with either box. Non-player cells keep their
-// NetHack foreground color. A null `pet_rows` (observations stored before pet
-// evidence existed) highlights no pet, and a null intent marks no target.
-export function renderMap(pre, observation, intent = null) {
+// wins over the destination box, which wins over the path tint, and the pet
+// fill (only from the API's explicit pet evidence) combines with any of them.
+// Non-player cells keep their NetHack foreground color. A null `pet_rows`
+// (observations stored before pet evidence existed) highlights no pet, a null
+// intent marks no target, and a null `path` (none recorded) draws no route.
+// `showPath` false hides only the path tint.
+export function renderMap(pre, observation, intent = null, showPath = true) {
   if (!observation) {
     pre.replaceChildren();
     return;
@@ -233,6 +236,7 @@ export function renderMap(pre, observation, intent = null) {
   const { x, y } = observation.player;
   const destination = intent?.destination ?? null;
   const attackTarget = intent?.attack_target ?? null;
+  const path = new Set(showPath ? (intent?.path ?? []).map((cell) => `${cell.x},${cell.y}`) : []);
   const fragment = document.createDocumentFragment();
   rows.forEach((row, rowIndex) => {
     const cells = Array.from(row);
@@ -257,6 +261,8 @@ export function renderMap(pre, observation, intent = null) {
           classes.push("attack-target");
         } else if (atCell(destination, columnIndex, rowIndex)) {
           classes.push("destination");
+        } else if (path.has(`${columnIndex},${rowIndex}`)) {
+          classes.push("path");
         }
         if (pets[columnIndex] === 1) {
           classes.push("pet");
@@ -436,6 +442,26 @@ export function intentFact(intent) {
   return { text: text.join("; "), help: help.join(" ") };
 }
 
+const NO_PATH_HELP =
+  "No route recorded: the action followed no route (waiting, searching, kicking, adjacent-hostile defense, a prompt answer, or a model fallback), or the step was stored before routes were recorded.";
+
+// Text and tooltip for the route a step's intent recorded; a missing or null
+// path means none was recorded, never a route rebuilt from other fields.
+export function pathFact(intent) {
+  const path = intent?.path;
+  if (!path?.length) {
+    return { text: "none recorded", help: NO_PATH_HELP };
+  }
+  const steps = `${path.length} ${path.length === 1 ? "step" : "steps"}`;
+  const first = cellText(path[0]);
+  const last = cellText(path[path.length - 1]);
+  const cells = path.length === 1 ? first : `${first} to ${last}`;
+  return {
+    text: `${steps}: ${cells}`,
+    help: `Path: the breadth-first route this step followed, ${steps} from ${first}, the cell it stepped into, to ${last}. The map tints these cells while Show path is on.`,
+  };
+}
+
 export function renderDecision(list, candidateBody, stepEvent, actionNames) {
   if (!stepEvent) {
     setFacts(list, [["Decision", "no step yet"]]);
@@ -454,6 +480,8 @@ export function renderDecision(list, candidateBody, stepEvent, actionNames) {
   ];
   const intent = intentFact(selection.intent);
   pairs.push(["Intent", intent.text, { valueHelp: intent.help }]);
+  const path = pathFact(selection.intent);
+  pairs.push(["Path", path.text, { valueHelp: path.help }]);
   if (selection.stuck_reason) {
     pairs.push(["Stuck", selection.stuck_reason]);
   }

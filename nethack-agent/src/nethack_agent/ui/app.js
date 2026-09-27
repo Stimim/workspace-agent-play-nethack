@@ -23,7 +23,6 @@ const STATUS_REFRESH_DELAY_MS = 250;
 const FINISHED_STATES = new Set(["terminal", "stopped", "error"]);
 
 
-
 function emptyTotals() {
   return { steps: 0, modelCalls: 0, promptTokens: 0, outputTokens: 0, latencyMs: 0, repairs: 0 };
 }
@@ -307,7 +306,7 @@ function render() {
   setText(view.streamState, state.streamState);
 
   const observation = state.observation;
-  renderMap(view.map, observation, observationIntent(observation, state.latestStep));
+  renderMap(view.map, observation, observationIntent(observation, state.latestStep), view.showPath.checked);
   setText(view.mapStep, observation ? `step ${observation.step_index}` : "");
   view.message.textContent = observation?.message || "\u00a0";
   view.prompt.textContent = promptText(observation?.prompt);
@@ -341,7 +340,7 @@ for (const command of ["pause", "resume", "step", "stop"]) {
   view[command].addEventListener("click", () => runAction(() => control(command)));
 }
 view.error.addEventListener("click", clearError);
-initializeView();
+initializeView(scheduleRender);
 const initialRun = new URLSearchParams(location.hash.slice(1)).get("run");
 if (initialRun) {
   runAction(() => attach(initialRun));

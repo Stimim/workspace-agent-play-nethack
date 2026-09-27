@@ -171,10 +171,11 @@ button:disabled { opacity: 0.45; cursor: default; }
   overflow-x: auto;
 }
 /* Map highlights; the legend swatches reuse them. The player cell carries only
-   `player`. Otherwise one intent box (attack target over destination) may
-   combine with the pet fill, and the NetHack color class stays. Intent boxes
-   paint above neighbouring highlights so an adjacent pet or player cannot
-   cover part of the box. */
+   `player`. Otherwise one intent mark (attack-target box over destination box
+   over path tint) may combine with the pet fill, and the NetHack color class
+   stays. Intent boxes paint above neighbouring highlights so an adjacent pet or
+   player cannot cover part of the box. The path tint is a background image, so
+   a pet's background color stays visible beneath it. */
 :is(.map, .map-legend) .player {
   background: #f0e68c;
   color: #000;
@@ -190,17 +191,31 @@ button:disabled { opacity: 0.45; cursor: default; }
 }
 :is(.map, .map-legend) .destination { outline: 2px dashed var(--accent); }
 :is(.map, .map-legend) .attack-target { outline: 2px solid var(--danger); }
+:is(.map, .map-legend) .path {
+  background-image: linear-gradient(rgb(88 166 255 / 0.16), rgb(88 166 255 / 0.16));
+  text-decoration: underline dotted rgb(88 166 255 / 0.75);
+  text-underline-offset: 0.15em;
+}
 .map {
   inline-size: calc(79ch + 0.8rem);
   block-size: calc(24.15em + 0.8rem);
   overflow: hidden;
 }
 
+.map-legend-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.3rem 1.1rem;
+  margin: 0.45rem 0 0.2rem;
+}
+.map-toggle { font-size: 0.85rem; }
 .map-legend {
   display: flex;
   flex-wrap: wrap;
   gap: 0.3rem 1.1rem;
-  margin: 0.45rem 0 0.2rem;
+  margin: 0;
   padding: 0;
   list-style: none;
   color: var(--muted);

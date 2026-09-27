@@ -202,10 +202,25 @@ coordinates, and an optional `attack_target` cell; at least one is present:
   into it. Exploration fights before choosing a frontier, so its attacks carry
   no destination.
 
-The destination is usually not the adjacent cell the action steps into. Prompt
-answers and model fallbacks carry no intent; the contract rejects an intent on
-any non-`deterministic_skill` selection. Recording the intent does not change
-any action choice.
+The destination is usually not the adjacent cell the action steps into.
+
+The intent's optional `path` is the route the action follows, as computed by
+the skill's breadth-first `RouteTree` for this step: the ordered cells after
+the hero's position, starting with the cell the action moves into and ending at
+the destination (for a locked door, at the cell orthogonally beside it where
+the hero kicks). The skill takes its move from this same route, so the path is
+never recomputed for display. Skills replan every step; there is no persistent
+multi-step plan. The path is `null` when the action follows no route: waiting
+on `>`, waiting for a peaceful or passive blocker, searching in place,
+kicking, and adjacent-hostile defense (the route to the destination is not
+taken on that step). A present path has 1 to 21 × 79 cells, needs a
+destination, never revisits a cell, is king-move contiguous, ends as above,
+starts at the attack target when both exist, and stays inside the observation
+map.
+
+Prompt answers and model fallbacks carry no intent; the contract rejects an
+intent on any non-`deterministic_skill` selection. Recording the intent and
+path does not change any action choice.
 
 `OllamaDecisionModel` implements both model boundaries. Skill selection uses
 `SKILL_DECISION_SCHEMA` with skill descriptions, the consultation reason, and,
@@ -299,17 +314,17 @@ skill, skill-selection source, stuck reason, rationale, and map `intent`),
 optional model skill/fallback decisions and metrics, gated action, reward,
 termination fields, outcome, and the projected observation. A present intent is
 strictly validated (exact fields, a known destination kind, non-negative
-integer cells inside the observation map). Events recorded before the
-`hierarchical-explore-v1` selection fields existed no longer satisfy the strict
-reader; their evaluation reports remain the evidence for those runs. Events
-recorded before pet evidence or map intents existed, which include the
-accepted milestone 1 suite, remain readable through the store, HTTP API,
-browser UI, and evaluation audit: pet evidence is unknown, as described under
-the observation projector, and an absent `intent` reads as JSON `null` (no
-intent recorded), never as an inferred target.
-
-Inventory records written before typed BUC evidence remain readable: absent
-`buc` becomes `unknown`, never a description-derived claim.
+integer cells inside the observation map, and the path rules above). Events
+recorded before the `hierarchical-explore-v1` selection fields existed no
+longer satisfy the strict reader; their evaluation reports remain the evidence
+for those runs. Events recorded before pet evidence, map intents, or intent
+paths existed, which include the accepted milestone 1 suite, remain readable
+through the store, HTTP API, browser UI, and evaluation audit: pet evidence is
+unknown, as described under the observation projector, an absent `intent`
+reads as JSON `null` (no intent recorded), and an absent intent `path` reads as
+`null` (no route recorded), never as an inferred target or route.
+Inventory records written before typed BUC evidence remain readable in the
+same way: absent `buc` becomes `unknown`, never a description-derived claim.
 
 The exact-field construction helpers and domain parsers remain authoritative
 instead of adding a second runtime JSON Schema validation pass; see
@@ -396,45 +411,51 @@ The browser UI is a dependency-free single page (plain HTML, CSS, and vanilla
 JavaScript modules in `nethack_agent/ui/`, packaged in the wheel) served by the
 same FastAPI app at `/` with assets under an allowlisted `/ui/{name}` route.
 `app.js` owns run/API/stream state, `view.js` owns DOM selection, responsive
-panel/tab behavior, focus, and tooltips, `event-log.js` owns the four bounded
-logs, `render.js` owns pure DOM rendering, and `client.js` owns HTTP/WebSocket
-transport. It uses only this HTTP API and the event WebSocket through
-page-relative URLs, so it works on any loopback host and port. It shows the
-NetHack-colored floor map, highlights the player and explicitly observed pets
-separately from wild animals, and displays boulders as `0` and ghost-class
-monsters as `X`. The map also boxes the displayed step's recorded intent: a
-dashed accent box on the destination and a solid danger-colored box on the
-attack target. The intent shown is the one recorded by the step event that
-carries the displayed observation; a newer status snapshot shows none until its
-step event arrives. Precedence per cell: the player highlight replaces
-everything; otherwise the attack-target box wins over the destination box, the
-pet fill combines with either box, and the NetHack foreground color is kept. A
-legend under the map explains the player, pet, destination, and attack-target
-highlights with tooltips. Player statistics use a specialized semantic
-description list: each `dt`/`dd` pair is one responsive stat cell, arranged in
-three columns in the normal 50rem primary column and automatically reduced to
-fewer columns if its container is constrained. Conditions spans the full grid.
-This compact display keeps every field, the separate Strength, Dexterity,
-Constitution, Intelligence, Wisdom, and Charisma labels, and their focusable
-tooltips. The UI also shows inventory, message, prompt flags, current goal and
-skill, run state, outcome, last error, and decision metrics. Every inventory
-item has a visible `[B]`, `[U]`, `[C]`, or `[?]` marker, a matching accessible
-class and tooltip, and the inventory panel includes the same textual legend, so
-color is not the only BUC cue. A full-width control panel sits above three
-workspace columns: the 50rem first column contains run information, the fixed
-79-by-21 map, and player state; the 30rem second column contains inventory; and
-the third column consumes the remaining width (at least 24rem) for metrics and
-agent information. When the viewport is 1520 CSS px wide or narrower (the
-107rem three-column layout at the 14 px root size plus room for a vertical
-scrollbar), the third column is hidden
+panel/tab behavior, path preference, focus, and tooltips, `event-log.js` owns
+the four bounded logs, `render.js` owns pure DOM rendering, and `client.js`
+owns HTTP/WebSocket transport. It uses only this HTTP API and the event
+WebSocket through page-relative URLs, so
+it works on any loopback host and port. It shows the NetHack-colored floor map,
+highlights the player and explicitly observed pets separately from wild
+animals, and displays boulders as `0` and ghost-class monsters as `X`. The map
+also boxes the displayed step's recorded intent: a dashed accent box on the
+destination and a solid danger-colored box on the attack target, and tints the
+recorded path cells with a faint accent background and dotted underline. The
+intent shown is the one recorded by the step event that carries the displayed
+observation; a newer status snapshot shows none until its step event arrives.
+Precedence per cell: the player highlight replaces everything; otherwise the
+attack-target box wins over the destination box, which wins over the path
+tint; the pet fill combines with any of them, and the NetHack foreground color
+is kept. A **Show path** checkbox beside the legend (on by default, stored in
+`localStorage` as `nethack-agent.showPath`) hides only the path tint and
+redraws without refetching. A legend under the map explains the player, pet,
+destination, attack-target, and path highlights with tooltips. Player
+statistics use a specialized semantic description list: each `dt`/`dd` pair is
+one responsive stat cell, arranged in three columns in the normal 50rem primary
+column and automatically reduced to fewer columns if its container is
+constrained. Conditions spans the full grid. This compact display keeps every
+field, the separate Strength, Dexterity, Constitution, Intelligence, Wisdom,
+and Charisma labels, and their focusable tooltips. The UI also shows inventory,
+message, prompt flags, current goal and skill, run state, outcome, last error,
+and decision metrics.
+Every inventory item has a visible `[B]`, `[U]`, `[C]`, or `[?]` marker, a
+matching accessible class and tooltip, and the inventory panel includes the
+same textual legend, so color is not the only BUC cue.
+A full-width control panel sits above three workspace columns: the 50rem first
+column contains run information, the fixed 79-by-21 map, and player state; the
+30rem second column contains inventory; and the third column consumes the
+remaining width (at least 24rem) for metrics and agent information. When the
+viewport is 1520 CSS px wide or narrower (the 107rem three-column layout at the
+14 px root size plus room for a vertical scrollbar), the third column is hidden
 behind an accessible Agent info control and opens as an overlay over the other
 workspace columns.
 
 Agent information has Events, Messages, Tools, and Verbose tabs. Each tab has an
 independent auto-scroll control and scrolling body. Event rows are native
 expand/collapse details; each newly received step becomes the one decision
-expanded by default and exposes the selection, recorded intent (or "none
-recorded"), model decisions, candidates, executed action, reward, and outcome.
+expanded by default and exposes the selection, recorded intent and path (or
+"none recorded"), model decisions, candidates, executed action, reward, and
+outcome.
 Messages lists one plain-text row, with observation step and event sequence, per
 `run_started` or `step` event whose `observation.message` is non-blank after
 trimming; repeated messages are kept because NetHack repeats them.

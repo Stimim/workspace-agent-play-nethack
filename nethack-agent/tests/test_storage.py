@@ -72,8 +72,11 @@ def event_fixtures(tmp_path: Path):  # type: ignore[no-untyped-def]
             None,
             action.index,
             "Explore toward unexplored space.",
+            # Attacking the monster that blocks a route further ahead.
             ActionIntent(
-                IntentDestination(DestinationKind.FRONTIER, 78, 20), MapCell(4, 2)
+                IntentDestination(DestinationKind.FRONTIER, 7, 4),
+                MapCell(4, 2),
+                (MapCell(4, 2), MapCell(5, 3), MapCell(6, 4), MapCell(7, 4)),
             ),
         )
         return (
@@ -185,13 +188,19 @@ def test_typed_event_payload_rejects_semantically_inconsistent_data(
         StepPayload.from_json(unexplained)
 
 
-def test_step_intent_is_optional_for_legacy_steps(tmp_path: Path) -> None:
+def test_step_intent_and_path_are_optional_for_legacy_steps(tmp_path: Path) -> None:
     step = event_fixtures(tmp_path)[3]
     assert isinstance(step, StepPayload)
     serialized = step.to_json()
     assert serialized["selection"]["intent"] == {  # type: ignore[index]
-        "destination": {"kind": "frontier", "x": 78, "y": 20},
+        "destination": {"kind": "frontier", "x": 7, "y": 4},
         "attack_target": {"x": 4, "y": 2},
+        "path": [
+            {"x": 4, "y": 2},
+            {"x": 5, "y": 3},
+            {"x": 6, "y": 4},
+            {"x": 7, "y": 4},
+        ],
     }
     assert StepPayload.from_json(json.loads(json.dumps(serialized))) == step
 
@@ -204,6 +213,17 @@ def test_step_intent_is_optional_for_legacy_steps(tmp_path: Path) -> None:
     assert restored.to_json()["selection"]["intent"] is None  # type: ignore[index]
     assert StepPayload.from_json(restored.to_json()) == restored
 
+    # Intents persisted before routes were recorded keep their targets; the
+    # route is unknown, not empty.
+    pathless = step.to_json()
+    del pathless["selection"]["intent"]["path"]  # type: ignore[index]
+    restored = StepPayload.from_json(pathless)
+    assert restored.selection.intent == ActionIntent(
+        IntentDestination(DestinationKind.FRONTIER, 7, 4), MapCell(4, 2), None
+    )
+    assert restored.to_json()["selection"]["intent"]["path"] is None  # type: ignore[index]
+    assert StepPayload.from_json(restored.to_json()) == restored
+
 
 _DESTINATION = {"kind": "frontier", "x": 3, "y": 1}
 
@@ -214,6 +234,16 @@ def _destination(**changes: object) -> dict[str, object]:
 
 def _attack(x: object, y: object) -> dict[str, object]:
     return {"destination": None, "attack_target": {"x": x, "y": y}}
+
+
+def _routed(
+    *cells: tuple[object, object], attack: object = None, **changes: object
+) -> dict[str, object]:
+    return {
+        **_destination(**changes),
+        "attack_target": attack,
+        "path": [{"x": x, "y": y} for x, y in cells],
+    }
 
 
 @pytest.mark.parametrize(
@@ -238,6 +268,39 @@ def _attack(x: object, y: object) -> dict[str, object]:
         ("intent", [3, 1], "intent must be an object"),
         ("intent", _destination(x=79), "outside the observation map"),
         ("intent", _attack(0, 21), "outside the observation map"),
+        ("intent", _routed((1, 1), (3, 1)), "must be adjacent in order"),
+        ("intent", _routed((1, 1), (2, 1)), "must end at the destination"),
+        ("intent", _routed((3, 21), (3, 20), y=20), "outside the observation map"),
+        (
+            "intent",
+            {**_routed((4, 2)), "destination": None, "attack_target": {"x": 4, "y": 2}},
+            "path requires a destination",
+        ),
+        (
+            "intent",
+            {**_routed((3, 1)), "path": [{"x": 3, "y": 1, "z": 0}]},
+            r"unexpected \['z'\]",
+        ),
+        ("intent", _routed(), "must have 1 to 1659 cells"),
+        ("intent", {**_routed(), "path": {"x": 3, "y": 1}}, "path must be an array"),
+        ("intent", _routed(*[(3, 1)] * 1660), "at most 1659 cells"),
+        ("intent", _routed((3, 1), (2, 1), (3, 1)), "must not revisit a cell"),
+        ("intent", _routed((True, 1), (3, 1)), "path cell x must be an integer"),
+        (
+            "intent",
+            _routed((1, 3), (2, 2), kind="locked_door"),
+            "end orthogonally beside the door",
+        ),
+        (
+            "intent",
+            _routed((2, 1), (3, 1), kind="locked_door"),
+            "end orthogonally beside the door",
+        ),
+        (
+            "intent",
+            _routed((2, 1), (3, 1), attack={"x": 2, "y": 2}),
+            "must start at the attack target",
+        ),
         ("target", _DESTINATION, r"unexpected \['target'\]"),
         ("source", "deterministic_prompt", "only deterministic skill selections"),
     ],
@@ -252,6 +315,20 @@ def test_malformed_step_intent_is_rejected(
 
     with pytest.raises(ContractError, match=match):
         StepPayload.from_json(serialized)
+
+
+def test_locked_door_route_ends_beside_the_door(tmp_path: Path) -> None:
+    step = event_fixtures(tmp_path)[3]
+    assert isinstance(step, StepPayload)
+    serialized = step.to_json()
+    serialized["selection"]["intent"] = _routed(  # type: ignore[index]
+        (1, 1), (2, 1), kind="locked_door"
+    )
+
+    intent = StepPayload.from_json(serialized).selection.intent
+
+    assert intent is not None
+    assert intent.path == (MapCell(1, 1), MapCell(2, 1))
 
 
 def test_unknown_and_corrupt_stored_events_fail_clearly(tmp_path: Path) -> None:

@@ -447,7 +447,9 @@ def test_abort_rejects_malformed_reports_without_writing(tmp_path: Path) -> None
 
 
 def test_development_evaluator_runs_real_nle_and_audits_records(
-    tmp_path: Path, to_milestone_1_shape: Callable[[Path], int]
+    tmp_path: Path,
+    to_milestone_1_shape: Callable[[Path], int],
+    to_pathless_intent_shape: Callable[[Path], int],
 ) -> None:
     payload = suite_payload()
     payload["max_episode_steps"] = 2
@@ -503,13 +505,36 @@ def test_development_evaluator_runs_real_nle_and_audits_records(
     )
     assert "event sequences are not contiguous from 0" in gap.integrity_problems
 
-    # Milestone 1 records predate pet evidence and step intents; they must
-    # still audit cleanly.
     assert any(
         isinstance(event.payload, StepPayload)
         and event.payload.selection.intent is not None
+        and event.payload.selection.intent.path is not None
         for event in events
     )
+    # Intents recorded before routes existed audit cleanly with no path.
+    assert to_pathless_intent_shape(data_directory / "runs.sqlite3") > 0
+    pathless_events = RunStore(data_directory / "runs.sqlite3").events_after(
+        first.run_id, limit=1000
+    )
+    assert all(
+        event.payload.selection.intent is None
+        or event.payload.selection.intent.path is None
+        for event in pathless_events
+        if isinstance(event.payload, StepPayload)
+    )
+    pathless = summarize_run(
+        record,
+        pathless_events,
+        suite=suite,
+        seed=1,
+        ended_by="episode_end",
+        wall_seconds=0.0,
+        data_directory=data_directory,
+    )
+    assert pathless.integrity_ok, pathless.integrity_problems
+
+    # Milestone 1 records predate pet evidence and step intents; they must
+    # still audit cleanly.
     assert to_milestone_1_shape(data_directory / "runs.sqlite3") > 0
     legacy_events = RunStore(data_directory / "runs.sqlite3").events_after(
         first.run_id, limit=1000

@@ -440,9 +440,9 @@ globalThis.document = {
   createTextNode: (text) => ({ className: "", textContent: text }),
 };
 const { renderMap } = await import("./render.js");
-const spans = (observation, intent) => {
+const spans = (observation, intent, showPath) => {
   const pre = new Node();
-  renderMap(pre, observation, intent);
+  renderMap(pre, observation, intent, showPath);
   return pre.children.map((node) => [node.className, node.textContent]);
 };
 """
@@ -529,6 +529,89 @@ def test_map_marks_destination_and_attack_target_with_precedence() -> None:
 
 
 @pytest.mark.skipif(NODE is None, reason="Node.js is unavailable")
+def test_map_tints_the_recorded_path_beneath_intent_boxes_unless_hidden() -> None:
+    result = _run_renderer_module(
+        _MAP_DOM
+        + """
+        const observation = {
+          map: {
+            rows: ["@.f..", ".r..>"],
+            color_rows: ["07070f0707", "0703070707"],
+            pet_rows: ["0000010000", "0000000000"],
+          },
+          player: { x: 0, y: 0 },
+        };
+        const at = (x, y) => ({ x, y });
+        const destination = { kind: "frontier", ...at(4, 1) };
+        const route = [at(0, 0), at(1, 0), at(2, 0), at(3, 1), at(4, 1)];
+        const attack = {
+          destination,
+          attack_target: at(1, 0),
+          path: [at(1, 0), at(2, 0), at(3, 1), at(4, 1)],
+        };
+        const walk = { destination, attack_target: null, path: route };
+        const pathless = { destination, attack_target: null };
+        console.log(JSON.stringify({
+          walk: spans(observation, walk),
+          attack: spans(observation, attack),
+          hidden: spans(observation, walk, false),
+          nullPath: spans(observation, { ...pathless, path: null }),
+          missingPath: spans(observation, pathless),
+        }));
+        """
+    )
+
+    newline = ["", "\n"]
+    # The hero hides the route cell it stands on; the pet fill combines with
+    # the tint; the destination box wins on the route's last cell.
+    assert result["walk"] == [
+        ["player", "@"],
+        ["path c7", "."],
+        ["path pet c15", "f"],
+        ["c7", ".."],
+        newline,
+        ["c7", "."],
+        ["c3", "r"],
+        ["c7", "."],
+        ["path c7", "."],
+        ["destination c7", ">"],
+    ]
+    # The attack-target box wins over the tint on the route's first cell.
+    assert result["attack"][1] == ["attack-target c7", "."]
+    assert result["attack"][2] == ["path pet c15", "f"]
+    # Hiding the path keeps every other mark; an unrecorded path draws none.
+    assert result["hidden"] == result["nullPath"] == result["missingPath"]
+    assert not any("path" in key for key, _ in result["hidden"])
+    assert ["destination c7", ">"] in result["hidden"]
+
+
+@pytest.mark.skipif(NODE is None, reason="Node.js is unavailable")
+def test_decision_path_fact_reports_only_a_recorded_route() -> None:
+    result = _run_renderer_module(
+        """
+        const { pathFact } = await import("./render.js");
+        const destination = { kind: "downstairs", x: 19, y: 14 };
+        const path = [11, 12, 13, 14].map((y) => ({ x: 19, y }));
+        console.log(JSON.stringify({
+          route: pathFact({ destination, attack_target: null, path }),
+          single: pathFact({ destination, attack_target: null, path: path.slice(3) }),
+          pathless: pathFact({ destination, attack_target: null }),
+          nullPath: pathFact({ destination, attack_target: null, path: null }),
+          noIntent: pathFact(null),
+        }));
+        """
+    )
+
+    assert result["route"]["text"] == "4 steps: (19, 11) to (19, 14)"
+    assert "(19, 11)" in result["route"]["help"]
+    assert result["single"]["text"] == "1 step: (19, 14)"
+    # Intents recorded before routes existed show no route, even with a
+    # destination that a route could have been guessed toward.
+    assert result["pathless"] == result["nullPath"] == result["noIntent"]
+    assert result["pathless"]["text"] == "none recorded"
+
+
+@pytest.mark.skipif(NODE is None, reason="Node.js is unavailable")
 def test_map_intent_comes_only_from_the_step_that_produced_the_observation() -> None:
     result = _run_renderer_module(
         """
@@ -536,6 +619,7 @@ def test_map_intent_comes_only_from_the_step_that_produced_the_observation() -> 
         const intent = {
           destination: { kind: "frontier", x: 57, y: 11 },
           attack_target: { x: 56, y: 10 },
+          path: [{ x: 56, y: 10 }, { x: 57, y: 11 }],
         };
         const step = (selection) => ({
           kind: "step",
@@ -558,6 +642,7 @@ def test_map_intent_comes_only_from_the_step_that_produced_the_observation() -> 
     assert result["matching"] == {
         "destination": {"kind": "frontier", "x": 57, "y": 11},
         "attack_target": {"x": 56, "y": 10},
+        "path": [{"x": 56, "y": 10}, {"x": 57, "y": 11}],
     }
     assert result["newerObservation"] is None
     assert result["noStep"] is None

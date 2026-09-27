@@ -64,6 +64,8 @@ class DestinationKind(Enum):
 MAX_FALLBACK_CANDIDATES: Final = 3
 MAX_CANDIDATE_REASON_LENGTH: Final = 100
 MAX_DECISION_RATIONALE_LENGTH: Final = 200
+# A shortest route never revisits a cell, so it fits within NetHack's 21x79 map.
+MAX_INTENT_PATH_LENGTH: Final = 21 * 79
 
 SKILL_DECISION_SCHEMA: Final[dict[str, object]] = {
     "type": "object",
@@ -433,11 +435,17 @@ class ActionIntent:
     `destination` is the skill's route goal (or, for kicking, the locked
     door), usually not the adjacent cell the action steps into.
     `attack_target` is the displayed hostile monster the action attacks by
-    moving into it. Both come from the skill's own routing data.
+    moving into it. `path` is the breadth-first route the action follows:
+    its cells after the hero's position, starting with the cell the action
+    moves into and ending at the destination (for a locked door, at the cell
+    orthogonally beside it where the hero kicks). It is None when the action
+    does not step along a route (waiting, searching, kicking, and adjacent-
+    hostile defense). All values come from the skill's own routing data.
     """
 
     destination: IntentDestination | None
     attack_target: MapCell | None
+    path: tuple[MapCell, ...] | None
 
     def __post_init__(self) -> None:
         if self.destination is not None and not isinstance(
@@ -450,10 +458,14 @@ class ActionIntent:
             raise TypeError("intent attack_target must be a MapCell")
         if self.destination is None and self.attack_target is None:
             raise ContractError("intent requires a destination or an attack target")
+        if self.path is not None:
+            _validate_path(self.path, self.destination, self.attack_target)
 
     def cells(self) -> tuple[IntentDestination | MapCell, ...]:
-        return tuple(
-            cell for cell in (self.destination, self.attack_target) if cell is not None
+        targets = (self.destination, self.attack_target)
+        return (
+            *(cell for cell in targets if cell is not None),
+            *(self.path or ()),
         )
 
     def to_json(self) -> dict[str, object]:
@@ -462,13 +474,27 @@ class ActionIntent:
             "attack_target": (
                 self.attack_target.to_json() if self.attack_target else None
             ),
+            "path": (
+                None if self.path is None else [cell.to_json() for cell in self.path]
+            ),
         }
 
     @classmethod
     def from_json(cls, value: object) -> Self:
-        payload = object_value(value, "intent", {"destination", "attack_target"})
+        # `path` is absent from intents persisted before routes were recorded;
+        # absent and null both mean no recorded route.
+        payload = object_value(
+            value, "intent", {"destination", "attack_target"}, optional={"path"}
+        )
         destination = payload["destination"]
         attack_target = payload["attack_target"]
+        path = payload.get("path")
+        if path is not None:
+            path = array_value(path, "intent path")
+            if len(path) > MAX_INTENT_PATH_LENGTH:
+                raise ContractError(
+                    f"intent path must have at most {MAX_INTENT_PATH_LENGTH} cells"
+                )
         return cls(
             destination=(
                 None
@@ -480,7 +506,45 @@ class ActionIntent:
                 if attack_target is None
                 else MapCell.from_json(attack_target, "intent attack_target")
             ),
+            path=(
+                None
+                if path is None
+                else tuple(MapCell.from_json(cell, "intent path cell") for cell in path)
+            ),
         )
+
+
+def _validate_path(
+    path: object,
+    destination: IntentDestination | None,
+    attack_target: MapCell | None,
+) -> None:
+    if not isinstance(path, tuple) or not all(
+        isinstance(cell, MapCell) for cell in path
+    ):
+        raise TypeError("intent path must be a tuple of MapCell values or None")
+    if destination is None:
+        raise ContractError("intent path requires a destination")
+    if not 1 <= len(path) <= MAX_INTENT_PATH_LENGTH:
+        raise ContractError(
+            f"intent path must have 1 to {MAX_INTENT_PATH_LENGTH} cells"
+        )
+    if len({(cell.x, cell.y) for cell in path}) != len(path):
+        raise ContractError("intent path must not revisit a cell")
+    for before, after in zip(path, path[1:], strict=False):
+        if max(abs(before.x - after.x), abs(before.y - after.y)) != 1:
+            raise ContractError("intent path cells must be adjacent in order")
+    last = path[-1]
+    if destination.kind is DestinationKind.LOCKED_DOOR:
+        # The hero kicks from beside the door, never diagonally.
+        if abs(last.x - destination.x) + abs(last.y - destination.y) != 1:
+            raise ContractError(
+                "a locked-door intent path must end orthogonally beside the door"
+            )
+    elif (last.x, last.y) != (destination.x, destination.y):
+        raise ContractError("intent path must end at the destination")
+    if attack_target is not None and path[0] != attack_target:
+        raise ContractError("intent path must start at the attack target")
 
 
 @dataclass(frozen=True, slots=True)

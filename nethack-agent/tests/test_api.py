@@ -114,11 +114,15 @@ def test_api_controls_run_and_persists_step_and_ttyrec(tmp_path: Path) -> None:
         "skill_selection": "arbiter",
         "stuck_reason": None,
     }
-    # The skill's route goal, two steps away, not the cell stepped into.
+    # The skill's route goal, two steps away, not the cell stepped into, and
+    # the route the step followed: the hero now stands on its first cell.
     assert selection["intent"] == {
         "destination": {"kind": "frontier", "x": 57, "y": 11},
         "attack_target": None,
+        "path": [{"x": 58, "y": 12}, {"x": 57, "y": 11}],
     }
+    player = step["observation"]["player"]
+    assert (player["x"], player["y"]) == (58, 12)
     with api.websocket_connect(f"/api/runs/{run_id}/events/ws") as websocket:
         assert websocket.receive_json()["kind"] == "run_started"
 
@@ -258,3 +262,23 @@ def test_events_stored_in_the_milestone_1_shape_remain_readable(
     # No intent was recorded, so none is served.
     assert events[1]["payload"]["selection"]["intent"] is None
     assert restarted.get(f"/api/runs/{run_id}").status_code == 200
+
+
+def test_intents_stored_without_a_path_are_served_with_an_unknown_path(
+    tmp_path: Path, to_pathless_intent_shape: Callable[[Path], int]
+) -> None:
+    api = client(tmp_path)
+    run_id = api.post("/api/runs", json={"seed": 6}).json()["run"]["id"]
+    api.post(f"/api/runs/{run_id}/step")
+    api.post(f"/api/runs/{run_id}/stop")
+    assert to_pathless_intent_shape(tmp_path / "runs.sqlite3") == 1
+
+    restarted = client(tmp_path)
+    response = restarted.get(f"/api/runs/{run_id}/events")
+    assert response.status_code == 200
+    # The recorded targets stay; the unrecorded route is null, not guessed.
+    assert response.json()["events"][1]["payload"]["selection"]["intent"] == {
+        "destination": {"kind": "frontier", "x": 57, "y": 11},
+        "attack_target": None,
+        "path": None,
+    }
