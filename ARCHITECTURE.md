@@ -103,7 +103,8 @@ skill, model cadence, inference retries, and action execution. `Goal` and
 their metrics are immutable typed records. The fixed milestone goal is
 `stand_on_downstairs`, fulfilled by standing on any `>` without issuing the
 descend command. It cannot request upstairs or identify a main-dungeon versus
-branch stair; typed direction and branch identity are roadmap work.
+branch stair; typed direction and branch identity are designed in
+[ADR 0004](docs/decisions/0004-traversal-goals-and-task-progression.md).
 
 Model role ([ADR 0002](docs/decisions/0002-deterministic-skill-arbiter.md)):
 a deterministic arbiter, not the local model, chooses the executing skill on
@@ -177,14 +178,15 @@ re-armed exploration that still cannot act, yields a model fallback action.
 Every proposal passes through `ActionGate`. It verifies the finite action index
 table and rejects `MiscDirection.UP` and `MiscDirection.DOWN`
 (`decision.FORBIDDEN_ACTION_NAMES`), even when proposed by the model, before
-NLE can receive them: the task never changes level, and `<` on dungeon level 1
-leaves the dungeon. A step records its typed goal and executed skill, the
-action source (`deterministic_skill`, `deterministic_prompt`, or
-`model_fallback`), who selected the skill (`arbiter` or, after a stuck report,
-`model`), the stuck reason if any, the skill's map intent, and the applicable
-structured model decisions and metrics. A model-selected skill must match the
-step's model skill decision. This is an auditable decision trace, not
-chain-of-thought.
+NLE can receive them: the task never changes level. `<` on dungeon level 1 asks
+to leave the dungeon; NLE's default prompt handling declines that question
+(see ADR 0004), and the gate still forbids the action. A step records its typed
+goal and executed skill, the action source (`deterministic_skill`,
+`deterministic_prompt`, or `model_fallback`), who selected the skill (`arbiter`
+or, after a stuck report, `model`), the stuck reason if any, the skill's map
+intent, and the applicable structured model decisions and metrics. A
+model-selected skill must match the step's model skill decision. This is an
+auditable decision trace, not chain-of-thought.
 
 The map intent (`decision.ActionIntent`) comes from the deterministic skill's
 own routing data, never from the action direction or rationale text. It has an
