@@ -1,0 +1,93 @@
+<code-review-comments>
+<file path="docs/decisions/0002-deterministic-skill-arbiter.md">
+<comment line="61">
+<code>+ - a later milestone offers several applicable skills or goals with real
+</code>
+Agree. The ultimate goal is to beat nethack. For now, if the scenarios are still easy and can be dealt with deterministic scripts, we don't need to depend on LLM. I think the LLM will become more important when we need to make high level decisions (Should I take the risk and go down the stairs? Or should I farm and gain more level?  Should I pray to get out of risk? What is the most dangerous monster on screen that I should deal first... )
+
+NOTE that: the nethack agent can deal with unknown / unfamiliar situations in an episode. Later, the coding agent can review what nethack agent did, and either update the knowledge to provide better guideline, or if the decision is very simple, then make a deterministic skill.
+</comment>
+</file>
+<file path="nethack-agent/knowledge/safe-interaction.md">
+<comment line="38">
+<code>+ - An unlocked closed door can be opened with the open command and may open when moved into if `autoopen` is enabled. A locked door will not open normally; first look for another route rather than forcing it.
+</code>
+The "if `autoopen` is enabled" statement is not necessary if we have decided to start the nethack-agent with or without `autoopen` enabled. I don't think we need to allow the nethack-agent to decide this, right?
+</comment>
+</file>
+<file path="nethack-agent/knowledge/staircase-goal.md">
+<comment line="31">
+<code>+ - Staircases themselves are never secret, but an item or monster can cover one, and the room containing one can be behind a secret door or hidden corridor.
+</code>
+regarding "an item or monster can cover one", does the NLE tell the agent where are staircases even if it is covered?
+</comment>
+<comment line="27">
+<code>+ ## Actionable facts
+</code>
+I'm wondering if we should mention that, on some levels, there might be multiple upstairs or downstairs (e.g. leading to gnome mine branch or sokoban levels)
+</comment>
+</file>
+<file path="nethack-agent/src/nethack_agent/ui/render.js">
+<comment line="287">
+<code>+     ["St Dx Co", `${strength(player)} ${player.dexterity} ${player.constitution}`],
+</code>
+It's more intuitive to do: "Str {value} Dex {value} Con {value}", same for the next line.
+</comment>
+<comment line="293">
+<code>+ export function renderInventory(list, inventory) {
+</code>
+Can we also highlight the items to show whether they are blessed, uncursed or cursed?
+</comment>
+</file>
+<file path="nethack-agent/src/nethack_agent/ui/app.js">
+<comment line="30">
+<code>+ const view = {
+</code>
+We should break this `app.js` file into smaller files and reflecting the hierarchy of the UI.
+</comment>
+</file>
+<file path="nethack-agent/src/nethack_agent/contracts.py">
+<comment line="1">
+<code>+ from __future__ import annotations
+</code>
+Based on the content of the file, can we just use JSON schema or other public schema validator?
+</comment>
+</file>
+<file path="nethack-agent/Modelfile.coding">
+<comment line="8">
+<code>+ You are a concise coding subagent. Follow the caller's instructions exactly, inspect available evidence before changing code, prefer minimal maintainable solutions, and report only results you actually observed.
+</code>
+It looks like this file is used to define a model for the "coding agent"? If this is the case, this file doesn't belong here. Maybe it should go to the top level `_agents` folder?
+</comment>
+</file>
+<file path="AGENTS.md">
+<comment line="37">
+<code>+ 9. Commits created by a coding agent must include the active OMP conversation
+</code>
+I'm wondering if it would be easier to make a SKILL for this. 
+In AGENTS.md, we ask the agent to follow the SKILL when creating commits.
+In the skill, it comes with a script that deterministically gets the conversation uuid and append it to the commit message.
+The skill can also invoke formater and / or linters.
+</comment>
+</file>
+<file path="ARCHITECTURE.md">
+<comment line="114">
+<code>+ 4. `StaircaseNavigationSkill` routes to the nearest reachable remembered `>`;
+</code>
+1. What if there are two downstairs on this floor?
+2. What if I want to go to upstairs instead of downstairs?
+</comment>
+<comment line="176">
+<code>+ - `frontier`: exploration's route goal next to never-observed space, including
+</code>
+Add to the TODO LIST: we should also visualize this on web UI, similar to the planned steps.
+</comment>
+</file>
+<file path="TODO_LIST.md">
+<comment line="29">
+<code>+ - [ ] Evaluate whether Laya improves routine action ranking enough to justify another model runtime.
+</code>
+There is another (fun?) model to explore: the fly brain model released by Google and Janelia ([ref](https://www.janelia.org/project-team/flyem/male-cns-connectome)).
+</comment>
+</file>
+</code-review-comments>

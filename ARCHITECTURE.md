@@ -6,7 +6,7 @@ Build a local, autonomous NetHack agent whose long-term success criterion is asc
 
 ## Current status
 
-The deterministic NLE adapter, immutable observation projector, hierarchical goal/skill coordinator with per-level terrain memory, deterministic staircase navigation and level exploration, and an action gate, structured Ollama decision model, reviewed local knowledge bundle, typed SQLite event log, loopback HTTP/WebSocket control service with the dependency-free browser UI, headless scenario orchestrator, executable socket-boundary verifier, and the committed 10-seed evaluation suite with its `eval run` and `eval abort` harness are implemented. Milestone 1 is accepted: the first complete real-model suite run of policy `hierarchical-explore-v1` passed with 10/10 task successes (`nethack-agent/evaluation/reports/staircase-v1-20260926T211301Z.json`).
+The deterministic NLE adapter, immutable observation projector, hierarchical goal/skill coordinator with per-level terrain memory, deterministic staircase navigation and level exploration, and an action gate, structured Ollama decision model, reviewed local knowledge bundle, typed SQLite event log, loopback HTTP/WebSocket control service with the dependency-free browser UI, headless scenario orchestrator, executable socket-boundary verifier, and the committed 10-seed evaluation suite with its `eval run` and `eval abort` harness are implemented. Milestone 1 is accepted: the first complete real-model suite run of policy `hierarchical-explore-v1` passed with 10/10 task successes (`nethack-agent/evaluation/reports/staircase-v1-20260926T211301Z.json`). With the current `staircase-reviewed-v2` knowledge bundle and explicit `autoopen`, the same suite and model passed again with 10/10 and step-identical trajectories (`nethack-agent/evaluation/reports/staircase-v1-20260927T065500Z.json`).
 
 ## System context
 
@@ -429,7 +429,9 @@ tint; the pet fill combines with any of them, and the NetHack foreground color
 is kept. A **Show path** checkbox beside the legend (on by default, stored in
 `localStorage` as `nethack-agent.showPath`) hides only the path tint and
 redraws without refetching. A legend under the map explains the player, pet,
-destination, attack-target, and path highlights with tooltips. Player
+destination, attack-target, and path highlights with tooltips. Frontier
+destinations use that destination box and their recorded routes use the path
+tint; this visualization is delivered rather than roadmap work. Player
 statistics use a specialized semantic description list: each `dt`/`dd` pair is
 one responsive stat cell, arranged in three columns in the normal 50rem primary
 column and automatically reduced to fewer columns if its container is

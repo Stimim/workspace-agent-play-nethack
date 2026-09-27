@@ -25,8 +25,6 @@ Acceptance: the fixed local policy succeeds on at least 6 of 10 committed determ
 
 - [ ] Analyze milestone failures and update deterministic skills or reviewed knowledge; do not let evaluation runs mutate themselves.
 - [ ] Add replay comparison and aggregate run diagnostics.
-- [ ] Make persisted events selectable so choosing an old event redraws that
-  event's historical map, player state, inventory, and related observation.
 - [ ] Add bounded navigation, combat-risk, hunger, inventory, and prompt-handling skills as evidence requires.
 - [ ] Evaluate whether Laya improves routine action ranking enough to justify another model runtime.
 - [ ] Survey the [Janelia FlyEM male CNS connectome](https://www.janelia.org/project-team/flyem/male-cns-connectome) and define a bounded, evidence-driven comparison of any connectome-inspired planning or action-ranking approach against current baselines; this is research, not a production commitment.
@@ -44,6 +42,30 @@ Acceptance: the fixed local policy succeeds on at least 6 of 10 committed determ
   `ollama/omp-coder-smol:latest` after the real Antigravity quota 429. Fresh
   direct OMP processes already fall back; OMP 18.3.2 did not refresh the
   already-running conversation's worker-launcher snapshot ([0008](docs/notes/0008-omp-local-coding-fallback.md)).
+
+### Observability and browser UI
+
+Browser tooling for inspecting runs. Evidence, design, and the limitations behind the open items are in notes 0009-0012.
+
+- [x] Redesign the agent column: full-width control panel, fixed map and inventory columns with a narrow-viewport overlay, expandable Events/Tools/Verbose tabs with per-tab auto-scroll, and field tooltips ([0009](docs/notes/0009-ui-agent-information-redesign.md)).
+- [x] Add a Messages tab for NetHack's own game messages, which also stay in Verbose ([0009](docs/notes/0009-ui-agent-information-redesign.md)).
+- [x] Highlight pets from explicit NLE pet evidence and display boulders as `0` and ghosts as `X`, keeping records without pet evidence readable ([0010](docs/notes/0010-pet-and-map-symbol-rendering.md)).
+- [x] Annotate the map with each step's recorded destination and attack target ([0011](docs/notes/0011-map-intent-annotations.md)).
+- [x] Draw each step's recorded planned path, with a persistent **Show path** toggle ([0012](docs/notes/0012-planned-path-overlay.md)).
+- [x] Visualize a recorded `frontier` destination with the destination box and
+  draw its recorded route with the persistent **Show path** toggle
+  ([0011](docs/notes/0011-map-intent-annotations.md),
+  [0012](docs/notes/0012-planned-path-overlay.md)).
+- [x] Split the browser controller into main run control, DOM/panel behavior,
+  event-log handling, and rendering modules; show explicit ability labels and
+  accessible BUC evidence cues.
+- [ ] Make persisted events selectable so choosing an old event redraws that event's historical map, player state, inventory, related observation, recorded intent, and planned path; today the map shows only the latest step's intent and path.
+- [ ] Record real tool and script executions for the Tools tab; today it lists only step events whose selection source is `deterministic_skill` or `deterministic_prompt`.
+- [ ] Add automated browser tests for layout, overlay, focus, and tooltip behavior, which only recorded browser smokes cover today.
+- [ ] Keep the sticky agent column inside a 1920x1080 viewport before page scroll; it overflows by about 34 px.
+- [ ] Mark an intent destination on the hero's own cell; the map leaves it unboxed and only the Events row names it.
+- [ ] Show where replanning diverges from a drawn path, and record routes that steps compute but do not follow (waiting for a blocker, staircase defense).
+
 ## Later: autonomous ascension
 
 - [ ] Establish staged full-game benchmarks and survival metrics.

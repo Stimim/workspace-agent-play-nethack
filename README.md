@@ -69,6 +69,17 @@ the start, on stuck exploration, and for unhandled prompts
 acceptance contract and boundaries are in [`ARCHITECTURE.md`](ARCHITECTURE.md);
 work is tracked in [`TODO_LIST.md`](TODO_LIST.md).
 
+Since acceptance, the browser UI has gained a redesigned agent column with
+Events, Messages, Tools, and Verbose tabs, explicit ability labels, inventory
+BUC evidence cues, pet highlighting, `0`/`X` boulder and ghost symbols, and map
+annotations for each step's recorded frontier or other destination, attack
+target, and planned path. The reviewed knowledge bundle (`staircase-reviewed-v2`)
+now makes `autoopen` explicit and documents covered and branch stairs from NLE
+and local-wiki evidence. The committed suite with this bundle and the local
+model again passed 10/10 with trajectories identical to the accepted run
+(`nethack-agent/evaluation/reports/staircase-v1-20260927T065500Z.md`;
+[note 0013](docs/notes/0013-review-feedback-resolutions.md)).
+
 ## Documentation
 
 Start with [`docs/README.md`](docs/README.md). Architecture documents describe
