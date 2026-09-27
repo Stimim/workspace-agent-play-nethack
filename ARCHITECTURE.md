@@ -65,17 +65,29 @@ must not retain raw observations as event history.
 
 `ObservationProjector` converts each ephemeral NLE observation into compact,
 immutable state before the next environment call. It copies visible map
-characters plus glyph IDs (`glyph_rows`), color, and special bytes, all public
-bottom-line statistics, decoded message and inventory strings, prompt flags
-(`single_character_choice` for single-character prompts, `text_input`, and
-`wait_for_space`), and changed map cells with their updated glyph and character
-data. NLE exposes inventory glyph, letter, object-class, and description arrays
-but no BUC array. The projector therefore derives a typed `BucStatus` only from
-an exact leading `blessed`, `uncursed`, or `cursed` adjective after an article
-or stack count; every other description is `unknown`. The result is
-JSON-serializable for prompts, persistence, APIs, and UI clients. Map deltas are
-computed against the previous projection without retaining NLE buffers. Raw
-arrays do not cross this boundary.
+characters plus glyph IDs (`glyph_rows`), color, special bytes, and an explicit
+per-cell pet mask (`pet_rows`) derived only from NLE's pet-glyph identity. Map
+display characters use stable glyph identities to render boulders as `0` and
+the ghost monster class as `X`; the original glyph IDs, NetHack colors, and
+player cell rendering remain authoritative. The projection also includes all
+public bottom-line statistics, decoded message and inventory strings, prompt
+flags (`single_character_choice` for single-character prompts, `text_input`,
+and `wait_for_space`), and changed map cells with their updated glyph,
+character, and pet data. NLE exposes inventory glyph, letter, object-class, and
+description arrays but no BUC array. The projector therefore derives a typed
+`BucStatus` only from an exact leading `blessed`, `uncursed`, or `cursed`
+adjective after an article or stack count; every other description is
+`unknown`. The result is JSON-serializable for prompts, persistence, APIs, and
+UI clients. Map deltas are computed against the previous projection without
+retaining NLE buffers. Raw arrays do not cross this boundary.
+
+Every new projection records pet evidence. Observations persisted before pet
+evidence existed (including the accepted milestone 1 suite) have no `pet_rows`
+or changed-cell `pet`; they load with pet evidence *unknown* (`pet_rows: None`,
+`pet: None`, serialized as JSON `null`), never as an invented all-zero mask.
+Present pet fields are still strictly validated (hex rows of the map shape with
+0/1 bytes; boolean `pet`), and unknown extra fields are rejected. The browser
+highlights no pet when evidence is unknown.
 
 Inventory observations stored before `buc` existed load as `unknown`; the
 reader never reparses their description and invents evidence. Present values
@@ -265,7 +277,10 @@ skill, skill-selection source, stuck reason), optional model skill/fallback
 decisions and metrics, gated action, reward, termination fields, outcome, and
 the projected observation. Events recorded before the `hierarchical-explore-v1`
 selection fields existed no longer satisfy the strict reader; their evaluation
-reports remain the evidence for those runs.
+reports remain the evidence for those runs. Events recorded before pet evidence
+existed, which include the accepted milestone 1 suite, remain readable through
+the store, HTTP API, browser UI, and evaluation audit with pet evidence
+unknown, as described under the observation projector.
 
 Inventory records written before typed BUC evidence remain readable: absent
 `buc` becomes `unknown`, never a description-derived claim.
@@ -359,23 +374,24 @@ panel/tab behavior, focus, and tooltips, `event-log.js` owns the three bounded
 logs, `render.js` owns pure DOM rendering, and `client.js` owns HTTP/WebSocket
 transport. It uses only this HTTP API and the event WebSocket through
 page-relative URLs, so it works on any loopback host and port. It shows the
-NetHack-colored floor map with the player highlighted. Player statistics use a
-specialized semantic description list: each `dt`/`dd` pair is one responsive
-stat cell, arranged in three columns in the normal primary column and
-automatically reduced to fewer columns if its container is constrained.
-Conditions spans the full grid. This compact display keeps every field, the
-separate Strength, Dexterity, Constitution, Intelligence, Wisdom, and Charisma
-labels, and their focusable tooltips. The UI also shows inventory, message,
-prompt flags, current goal and skill, run state, outcome, last error, and
-decision metrics. Every inventory item has a visible `[B]`, `[U]`, `[C]`, or
-`[?]` marker, a matching accessible class and tooltip, and the inventory panel
-includes the same textual legend, so color is not the only BUC cue. A
-full-width control panel sits above three workspace columns: the fixed-width
-first column contains run information, the fixed 79-by-21 map, and player
-state; the fixed-width second column contains inventory; and the third column
-consumes the remaining width for metrics and agent information. When the
-viewport cannot fit all three without narrowing the fixed columns, the third
-column is hidden
+NetHack-colored floor map, highlights the player and explicitly observed pets
+separately from wild animals, and displays boulders as `0` and ghost-class
+monsters as `X`. Player statistics use a specialized semantic description
+list: each `dt`/`dd` pair is one responsive stat cell, arranged in three columns
+in the normal primary column and automatically reduced to fewer columns if its
+container is constrained. Conditions spans the full grid. This compact display
+keeps every field, the separate Strength, Dexterity, Constitution,
+Intelligence, Wisdom, and Charisma labels, and their focusable tooltips. The UI
+also shows inventory, message, prompt flags, current goal and skill, run state,
+outcome, last error, and decision metrics. Every inventory item has a visible
+`[B]`, `[U]`, `[C]`, or `[?]` marker, a matching accessible class and tooltip,
+and the inventory panel includes the same textual legend, so color is not the
+only BUC cue. A full-width control panel sits above three workspace columns:
+the fixed-width first column contains run information, the fixed 79-by-21 map,
+and player state; the fixed-width second column contains inventory; and the
+third column consumes the remaining width for metrics and agent information.
+When the viewport cannot fit all three without narrowing the fixed columns, the
+third column is hidden
 behind an accessible Agent info control and opens as an overlay over the other
 workspace columns.
 

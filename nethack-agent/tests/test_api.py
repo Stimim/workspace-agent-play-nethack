@@ -1,4 +1,5 @@
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -227,3 +228,26 @@ def test_model_failure_is_503_but_internal_coordinator_failure_is_500(
     internal_response = internal_api.post(f"/api/runs/{internal_run}/step")
     assert internal_response.status_code == 500
     assert internal_manager.store.get_run(internal_run).state is RunState.ERROR
+
+
+def test_events_stored_before_pet_evidence_remain_readable(
+    tmp_path: Path, strip_pet_evidence: Callable[[Path], int]
+) -> None:
+    api = client(tmp_path)
+    run_id = api.post("/api/runs", json={"seed": 6}).json()["run"]["id"]
+    api.post(f"/api/runs/{run_id}/step")
+    api.post(f"/api/runs/{run_id}/stop")
+    assert strip_pet_evidence(tmp_path / "runs.sqlite3") == 2
+
+    # A restarted service reads the legacy records through the strict store.
+    restarted = client(tmp_path)
+    response = restarted.get(f"/api/runs/{run_id}/events")
+    assert response.status_code == 200
+    events = response.json()["events"]
+    assert [event["kind"] for event in events] == ["run_started", "step", "run_stopped"]
+    step = events[1]["payload"]["observation"]
+    assert events[0]["payload"]["observation"]["map"]["pet_rows"] is None
+    assert step["map"]["pet_rows"] is None
+    assert step["changed_cells"]
+    assert all(cell["pet"] is None for cell in step["changed_cells"])
+    assert restarted.get(f"/api/runs/{run_id}").status_code == 200

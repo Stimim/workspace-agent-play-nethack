@@ -25,6 +25,8 @@ Acceptance: the fixed local policy succeeds on at least 6 of 10 committed determ
 
 - [ ] Analyze milestone failures and update deterministic skills or reviewed knowledge; do not let evaluation runs mutate themselves.
 - [ ] Add replay comparison and aggregate run diagnostics.
+- [ ] Make persisted events selectable so choosing an old event redraws that
+  event's historical map, player state, inventory, and related observation.
 - [ ] Add bounded navigation, combat-risk, hunger, inventory, and prompt-handling skills as evidence requires.
 - [ ] Evaluate whether Laya improves routine action ranking enough to justify another model runtime.
 - [ ] Survey the [Janelia FlyEM male CNS connectome](https://www.janelia.org/project-team/flyem/male-cns-connectome) and define a bounded, evidence-driven comparison of any connectome-inspired planning or action-ranking approach against current baselines; this is research, not a production commitment.

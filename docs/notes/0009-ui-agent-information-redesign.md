@@ -97,14 +97,21 @@ only the event sequence and kind.
     `event.payload.selection.source = deterministic_skill`; Verbose contained no
     raw model response. Escape closed the overlay and returned focus to
     **Agent info**.
+  - The live seed-6 observation contained a real pet: the map rendered one
+    `pet c15` span (`f`) and a separate `player` span.
+  - Boulder and ghost symbols do not occur in the scripted observation, so a
+    browser-side fixture passed a synthetic observation to the shipped
+    `renderMap` without changing product state. It produced `c3 "0"`,
+    `c15 "X"`, `pet c2 "d"`, a separate same-color wild `c2 "d"`, and `player "@"`.
   - A focus probe kept keyboard focus on the "Steps seen" trigger across a
     live metrics update (value 1 to 2) with its tooltip visible, and kept the
     unchanged goal node.
   - Screenshots (Windows `C:\Temp\`): `nethack-ui-wide.png`,
     `nethack-ui-wide-tooltip.png`, `nethack-ui-wide-expanded-first-event.png`,
     `nethack-ui-narrow-closed.png`, `nethack-ui-narrow-open-events.png`,
-    `nethack-ui-narrow-open-tooltip.png`, `nethack-ui-narrow-tools.png`, and
-    `nethack-ui-narrow-verbose.png`.
+    `nethack-ui-narrow-open-tooltip.png`, `nethack-ui-narrow-tools.png`,
+    `nethack-ui-narrow-verbose.png`, `nethack-ui-narrow-symbol-fixture.png`,
+    and `nethack-ui-symbol-fixture-zoom.png`.
 
 ## Limitations
 

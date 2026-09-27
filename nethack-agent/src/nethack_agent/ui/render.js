@@ -198,19 +198,21 @@ export function hexToBytes(hex) {
   return bytes;
 }
 
-// Groups each row into spans of equal NetHack color; the player cell gets its
-// own highlighted span.
+// Groups each row into spans of equal NetHack color. The player cell gets its
+// own highlight, and only the API's explicit pet evidence marks a pet; a null
+// `pet_rows` (observations stored before pet evidence existed) highlights none.
 export function renderMap(pre, observation) {
   if (!observation) {
     pre.replaceChildren();
     return;
   }
-  const { rows, color_rows: colorRows } = observation.map;
+  const { rows, color_rows: colorRows, pet_rows: petRows } = observation.map;
   const { x, y } = observation.player;
   const fragment = document.createDocumentFragment();
   rows.forEach((row, rowIndex) => {
     const cells = Array.from(row);
     const colors = hexToBytes(colorRows[rowIndex] ?? "");
+    const pets = hexToBytes(petRows?.[rowIndex] ?? "");
     let text = "";
     let key = null;
     const flush = () => {
@@ -223,7 +225,13 @@ export function renderMap(pre, observation) {
       text = "";
     };
     cells.forEach((cell, columnIndex) => {
-      const cellKey = rowIndex === y && columnIndex === x ? "player" : `c${colors[columnIndex] ?? 7}`;
+      const colorClass = `c${colors[columnIndex] ?? 7}`;
+      let cellKey = colorClass;
+      if (rowIndex === y && columnIndex === x) {
+        cellKey = "player";
+      } else if (pets[columnIndex] === 1) {
+        cellKey = `pet ${colorClass}`;
+      }
       if (cellKey !== key) {
         flush();
         key = cellKey;

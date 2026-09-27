@@ -359,3 +359,43 @@ def test_verbose_view_exposes_trace_text_but_not_raw_model_responses() -> None:
         {"label": "Decision failure", "value": "invalid model response"},
         {"label": "Attempt 1", "value": "missing action_index"},
     ]
+
+
+@pytest.mark.skipif(NODE is None, reason="Node.js is unavailable")
+def test_map_highlights_only_explicit_pet_evidence() -> None:
+    result = _run_renderer_module(
+        """
+        class Node {
+          constructor() {
+            this.children = [];
+            this.className = "";
+            this.textContent = "";
+          }
+          append(...nodes) { this.children.push(...nodes); }
+          replaceChildren(...nodes) {
+            this.children = nodes.flatMap(
+              (node) => node.fragment ? node.children : [node],
+            );
+          }
+        }
+        globalThis.document = {
+          createDocumentFragment: () => Object.assign(new Node(), { fragment: true }),
+          createElement: () => new Node(),
+          createTextNode: (text) => ({ className: "", textContent: text }),
+        };
+        const { renderMap } = await import("./render.js");
+        const spans = (petRows) => {
+          const pre = new Node();
+          renderMap(pre, {
+            map: { rows: ["@dd"], color_rows: ["070202"], pet_rows: petRows },
+            player: { x: 0, y: 0 },
+          });
+          return pre.children.map((node) => [node.className, node.textContent]);
+        };
+        console.log(JSON.stringify({ known: spans(["000100"]), unknown: spans(null) }));
+        """
+    )
+
+    # The same-character, same-color wild animal stays unhighlighted.
+    assert result["known"] == [["player", "@"], ["pet c2", "d"], ["c2", "d"]]
+    assert result["unknown"] == [["player", "@"], ["c2", "dd"]]

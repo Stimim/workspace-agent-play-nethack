@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import stat
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
@@ -445,7 +446,7 @@ def test_abort_rejects_malformed_reports_without_writing(tmp_path: Path) -> None
 
 
 def test_development_evaluator_runs_real_nle_and_audits_records(
-    tmp_path: Path,
+    tmp_path: Path, strip_pet_evidence: Callable[[Path], int]
 ) -> None:
     payload = suite_payload()
     payload["max_episode_steps"] = 2
@@ -500,6 +501,24 @@ def test_development_evaluator_runs_real_nle_and_audits_records(
         data_directory=data_directory,
     )
     assert "event sequences are not contiguous from 0" in gap.integrity_problems
+
+    # Milestone 1 records predate pet evidence; they must still audit cleanly.
+    assert strip_pet_evidence(data_directory / "runs.sqlite3") > 0
+    legacy_events = RunStore(data_directory / "runs.sqlite3").events_after(
+        first.run_id, limit=1000
+    )
+    assert legacy_events[0].payload.observation.map.pet_rows is None
+    legacy = summarize_run(
+        record,
+        legacy_events,
+        suite=suite,
+        seed=1,
+        ended_by="episode_end",
+        wall_seconds=0.0,
+        data_directory=data_directory,
+    )
+    assert legacy.integrity_ok, legacy.integrity_problems
+    assert legacy.steps == first.steps
 
     assert record.ttyrec_path is not None
     Path(record.ttyrec_path).unlink()

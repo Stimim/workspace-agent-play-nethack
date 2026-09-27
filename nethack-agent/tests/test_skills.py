@@ -117,6 +117,10 @@ def sketch(
             glyph_rows=tuple(tuple(_GLYPHS[char] for char in row) for row in rows),
             color_rows=tuple(bytes(width) for _ in rows),
             special_rows=tuple(bytes(width) for _ in rows),
+            pet_rows=tuple(
+                bytes(int(bool(nethack.glyph_is_pet(_GLYPHS[char]))) for char in row)
+                for row in rows
+            ),
         ),
         changed_cells=(),
         player=replace(

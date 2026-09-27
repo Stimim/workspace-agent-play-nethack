@@ -34,6 +34,57 @@ _CONDITION_MASKS: Final = (
     (nethack.BL_MASK_RIDE, "riding"),
 )
 
+_BOULDER_OBJECT: Final = next(
+    index
+    for index in range(nethack.NUM_OBJECTS)
+    if nethack.objdescr.from_idx(index).oc_name == "boulder"
+)
+_GHOST_MONSTER_CLASS: Final = nethack.permonst(
+    next(
+        index
+        for index in range(nethack.NUMMONS)
+        if nethack.permonst(index).mname == "ghost"
+    )
+).mlet
+_GHOST_MONSTERS: Final = frozenset(
+    index
+    for index in range(nethack.NUMMONS)
+    if nethack.permonst(index).mlet == _GHOST_MONSTER_CLASS
+)
+
+
+def _display_row(
+    characters: object,
+    glyphs: object,
+    *,
+    row_index: int,
+    player_x: int,
+    player_y: int,
+) -> str:
+    display = bytearray(characters)  # type: ignore[arg-type]
+    for x, value in enumerate(glyphs):  # type: ignore[arg-type]
+        if row_index == player_y and x == player_x:
+            continue
+        glyph = int(value)
+        if (
+            nethack.glyph_is_object(glyph)
+            and nethack.glyph_to_obj(glyph) == _BOULDER_OBJECT
+        ):
+            display[x] = ord("0")
+        elif (
+            nethack.glyph_is_monster(glyph)
+            and nethack.glyph_to_mon(glyph) in _GHOST_MONSTERS
+        ):
+            display[x] = ord("X")
+    return display.decode("ascii", errors="replace")
+
+
+def _pet_row(glyphs: object) -> bytes:
+    return bytes(
+        int(bool(nethack.glyph_is_pet(int(glyph))))
+        for glyph in glyphs  # type: ignore[union-attr]
+    )
+
 
 def _decode_c_string(values: object) -> str:
     raw = values.tobytes()  # type: ignore[attr-defined]
@@ -46,6 +97,10 @@ class MapView:
     glyph_rows: tuple[tuple[int, ...], ...]
     color_rows: tuple[bytes, ...]
     special_rows: tuple[bytes, ...]
+    # One 0/1 byte per cell from NLE's pet-glyph identity. None means the
+    # observation was persisted before pet evidence was recorded: unknown, not
+    # "no pets".
+    pet_rows: tuple[bytes, ...] | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,6 +111,8 @@ class MapCellChange:
     glyph: int
     color: int
     special: int
+    # None: recorded before pet evidence existed (unknown).
+    pet: bool | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,9 +221,16 @@ class ProjectedObservation:
             ("glyph_rows", self.map.glyph_rows),
             ("color_rows", self.map.color_rows),
             ("special_rows", self.map.special_rows),
+            ("pet_rows", self.map.pet_rows),
         ):
+            if rows is None:
+                continue
             if len(rows) != height or any(len(row) != width for row in rows):
                 raise ContractError(f"observation map {name} shape does not match rows")
+        if self.map.pet_rows is not None and any(
+            value > 1 for row in self.map.pet_rows for value in row
+        ):
+            raise ContractError("observation map pet_rows values must be 0 or 1")
         if not 0 <= self.player.x < width or not 0 <= self.player.y < height:
             raise ContractError("player coordinates are outside the observation map")
         if not all(isinstance(cell, MapCellChange) for cell in self.changed_cells):
@@ -187,6 +251,11 @@ class ProjectedObservation:
                 "glyph_rows": [list(row) for row in self.map.glyph_rows],
                 "color_rows": [row.hex() for row in self.map.color_rows],
                 "special_rows": [row.hex() for row in self.map.special_rows],
+                "pet_rows": (
+                    None
+                    if self.map.pet_rows is None
+                    else [row.hex() for row in self.map.pet_rows]
+                ),
             },
             "changed_cells": [asdict(cell) for cell in self.changed_cells],
             "player": player,
@@ -274,8 +343,13 @@ _PLAYER_FIELDS: Final = (
 
 
 def _map_view_from_json(value: object) -> MapView:
+    # `pet_rows` is absent from observations persisted before pet evidence
+    # existed; absent and null both mean unknown.
     payload = object_value(
-        value, "observation map", {"rows", "glyph_rows", "color_rows", "special_rows"}
+        value,
+        "observation map",
+        {"rows", "glyph_rows", "color_rows", "special_rows"},
+        optional={"pet_rows"},
     )
     rows = tuple(
         string_value(row, "map row") for row in array_value(payload["rows"], "map rows")
@@ -287,11 +361,13 @@ def _map_view_from_json(value: object) -> MapView:
         )
         for row in array_value(payload["glyph_rows"], "map glyph_rows")
     )
+    pet_rows = payload.get("pet_rows")
     return MapView(
         rows=rows,
         glyph_rows=glyph_rows,
         color_rows=_byte_rows(payload["color_rows"], "map color_rows"),
         special_rows=_byte_rows(payload["special_rows"], "map special_rows"),
+        pet_rows=None if pet_rows is None else _byte_rows(pet_rows, "map pet_rows"),
     )
 
 
@@ -308,8 +384,12 @@ def _byte_rows(value: object, name: str) -> tuple[bytes, ...]:
 
 def _map_cell_change_from_json(value: object) -> MapCellChange:
     payload = object_value(
-        value, "map cell change", {"x", "y", "character", "glyph", "color", "special"}
+        value,
+        "map cell change",
+        {"x", "y", "character", "glyph", "color", "special"},
+        optional={"pet"},
     )
+    pet = payload.get("pet")
     return MapCellChange(
         x=integer_value(payload["x"], "changed cell x", minimum=0),
         y=integer_value(payload["y"], "changed cell y", minimum=0),
@@ -323,6 +403,7 @@ def _map_cell_change_from_json(value: object) -> MapCellChange:
         special=integer_value(
             payload["special"], "changed cell special", minimum=0, maximum=255
         ),
+        pet=None if pet is None else boolean_value(pet, "changed cell pet"),
     )
 
 
@@ -391,16 +472,26 @@ class ObservationProjector:
     def project(
         self, observation: NleObservation, *, step_index: int
     ) -> ProjectedObservation:
+        player = self._player_stats(observation)
         map_view = MapView(
             rows=tuple(
-                bytes(row).decode("ascii", errors="replace")
-                for row in observation.chars
+                _display_row(
+                    row,
+                    glyphs,
+                    row_index=y,
+                    player_x=player.x,
+                    player_y=player.y,
+                )
+                for y, (row, glyphs) in enumerate(
+                    zip(observation.chars, observation.glyphs, strict=True)
+                )
             ),
             glyph_rows=tuple(
                 tuple(int(glyph) for glyph in row) for row in observation.glyphs
             ),
             color_rows=tuple(bytes(row) for row in observation.colors),
             special_rows=tuple(bytes(row) for row in observation.specials),
+            pet_rows=tuple(_pet_row(row) for row in observation.glyphs),
         )
         changed_cells = self._changed_cells(map_view)
         self._previous_map = map_view
@@ -408,7 +499,7 @@ class ObservationProjector:
             step_index=step_index,
             map=map_view,
             changed_cells=changed_cells,
-            player=self._player_stats(observation),
+            player=player,
             message=_decode_c_string(observation.message),
             prompt=PromptState(
                 single_character_choice=bool(observation.misc[0]),
@@ -422,6 +513,8 @@ class ObservationProjector:
         previous = self._previous_map
         if previous is None:
             return ()
+        # Projected maps always carry pet evidence; only stored ones may not.
+        assert current.pet_rows is not None and previous.pet_rows is not None
         changes = []
         for y, (
             row,
@@ -432,6 +525,8 @@ class ObservationProjector:
             old_colors,
             specials,
             old_specials,
+            pets,
+            old_pets,
         ) in enumerate(
             zip(
                 current.rows,
@@ -442,6 +537,8 @@ class ObservationProjector:
                 previous.color_rows,
                 current.special_rows,
                 previous.special_rows,
+                current.pet_rows,
+                previous.pet_rows,
                 strict=True,
             )
         ):
@@ -450,10 +547,11 @@ class ObservationProjector:
                 and glyphs == old_glyphs
                 and colors == old_colors
                 and specials == old_specials
+                and pets == old_pets
             ):
                 continue
             changes.extend(
-                MapCellChange(x, y, character, glyph, color, special)
+                MapCellChange(x, y, character, glyph, color, special, bool(pet))
                 for x, (
                     character,
                     old_character,
@@ -463,6 +561,8 @@ class ObservationProjector:
                     old_color,
                     special,
                     old_special,
+                    pet,
+                    old_pet,
                 ) in enumerate(
                     zip(
                         row,
@@ -473,6 +573,8 @@ class ObservationProjector:
                         old_colors,
                         specials,
                         old_specials,
+                        pets,
+                        old_pets,
                         strict=True,
                     )
                 )
@@ -480,6 +582,7 @@ class ObservationProjector:
                 or glyph != old_glyph
                 or color != old_color
                 or special != old_special
+                or pet != old_pet
             )
         return tuple(changes)
 

@@ -217,6 +217,15 @@ model responses; each summary previews its first text field. Focus or hover
 dotted field and goal/skill labels for their accessible explanations; Escape
 dismisses a shown tooltip, and a second Escape closes the narrow overlay.
 
+The map preserves NetHack colors and highlights the player independently. It
+uses the observation's explicit `pet_rows` mask to distinguish pets from wild
+animals; pet status is never inferred from the displayed character. Runs
+recorded before pet evidence existed (such as the milestone 1 suite data)
+still attach, with `pet_rows: null` meaning unknown, and show no pet highlight.
+The projector uses glyph identity, rather than character matching, to display
+boulders as `0` and ghost-class monsters as `X`; stored older rows keep the
+characters they were recorded with.
+
 Player state is a compact semantic description-list grid. It places three
 labeled stat cells per row at the normal primary-column width, while
 auto-fitting to two or one column if the container is constrained; Conditions
