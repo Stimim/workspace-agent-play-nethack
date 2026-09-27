@@ -1,7 +1,7 @@
 import { installFieldTooltips } from "./render.js";
 
-// Must equal the max-width breakpoint in app.css.
-export const NARROW_AGENT_QUERY = "(max-width: 1450px)";
+// Must equal the max-width breakpoint in app.css; its derivation is there.
+export const NARROW_AGENT_QUERY = "(max-width: 1520px)";
 
 export const element = (id) => document.getElementById(id);
 

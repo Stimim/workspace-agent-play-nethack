@@ -181,9 +181,31 @@ NLE can receive them: the task never changes level, and `<` on dungeon level 1
 leaves the dungeon. A step records its typed goal and executed skill, the
 action source (`deterministic_skill`, `deterministic_prompt`, or
 `model_fallback`), who selected the skill (`arbiter` or, after a stuck report,
-`model`), the stuck reason if any, and the applicable structured model decisions
-and metrics. A model-selected skill must match the step's model skill
-decision. This is an auditable decision trace, not chain-of-thought.
+`model`), the stuck reason if any, the skill's map intent, and the applicable
+structured model decisions and metrics. A model-selected skill must match the
+step's model skill decision. This is an auditable decision trace, not
+chain-of-thought.
+
+The map intent (`decision.ActionIntent`) comes from the deterministic skill's
+own routing data, never from the action direction or rationale text. It has an
+optional `destination` with a `DestinationKind` and zero-based map
+coordinates, and an optional `attack_target` cell; at least one is present:
+
+- `downstairs`: the remembered `>` staircase navigation routes to, steps onto,
+  waits on, or keeps while it first fights an adjacent hostile;
+- `frontier`: exploration's route goal next to never-observed space, including
+  when the route first opens a door or waits for or attacks a blocking monster;
+- `search_spot`: the committed spot exploration walks to and searches from;
+- `locked_door`: the door exploration walks beside, kicks, and aims its kick
+  at;
+- `attack_target`: the displayed hostile monster the action attacks by moving
+  into it. Exploration fights before choosing a frontier, so its attacks carry
+  no destination.
+
+The destination is usually not the adjacent cell the action steps into. Prompt
+answers and model fallbacks carry no intent; the contract rejects an intent on
+any non-`deterministic_skill` selection. Recording the intent does not change
+any action choice.
 
 `OllamaDecisionModel` implements both model boundaries. Skill selection uses
 `SKILL_DECISION_SCHEMA` with skill descriptions, the consultation reason, and,
@@ -273,14 +295,18 @@ keys, invalid nested observations or decisions, and semantically inconsistent
 step payloads fail with a clear stored-event contract error. HTTP and WebSocket
 consumers receive the same stable `{sequence, created_at, kind, payload}` JSON
 envelope. Step events include the action selection (source, goal, executed
-skill, skill-selection source, stuck reason), optional model skill/fallback
-decisions and metrics, gated action, reward, termination fields, outcome, and
-the projected observation. Events recorded before the `hierarchical-explore-v1`
-selection fields existed no longer satisfy the strict reader; their evaluation
-reports remain the evidence for those runs. Events recorded before pet evidence
-existed, which include the accepted milestone 1 suite, remain readable through
-the store, HTTP API, browser UI, and evaluation audit with pet evidence
-unknown, as described under the observation projector.
+skill, skill-selection source, stuck reason, rationale, and map `intent`),
+optional model skill/fallback decisions and metrics, gated action, reward,
+termination fields, outcome, and the projected observation. A present intent is
+strictly validated (exact fields, a known destination kind, non-negative
+integer cells inside the observation map). Events recorded before the
+`hierarchical-explore-v1` selection fields existed no longer satisfy the strict
+reader; their evaluation reports remain the evidence for those runs. Events
+recorded before pet evidence or map intents existed, which include the
+accepted milestone 1 suite, remain readable through the store, HTTP API,
+browser UI, and evaluation audit: pet evidence is unknown, as described under
+the observation projector, and an absent `intent` reads as JSON `null` (no
+intent recorded), never as an inferred target.
 
 Inventory records written before typed BUC evidence remain readable: absent
 `buc` becomes `unknown`, never a description-derived claim.
@@ -376,37 +402,47 @@ transport. It uses only this HTTP API and the event WebSocket through
 page-relative URLs, so it works on any loopback host and port. It shows the
 NetHack-colored floor map, highlights the player and explicitly observed pets
 separately from wild animals, and displays boulders as `0` and ghost-class
-monsters as `X`. Player statistics use a specialized semantic description
-list: each `dt`/`dd` pair is one responsive stat cell, arranged in three columns
-in the normal primary column and automatically reduced to fewer columns if its
-container is constrained. Conditions spans the full grid. This compact display
-keeps every field, the separate Strength, Dexterity, Constitution,
-Intelligence, Wisdom, and Charisma labels, and their focusable tooltips. The UI
-also shows inventory, message, prompt flags, current goal and skill, run state,
-outcome, last error, and decision metrics. Every inventory item has a visible
-`[B]`, `[U]`, `[C]`, or `[?]` marker, a matching accessible class and tooltip,
-and the inventory panel includes the same textual legend, so color is not the
-only BUC cue. A full-width control panel sits above three workspace columns:
-the fixed-width first column contains run information, the fixed 79-by-21 map,
-and player state; the fixed-width second column contains inventory; and the
-third column consumes the remaining width for metrics and agent information.
-When the viewport cannot fit all three without narrowing the fixed columns, the
-third column is hidden
+monsters as `X`. The map also boxes the displayed step's recorded intent: a
+dashed accent box on the destination and a solid danger-colored box on the
+attack target. The intent shown is the one recorded by the step event that
+carries the displayed observation; a newer status snapshot shows none until its
+step event arrives. Precedence per cell: the player highlight replaces
+everything; otherwise the attack-target box wins over the destination box, the
+pet fill combines with either box, and the NetHack foreground color is kept. A
+legend under the map explains the player, pet, destination, and attack-target
+highlights with tooltips. Player statistics use a specialized semantic
+description list: each `dt`/`dd` pair is one responsive stat cell, arranged in
+three columns in the normal 50rem primary column and automatically reduced to
+fewer columns if its container is constrained. Conditions spans the full grid.
+This compact display keeps every field, the separate Strength, Dexterity,
+Constitution, Intelligence, Wisdom, and Charisma labels, and their focusable
+tooltips. The UI also shows inventory, message, prompt flags, current goal and
+skill, run state, outcome, last error, and decision metrics. Every inventory
+item has a visible `[B]`, `[U]`, `[C]`, or `[?]` marker, a matching accessible
+class and tooltip, and the inventory panel includes the same textual legend, so
+color is not the only BUC cue. A full-width control panel sits above three
+workspace columns: the 50rem first column contains run information, the fixed
+79-by-21 map, and player state; the 30rem second column contains inventory; and
+the third column consumes the remaining width (at least 24rem) for metrics and
+agent information. When the viewport is 1520 CSS px wide or narrower (the
+107rem three-column layout at the 14 px root size plus room for a vertical
+scrollbar), the third column is hidden
 behind an accessible Agent info control and opens as an overlay over the other
 workspace columns.
 
 Agent information has Events, Tools, and Verbose tabs. Each tab has an
 independent auto-scroll control and scrolling body. Event rows are native
 expand/collapse details; each newly received step becomes the one decision
-expanded by default and exposes the selection, model decisions, candidates,
-executed action, reward, and outcome. Tools contains expandable rows only for
-step events whose typed `selection.source` is `deterministic_skill` or
-`deterministic_prompt` and whose executed `action` is present; it does not
-infer tool calls. Verbose groups the remaining game messages, concise
-rationales, candidate reasons, and decision-attempt errors, but deliberately
-does not expose raw model responses or hidden chain-of-thought. Focusable,
-semantic tooltips explain displayed fields and the exact `Goal` and `Skill`
-enum values. They are fixed-position layers placed through CSSOM custom
+expanded by default and exposes the selection, recorded intent (or "none
+recorded"), model decisions, candidates, executed action, reward, and outcome.
+Tools contains expandable rows only for step events whose typed
+`selection.source` is `deterministic_skill` or `deterministic_prompt` and whose
+executed `action` is present; it does not infer tool calls. Verbose groups the
+remaining game messages, concise rationales, candidate reasons, and
+decision-attempt errors, but deliberately does not expose raw model responses
+or hidden chain-of-thought. Focusable, semantic tooltips explain displayed
+fields, map legend entries, the recorded intent, and the exact `Goal` and
+`Skill` enum values. They are fixed-position layers placed through CSSOM custom
 properties, so scrolling tab bodies and overflow-clipped panels cannot clip
 them, and Escape dismisses a shown tooltip before closing the overlay. Live
 renders keep unchanged tooltip DOM and restore focus to the same trigger when

@@ -27,6 +27,7 @@ from nethack_agent.evaluation import (
     run_evaluation,
     summarize_run,
 )
+from nethack_agent.events import StepPayload
 from nethack_agent.storage import RunStore
 
 SUITE_PATH = Path(__file__).resolve().parents[1] / "evaluation" / "staircase-v1.json"
@@ -446,7 +447,7 @@ def test_abort_rejects_malformed_reports_without_writing(tmp_path: Path) -> None
 
 
 def test_development_evaluator_runs_real_nle_and_audits_records(
-    tmp_path: Path, strip_pet_evidence: Callable[[Path], int]
+    tmp_path: Path, to_milestone_1_shape: Callable[[Path], int]
 ) -> None:
     payload = suite_payload()
     payload["max_episode_steps"] = 2
@@ -502,12 +503,23 @@ def test_development_evaluator_runs_real_nle_and_audits_records(
     )
     assert "event sequences are not contiguous from 0" in gap.integrity_problems
 
-    # Milestone 1 records predate pet evidence; they must still audit cleanly.
-    assert strip_pet_evidence(data_directory / "runs.sqlite3") > 0
+    # Milestone 1 records predate pet evidence and step intents; they must
+    # still audit cleanly.
+    assert any(
+        isinstance(event.payload, StepPayload)
+        and event.payload.selection.intent is not None
+        for event in events
+    )
+    assert to_milestone_1_shape(data_directory / "runs.sqlite3") > 0
     legacy_events = RunStore(data_directory / "runs.sqlite3").events_after(
         first.run_id, limit=1000
     )
     assert legacy_events[0].payload.observation.map.pet_rows is None
+    assert all(
+        event.payload.selection.intent is None
+        for event in legacy_events
+        if isinstance(event.payload, StepPayload)
+    )
     legacy = summarize_run(
         record,
         legacy_events,

@@ -42,6 +42,7 @@ const FIELD_HELP = Object.freeze({
   "Skill selected by": "The typed SkillSelectionSource: the arbiter or a stuck-state model consultation.",
   Action: "The executed legal action, stable action index, and NetHack command value.",
   Rationale: "The persisted concise rationale. This is an auditable decision trace, not hidden chain-of-thought.",
+  Intent: "The typed map intent a deterministic skill recorded with this step: its destination (route goal) and any attack target, in zero-based map coordinates. Prompt answers, model fallbacks, and steps recorded before intents existed have none.",
   Stuck: "The typed reason deterministic exploration could not propose an action.",
   "Skill choice": "The typed skill returned by the model consultation.",
   "Skill rationale": "The concise rationale returned with the model skill choice.",
@@ -65,6 +66,10 @@ const FIELD_HELP = Object.freeze({
   "Previous state": "The lifecycle state immediately before the run was stopped.",
   "Event kind": "The discriminated event variant from the typed event contract.",
   Evidence: "The exact typed event field that qualifies this row as deterministic execution.",
+  Player: "The hero's cell from the projected player coordinates. This highlight wins over every other map highlight.",
+  Pet: "A cell whose glyph NLE identifies as a pet (the observation's pet_rows). Observations recorded before pet evidence existed show none. The fill stays visible beneath a destination or attack-target box.",
+  Destination: "The cell the latest step's deterministic skill works toward: a frontier, remembered downstairs, search spot, or locked door. Usually not the adjacent cell stepped into; hidden when it is the player's own cell.",
+  "Attack target": "The displayed hostile monster the latest step's deterministic skill attacks by moving into it. Its box wins over a destination box on the same cell.",
 });
 
 const VALUE_HELP = Object.freeze({
@@ -198,16 +203,36 @@ export function hexToBytes(hex) {
   return bytes;
 }
 
-// Groups each row into spans of equal NetHack color. The player cell gets its
-// own highlight, and only the API's explicit pet evidence marks a pet; a null
-// `pet_rows` (observations stored before pet evidence existed) highlights none.
-export function renderMap(pre, observation) {
+// The typed intent of the step decision that produced `observation`: the
+// latest step event, when it carries that same observation. A status snapshot
+// newer than the latest received step shows no intent until its step arrives.
+export function observationIntent(observation, stepEvent) {
+  const payload = stepEvent?.payload;
+  if (!observation || payload?.observation?.step_index !== observation.step_index) {
+    return null;
+  }
+  return payload.selection?.intent ?? null;
+}
+
+function atCell(cell, x, y) {
+  return cell !== null && cell.x === x && cell.y === y;
+}
+
+// Groups each row into spans of equal highlight and NetHack color. Precedence:
+// the player cell gets only its own highlight; otherwise the attack-target box
+// wins over the destination box, and the pet fill (only from the API's
+// explicit pet evidence) combines with either box. Non-player cells keep their
+// NetHack foreground color. A null `pet_rows` (observations stored before pet
+// evidence existed) highlights no pet, and a null intent marks no target.
+export function renderMap(pre, observation, intent = null) {
   if (!observation) {
     pre.replaceChildren();
     return;
   }
   const { rows, color_rows: colorRows, pet_rows: petRows } = observation.map;
   const { x, y } = observation.player;
+  const destination = intent?.destination ?? null;
+  const attackTarget = intent?.attack_target ?? null;
   const fragment = document.createDocumentFragment();
   rows.forEach((row, rowIndex) => {
     const cells = Array.from(row);
@@ -225,12 +250,19 @@ export function renderMap(pre, observation) {
       text = "";
     };
     cells.forEach((cell, columnIndex) => {
-      const colorClass = `c${colors[columnIndex] ?? 7}`;
-      let cellKey = colorClass;
-      if (rowIndex === y && columnIndex === x) {
-        cellKey = "player";
-      } else if (pets[columnIndex] === 1) {
-        cellKey = `pet ${colorClass}`;
+      let cellKey = "player";
+      if (rowIndex !== y || columnIndex !== x) {
+        const classes = [];
+        if (atCell(attackTarget, columnIndex, rowIndex)) {
+          classes.push("attack-target");
+        } else if (atCell(destination, columnIndex, rowIndex)) {
+          classes.push("destination");
+        }
+        if (pets[columnIndex] === 1) {
+          classes.push("pet");
+        }
+        classes.push(`c${colors[columnIndex] ?? 7}`);
+        cellKey = classes.join(" ");
       }
       if (cellKey !== key) {
         flush();
@@ -362,6 +394,48 @@ function formatMetrics(metrics) {
   return `${latency} ms, ${metrics.prompt_tokens} prompt / ${metrics.output_tokens} output tokens${repair}`;
 }
 
+const DESTINATION_LABELS = Object.freeze({
+  downstairs: "downstairs",
+  frontier: "frontier",
+  search_spot: "search spot",
+  locked_door: "locked door",
+});
+
+const DESTINATION_HELP = Object.freeze({
+  downstairs: "Destination downstairs: the remembered > that staircase navigation routes to or stands on.",
+  frontier: "Destination frontier: the known cell next to never-observed space that exploration routes to.",
+  search_spot: "Destination search spot: the committed cell exploration walks to and searches for hidden passages from.",
+  locked_door: "Destination locked door: the known-locked door exploration walks beside, kicks, and aims its kick at.",
+});
+
+const ATTACK_HELP = "Attack target: the adjacent displayed hostile monster this action attacks by moving into it.";
+const NO_INTENT_HELP =
+  "No intent recorded: a prompt answer, a model fallback, a skill action without a map target, or a step stored before intents existed.";
+
+function cellText(cell) {
+  return `(${cell.x}, ${cell.y})`;
+}
+
+// Text and tooltip for a step's typed intent; missing or null means none was
+// recorded, never an inferred target.
+export function intentFact(intent) {
+  if (!intent) {
+    return { text: "none recorded", help: NO_INTENT_HELP };
+  }
+  const text = [];
+  const help = [];
+  if (intent.destination) {
+    const { kind } = intent.destination;
+    text.push(`destination: ${DESTINATION_LABELS[kind] ?? kind} ${cellText(intent.destination)}`);
+    help.push(DESTINATION_HELP[kind] ?? `Destination kind ${kind}.`);
+  }
+  if (intent.attack_target) {
+    text.push(`attack target: ${cellText(intent.attack_target)}`);
+    help.push(ATTACK_HELP);
+  }
+  return { text: text.join("; "), help: help.join(" ") };
+}
+
 export function renderDecision(list, candidateBody, stepEvent, actionNames) {
   if (!stepEvent) {
     setFacts(list, [["Decision", "no step yet"]]);
@@ -378,6 +452,8 @@ export function renderDecision(list, candidateBody, stepEvent, actionNames) {
     ["Action", `${action.name} (#${action.index}, command ${action.command})`],
     ["Rationale", selection.rationale],
   ];
+  const intent = intentFact(selection.intent);
+  pairs.push(["Intent", intent.text, { valueHelp: intent.help }]);
   if (selection.stuck_reason) {
     pairs.push(["Stuck", selection.stuck_reason]);
   }

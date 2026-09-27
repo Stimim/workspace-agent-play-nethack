@@ -48,6 +48,19 @@ class StuckReason(Enum):
     MONSTER_BLOCKED = "monster_blocked"
 
 
+class DestinationKind(Enum):
+    """What the map cell a deterministic skill works toward is."""
+
+    # A remembered `>` that staircase navigation routes to or stands on.
+    DOWNSTAIRS = "downstairs"
+    # The known cell next to never-observed space that exploration routes to.
+    FRONTIER = "frontier"
+    # The committed spot exploration walks to and searches from.
+    SEARCH_SPOT = "search_spot"
+    # A known-locked door exploration walks beside, kicks, and aims a kick at.
+    LOCKED_DOOR = "locked_door"
+
+
 MAX_FALLBACK_CANDIDATES: Final = 3
 MAX_CANDIDATE_REASON_LENGTH: Final = 100
 MAX_DECISION_RATIONALE_LENGTH: Final = 200
@@ -364,6 +377,113 @@ class ModelActionDecision:
 
 
 @dataclass(frozen=True, slots=True)
+class MapCell:
+    """Zero-based map coordinates, as in the projected observation."""
+
+    x: int
+    y: int
+
+    def __post_init__(self) -> None:
+        integer_value(self.x, "map cell x", minimum=0)
+        integer_value(self.y, "map cell y", minimum=0)
+
+    def to_json(self) -> dict[str, object]:
+        return {"x": self.x, "y": self.y}
+
+    @classmethod
+    def from_json(cls, value: object, name: str) -> Self:
+        payload = object_value(value, name, {"x", "y"})
+        return cls(
+            x=integer_value(payload["x"], f"{name} x", minimum=0),
+            y=integer_value(payload["y"], f"{name} y", minimum=0),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class IntentDestination:
+    kind: DestinationKind
+    x: int
+    y: int
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.kind, DestinationKind):
+            raise TypeError("destination kind must be a DestinationKind")
+        integer_value(self.x, "intent destination x", minimum=0)
+        integer_value(self.y, "intent destination y", minimum=0)
+
+    def to_json(self) -> dict[str, object]:
+        return {"kind": self.kind.value, "x": self.x, "y": self.y}
+
+    @classmethod
+    def from_json(cls, value: object) -> Self:
+        payload = object_value(value, "intent destination", {"kind", "x", "y"})
+        return cls(
+            kind=enum_value(
+                payload["kind"], "intent destination kind", DestinationKind
+            ),
+            x=integer_value(payload["x"], "intent destination x", minimum=0),
+            y=integer_value(payload["y"], "intent destination y", minimum=0),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ActionIntent:
+    """The map targets a deterministic skill chose for one action.
+
+    `destination` is the skill's route goal (or, for kicking, the locked
+    door), usually not the adjacent cell the action steps into.
+    `attack_target` is the displayed hostile monster the action attacks by
+    moving into it. Both come from the skill's own routing data.
+    """
+
+    destination: IntentDestination | None
+    attack_target: MapCell | None
+
+    def __post_init__(self) -> None:
+        if self.destination is not None and not isinstance(
+            self.destination, IntentDestination
+        ):
+            raise TypeError("intent destination must be an IntentDestination")
+        if self.attack_target is not None and not isinstance(
+            self.attack_target, MapCell
+        ):
+            raise TypeError("intent attack_target must be a MapCell")
+        if self.destination is None and self.attack_target is None:
+            raise ContractError("intent requires a destination or an attack target")
+
+    def cells(self) -> tuple[IntentDestination | MapCell, ...]:
+        return tuple(
+            cell for cell in (self.destination, self.attack_target) if cell is not None
+        )
+
+    def to_json(self) -> dict[str, object]:
+        return {
+            "destination": self.destination.to_json() if self.destination else None,
+            "attack_target": (
+                self.attack_target.to_json() if self.attack_target else None
+            ),
+        }
+
+    @classmethod
+    def from_json(cls, value: object) -> Self:
+        payload = object_value(value, "intent", {"destination", "attack_target"})
+        destination = payload["destination"]
+        attack_target = payload["attack_target"]
+        return cls(
+            destination=(
+                None
+                if destination is None
+                else IntentDestination.from_json(destination)
+            ),
+            attack_target=(
+                None
+                if attack_target is None
+                else MapCell.from_json(attack_target, "intent attack_target")
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class ActionSelection:
     source: ActionSelectionSource
     goal: Goal
@@ -372,6 +492,9 @@ class ActionSelection:
     stuck_reason: StuckReason | None
     action_index: int
     rationale: str
+    # None for prompt answers, model fallbacks, skill actions without a map
+    # target, and steps recorded before intents existed (unknown).
+    intent: ActionIntent | None
 
     def __post_init__(self) -> None:
         if not isinstance(self.source, ActionSelectionSource):
@@ -394,6 +517,11 @@ class ActionSelection:
             maximum=500,
             strip=True,
         )
+        if self.intent is not None:
+            if not isinstance(self.intent, ActionIntent):
+                raise TypeError("intent must be an ActionIntent or None")
+            if self.source is not ActionSelectionSource.DETERMINISTIC_SKILL:
+                raise ContractError("only deterministic skill selections carry intent")
         if (
             self.skill_selection is SkillSelectionSource.MODEL
             and self.stuck_reason is None
@@ -411,10 +539,13 @@ class ActionSelection:
             "stuck_reason": self.stuck_reason.value if self.stuck_reason else None,
             "action_index": self.action_index,
             "rationale": self.rationale,
+            "intent": self.intent.to_json() if self.intent else None,
         }
 
     @classmethod
     def from_json(cls, value: object) -> Self:
+        # `intent` is absent from steps persisted before intents existed;
+        # absent and null both mean no recorded intent.
         payload = object_value(
             value,
             "action selection",
@@ -427,7 +558,9 @@ class ActionSelection:
                 "action_index",
                 "rationale",
             },
+            optional={"intent"},
         )
+        intent = payload.get("intent")
         return cls(
             source=enum_value(
                 payload["source"], "action selection source", ActionSelectionSource
@@ -452,6 +585,7 @@ class ActionSelection:
                 maximum=500,
                 strip=True,
             ),
+            intent=None if intent is None else ActionIntent.from_json(intent),
         )
 
 

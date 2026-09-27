@@ -231,6 +231,13 @@ class StepPayload:
             and self.action_decision.action_index != self.action.index
         ):
             raise ContractError("step action decision and action indices must match")
+        intent = self.selection.intent
+        if intent is not None:
+            rows = self.observation.map.rows
+            if any(
+                cell.y >= len(rows) or cell.x >= len(rows[0]) for cell in intent.cells()
+            ):
+                raise ContractError("step intent cell is outside the observation map")
         reward = number_value(self.reward, "step reward")
         object.__setattr__(self, "reward", reward)
         boolean_value(self.terminated, "step terminated")

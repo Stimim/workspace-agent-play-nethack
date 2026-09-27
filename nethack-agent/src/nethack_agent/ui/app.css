@@ -8,8 +8,8 @@
   --muted: #8b949e;
   --accent: #58a6ff;
   --danger: #f85149;
-  --primary-column-width: 54rem;
-  --inventory-column-width: 21rem;
+  --primary-column-width: 50rem;
+  --inventory-column-width: 30rem;
   --agent-column-min-width: 24rem;
   font-family: system-ui, sans-serif;
   font-size: 14px;
@@ -97,9 +97,10 @@ button:disabled { opacity: 0.45; cursor: default; }
     var(--inventory-column-width)
     minmax(var(--agent-column-min-width), 1fr);
   gap: 0.75rem;
+  /* Border-box: the columns, two gaps, and the 0.75rem padding on each side. */
   min-width: calc(
     var(--primary-column-width) + var(--inventory-column-width) +
-    var(--agent-column-min-width) + 1.5rem
+    var(--agent-column-min-width) + 3rem
   );
   padding: 0.75rem;
   align-items: start;
@@ -169,19 +170,53 @@ button:disabled { opacity: 0.45; cursor: default; }
   border-radius: 4px;
   overflow-x: auto;
 }
-.map .player {
+/* Map highlights; the legend swatches reuse them. The player cell carries only
+   `player`. Otherwise one intent box (attack target over destination) may
+   combine with the pet fill, and the NetHack color class stays. Intent boxes
+   paint above neighbouring highlights so an adjacent pet or player cannot
+   cover part of the box. */
+:is(.map, .map-legend) .player {
   background: #f0e68c;
   color: #000;
   outline: 1px solid #fff;
 }
-.map .pet {
+:is(.map, .map-legend) .pet {
   background: #153d2a;
   outline: 1px solid #3fb950;
 }
+:is(.map, .map-legend) :is(.destination, .attack-target) {
+  position: relative;
+  z-index: 1;
+}
+:is(.map, .map-legend) .destination { outline: 2px dashed var(--accent); }
+:is(.map, .map-legend) .attack-target { outline: 2px solid var(--danger); }
 .map {
   inline-size: calc(79ch + 0.8rem);
   block-size: calc(24.15em + 0.8rem);
   overflow: hidden;
+}
+
+.map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 1.1rem;
+  margin: 0.45rem 0 0.2rem;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.map-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.legend-swatch {
+  padding: 0 0.3em;
+  background: #000;
+  font-family: ui-monospace, "DejaVu Sans Mono", "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.15;
 }
 
 
@@ -408,11 +443,15 @@ button:disabled { opacity: 0.45; cursor: default; }
 
 .agent-scrim { display: none; }
 
-@media (max-width: 1450px) {
+/* 1520px = 1498px of layout plus 22px for a classic vertical scrollbar, which
+   max-width includes. Layout at the 14px root size: columns 50rem + 30rem +
+   24rem (agent minimum), two 0.75rem gaps, and 0.75rem padding on each side,
+   i.e. 107rem. Keep NARROW_AGENT_QUERY in view.js equal to this query. */
+@media (max-width: 1520px) {
   .workspace {
     grid-template-columns: var(--primary-column-width) var(--inventory-column-width);
     min-width: calc(
-      var(--primary-column-width) + var(--inventory-column-width) + 0.75rem
+      var(--primary-column-width) + var(--inventory-column-width) + 2.25rem
     );
   }
 

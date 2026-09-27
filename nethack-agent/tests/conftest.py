@@ -6,14 +6,15 @@ from pathlib import Path
 import pytest
 
 
-def _strip_pet_evidence(database: Path) -> int:
-    """Rewrite stored observations to the shape recorded before pet evidence.
+def _to_milestone_1_shape(database: Path) -> int:
+    """Rewrite stored events to the shape milestone 1 recorded.
 
     Milestone 1 events were persisted without observation inventory `buc`,
-    `map.pet_rows`, or changed-cell `pet`; this reproduces that exact shape from
-    freshly recorded events.
+    `map.pet_rows`, changed-cell `pet`, or step `selection.intent`; this
+    reproduces that exact shape from freshly recorded events and returns the
+    rewritten event count.
     """
-    stripped = 0
+    rewritten = 0
     with sqlite3.connect(database) as connection:
         rows = connection.execute("SELECT rowid, payload_json FROM events").fetchall()
         for rowid, text in rows:
@@ -26,14 +27,17 @@ def _strip_pet_evidence(database: Path) -> int:
                 del cell["pet"]
             for item in observation["inventory"]:
                 del item["buc"]
+            selection = payload.get("selection")
+            if selection is not None:
+                del selection["intent"]
             connection.execute(
                 "UPDATE events SET payload_json = ? WHERE rowid = ?",
                 (json.dumps(payload), rowid),
             )
-            stripped += 1
-    return stripped
+            rewritten += 1
+    return rewritten
 
 
 @pytest.fixture
-def strip_pet_evidence() -> Callable[[Path], int]:
-    return _strip_pet_evidence
+def to_milestone_1_shape() -> Callable[[Path], int]:
+    return _to_milestone_1_shape

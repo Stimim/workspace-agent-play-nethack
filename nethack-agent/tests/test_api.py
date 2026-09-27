@@ -114,6 +114,11 @@ def test_api_controls_run_and_persists_step_and_ttyrec(tmp_path: Path) -> None:
         "skill_selection": "arbiter",
         "stuck_reason": None,
     }
+    # The skill's route goal, two steps away, not the cell stepped into.
+    assert selection["intent"] == {
+        "destination": {"kind": "frontier", "x": 57, "y": 11},
+        "attack_target": None,
+    }
     with api.websocket_connect(f"/api/runs/{run_id}/events/ws") as websocket:
         assert websocket.receive_json()["kind"] == "run_started"
 
@@ -230,14 +235,14 @@ def test_model_failure_is_503_but_internal_coordinator_failure_is_500(
     assert internal_manager.store.get_run(internal_run).state is RunState.ERROR
 
 
-def test_events_stored_before_pet_evidence_remain_readable(
-    tmp_path: Path, strip_pet_evidence: Callable[[Path], int]
+def test_events_stored_in_the_milestone_1_shape_remain_readable(
+    tmp_path: Path, to_milestone_1_shape: Callable[[Path], int]
 ) -> None:
     api = client(tmp_path)
     run_id = api.post("/api/runs", json={"seed": 6}).json()["run"]["id"]
     api.post(f"/api/runs/{run_id}/step")
     api.post(f"/api/runs/{run_id}/stop")
-    assert strip_pet_evidence(tmp_path / "runs.sqlite3") == 2
+    assert to_milestone_1_shape(tmp_path / "runs.sqlite3") == 2
 
     # A restarted service reads the legacy records through the strict store.
     restarted = client(tmp_path)
@@ -250,4 +255,6 @@ def test_events_stored_before_pet_evidence_remain_readable(
     assert step["map"]["pet_rows"] is None
     assert step["changed_cells"]
     assert all(cell["pet"] is None for cell in step["changed_cells"])
+    # No intent was recorded, so none is served.
+    assert events[1]["payload"]["selection"]["intent"] is None
     assert restarted.get(f"/api/runs/{run_id}").status_code == 200

@@ -3,7 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Final
 
-from nethack_agent.decision import StuckReason
+from nethack_agent.decision import (
+    ActionIntent,
+    DestinationKind,
+    IntentDestination,
+    MapCell,
+    StuckReason,
+)
 from nethack_agent.environment import LegalAction
 from nethack_agent.navigation import (
     MOVE_ACTION_NAMES,
@@ -44,6 +50,9 @@ class SkillAction:
     action_index: int
     rationale: str
     record: ActionRecord
+    # The map targets behind this action; None when it has none (prompt
+    # answers).
+    intent: ActionIntent | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,13 +85,15 @@ class StaircaseNavigationSkill:
                 wait.index,
                 "Wait safely while already standing on the downstairs.",
                 ActionRecord(ActionKind.OTHER, origin),
+                _toward(DestinationKind.DOWNSTAIRS, origin),
             )
         tree = route_tree(memory)
         target = _nearest(tree, stairs)
         blocked: RouteTree | None = None
         if target is None:
             blocked = route_tree(memory, through_monsters=True)
-            if _nearest(blocked, stairs) is None:
+            target = _nearest(blocked, stairs)
+            if target is None:
                 return None
         elif tree.distances[target] == 1:
             # Stepping onto `>` ends the task at once; that beats any fight.
@@ -92,11 +103,13 @@ class StaircaseNavigationSkill:
                 actions_by_name,
                 target,
                 f"Step onto the downstairs at {_cell(target)}.",
+                _toward(DestinationKind.DOWNSTAIRS, target),
             )
-        defense = _attack_adjacent_hostile(memory, actions_by_name)
+        destination = IntentDestination(DestinationKind.DOWNSTAIRS, *target)
+        defense = _attack_adjacent_hostile(memory, actions_by_name, destination)
         if defense is not None:
             return defense
-        if target is not None:
+        if blocked is None:
             return _route_step(
                 memory,
                 tree,
@@ -104,11 +117,11 @@ class StaircaseNavigationSkill:
                 target,
                 f"Follow the known route to the downstairs at {_cell(target)} "
                 f"({tree.distances[target]} steps).",
+                ActionIntent(destination, None),
             )
-        assert blocked is not None
-        target = _nearest(blocked, stairs)
-        assert target is not None
-        return _past_monster(memory, blocked, actions_by_name, target, "downstairs")
+        return _past_monster(
+            memory, blocked, actions_by_name, target, "downstairs", destination
+        )
 
 
 class ExploreLevelSkill:
@@ -137,12 +150,13 @@ class ExploreLevelSkill:
             action.index,
             f"Direct the kick at the locked door at {_cell(door)}.",
             ActionRecord(ActionKind.KICK_DIRECTION, origin, door),
+            _toward(DestinationKind.LOCKED_DOOR, door),
         )
 
     def select_action(
         self, memory: LevelMemory, actions_by_name: dict[str, LegalAction]
     ) -> ExploreResult:
-        defense = _attack_adjacent_hostile(memory, actions_by_name)
+        defense = _attack_adjacent_hostile(memory, actions_by_name, None)
         if defense is not None:
             return ExploreResult(defense, None)
         stairs = memory.downstairs()
@@ -156,6 +170,7 @@ class ExploreLevelSkill:
                 goal,
                 f"Explore toward unexplored space next to {_cell(goal)} "
                 f"({tree.distances[goal]} steps).",
+                _toward(DestinationKind.FRONTIER, goal),
             )
             if action is not None:
                 return ExploreResult(action, None)
@@ -165,7 +180,12 @@ class ExploreLevelSkill:
         goal = _frontier_goal(memory, through, stairs)
         if goal is not None:
             action = _past_monster(
-                memory, through, actions_by_name, goal, "unexplored space"
+                memory,
+                through,
+                actions_by_name,
+                goal,
+                "unexplored space",
+                IntentDestination(DestinationKind.FRONTIER, *goal),
             )
             if action is not None:
                 return ExploreResult(action, None)
@@ -205,7 +225,7 @@ class SafePromptHandler:
                 else "Submit empty text to cancel the text-input prompt safely."
             )
             return SkillAction(
-                action.index, reason, ActionRecord(ActionKind.OTHER, origin)
+                action.index, reason, ActionRecord(ActionKind.OTHER, origin), None
             )
         if prompt.single_character_choice:
             message = observation.message.lower()
@@ -218,12 +238,17 @@ class SafePromptHandler:
                 action.index,
                 "Decline the yes/no prompt safely.",
                 ActionRecord(ActionKind.OTHER, origin),
+                None,
             )
         return None
 
 
 def _cell(point: Point) -> str:
     return f"({point[0]}, {point[1]})"
+
+
+def _toward(kind: DestinationKind, point: Point) -> ActionIntent:
+    return ActionIntent(IntentDestination(kind, *point), None)
 
 
 def _nearest(tree: RouteTree, targets: tuple[Point, ...]) -> Point | None:
@@ -241,6 +266,7 @@ def _route_step(
     actions_by_name: dict[str, LegalAction],
     goal: Point,
     rationale: str,
+    intent: ActionIntent,
     *,
     search_spot: Point | None = None,
 ) -> SkillAction | None:
@@ -259,6 +285,7 @@ def _route_step(
             action.index,
             f"Open the closed door at {_cell(step)} by moving into it; {rationale}",
             ActionRecord(ActionKind.OPEN_DOOR, origin, step, None, goal, search_spot),
+            intent,
         )
     return SkillAction(
         action.index,
@@ -271,17 +298,21 @@ def _route_step(
             goal,
             search_spot,
         ),
+        intent,
     )
 
 
 def _attack_adjacent_hostile(
-    memory: LevelMemory, actions_by_name: dict[str, LegalAction]
+    memory: LevelMemory,
+    actions_by_name: dict[str, LegalAction],
+    destination: IntentDestination | None,
 ) -> SkillAction | None:
     """Fight back against an adjacent displayed monster that may be meleed.
 
     Pets, monsters that answered a "Really attack?" prompt (peaceful), and
     passive-damage monsters are excluded. NetHack resolves an attack before
     its movement rules, so diagonal attacks out of doorways are allowed.
+    `destination` is the calling skill's already chosen route goal, if any.
     """
     origin = memory.position
     for point in sorted(memory.neighbors(origin), key=lambda p: (p[1], p[0])):
@@ -297,6 +328,7 @@ def _attack_adjacent_hostile(
             action.index,
             f"Attack the adjacent {monster.name} at {_cell(point)} before exploring.",
             ActionRecord(ActionKind.MOVE, origin, point, monster.glyph),
+            ActionIntent(destination, MapCell(*point)),
         )
     return None
 
@@ -307,6 +339,7 @@ def _past_monster(
     actions_by_name: dict[str, LegalAction],
     goal: Point,
     purpose: str,
+    destination: IntentDestination,
 ) -> SkillAction | None:
     """Advance on a route that is blocked only by displayed monsters."""
     step = tree.first_step(goal)
@@ -321,6 +354,7 @@ def _past_monster(
             goal,
             f"Approach the {purpose} near {_cell(goal)} along a route a monster "
             "currently blocks further ahead.",
+            ActionIntent(destination, None),
         )
     if memory.hostile_blocker(step) is not None:
         # NLE's Staircase action set has no fight command; moving into a
@@ -332,6 +366,7 @@ def _past_monster(
             goal,
             f"Attack the {monster.name} blocking the route to the {purpose} "
             f"near {_cell(goal)} by moving into it.",
+            ActionIntent(destination, MapCell(*step)),
         )
     search = actions_by_name.get("Command.SEARCH")
     if search is None or memory.monster_waits >= MONSTER_WAIT_LIMIT:
@@ -341,6 +376,7 @@ def _past_monster(
         f"Wait in place for the {monster.name} blocking the route to the "
         f"{purpose} to move; it is peaceful or unsafe to melee.",
         ActionRecord(ActionKind.WAIT, memory.position),
+        ActionIntent(destination, None),
     )
 
 
@@ -398,12 +434,14 @@ def _kick_locked_door(
         return None
     _, _, _, stand, door = min(candidates)
     origin = memory.position
+    intent = _toward(DestinationKind.LOCKED_DOOR, door)
     if stand == origin:
         return SkillAction(
             kick.index,
             f"Kick the locked door at {_cell(door)}: no other unexplored space is "
             "reachable, and dungeon level 1 has no shopkeeper or watch to anger.",
             ActionRecord(ActionKind.KICK, origin, door),
+            intent,
         )
     return _route_step(
         memory,
@@ -411,6 +449,7 @@ def _kick_locked_door(
         actions_by_name,
         stand,
         f"Move beside the locked door at {_cell(door)} to kick it open.",
+        intent,
     )
 
 
@@ -477,12 +516,14 @@ def _search(
     if spot is None or evaluation is None:
         return None
     origin = memory.position
+    intent = _toward(DestinationKind.SEARCH_SPOT, spot)
     if spot == origin:
         return SkillAction(
             search.index,
             f"Search for hidden passages at {_cell(spot)} "
             f"(least-searched neighbour {evaluation[1]}/{budget}).",
             ActionRecord(ActionKind.SEARCH, origin, search_spot=spot),
+            intent,
         )
     return _route_step(
         memory,
@@ -491,6 +532,7 @@ def _search(
         spot,
         f"Move to search spot {_cell(spot)} ({tree.distances[spot]} steps); "
         "no reachable unexplored space remains.",
+        intent,
         search_spot=spot,
     )
 

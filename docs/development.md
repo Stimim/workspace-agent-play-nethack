@@ -202,13 +202,16 @@ URL reattaches after a reload. Starting while another run is active shows the
 service's 409 detail; stop the active run first. Runs from before a service
 restart are shown read-only.
 
-The workspace keeps the run/map/player and inventory columns at fixed widths;
-agent information consumes the remaining width. At narrower viewport widths,
-use **Agent info** to open that third column as an overlay instead of squeezing
-the map or inventory. The breakpoint in `app.css` and `NARROW_AGENT_QUERY` in
-`view.js` must change together. The overlay closes with its Close button, the
-dimmed background, or Escape. Its Events, Tools, and Verbose tabs support click
-and arrow-key navigation. Every tab has an independent auto-scroll checkbox.
+The workspace keeps the run/map/player (50rem) and inventory (30rem) columns at
+fixed widths; agent information consumes the remaining width (at least 24rem).
+At viewport widths of 1520 CSS px or less, use **Agent info** to open that third
+column as an overlay instead of squeezing the map or inventory. The breakpoint
+is the 107rem three-column layout (columns, two gaps, and workspace padding) at
+the 14 px root font size plus 22 px for a vertical scrollbar; `app.css` and
+`NARROW_AGENT_QUERY` in `view.js` must change together. The overlay closes with
+its Close button, the dimmed background, or Escape. Its Events, Tools, and
+Verbose tabs support click and arrow-key navigation. Every tab has an
+independent auto-scroll checkbox.
 Events and evidenced deterministic-execution rows expand on click; the newest
 step decision is expanded by default. Tools lists only step events that record
 `deterministic_skill` or `deterministic_prompt` as their selection source and
@@ -226,8 +229,8 @@ The projector uses glyph identity, rather than character matching, to display
 boulders as `0` and ghost-class monsters as `X`; stored older rows keep the
 characters they were recorded with.
 
-Player state is a compact semantic description-list grid. It places three
-labeled stat cells per row at the normal primary-column width, while
+Player state is a compact semantic description-list grid. At the normal 50rem
+primary-column width it places three labeled stat cells per row, while
 auto-fitting to two or one column if the container is constrained; Conditions
 spans the full grid. Every field and focusable field tooltip remains available,
 and abilities use the full Strength, Dexterity, Constitution, Intelligence,
@@ -236,6 +239,18 @@ Wisdom, and Charisma labels. Each inventory item begins with a visible `[B]`,
 with a distinct class and focusable tooltip; the panel repeats those markers in
 a textual legend. `unknown` means no explicit leading beatitude adjective was
 present, including for records written before this evidence field existed.
+
+The map also shows the intent recorded by the step event that carries the
+displayed observation: a dashed accent box marks the destination the
+deterministic skill works toward (frontier, remembered downstairs, search spot,
+or locked door), and a solid danger-colored box marks the monster it attacks.
+The player highlight wins over both boxes, the attack-target box wins over the
+destination box on the same cell, and a pet keeps its fill under either box.
+The legend under the map explains each highlight, and the expanded step
+decision in Events shows the same **Intent** with an explanatory tooltip. Model
+fallbacks, prompt answers, and runs recorded before intents existed (such as the
+milestone 1 suite data) show "none recorded" and no boxes; the UI never derives
+a target from the action direction or rationale.
 For a no-Ollama UI check, serve with the scripted development model on a
 scratch data directory:
 
@@ -252,8 +267,9 @@ Content-Security-Policy permits only same-origin scripts, styles, images, and
 connections, so do not add inline scripts, inline `style`/`on*` attributes, or
 external URLs, and insert model or game text with `textContent`.
 `tests/test_ui.py` enforces the headers and full served module graph, checks
-these asset rules, and executes renderer classification, ability labels, and
-inventory BUC cues with Node.js when Node is available.
+these asset rules, and executes renderer classification, ability labels,
+inventory BUC cues, map highlight precedence, and intent selection behavior
+with Node.js when Node is available.
 
 ### Owned headless scenarios
 
@@ -346,7 +362,9 @@ uv run nethack-agent eval run \
 ```
 
 Use a fresh data directory per policy version: the strict event reader does not
-accept step events recorded before the current selection contract.
+accept step events recorded before the `hierarchical-explore-v1` selection
+fields. Later optional additions (pet evidence and step intents) keep older
+`hierarchical-explore-v1` data, including the milestone 1 suite, readable.
 
 Progress lines go to stderr every `--progress-interval` seconds (default 30).
 Each invocation reserves a new `<suite>-<UTC timestamp>.json` and `.md` pair in

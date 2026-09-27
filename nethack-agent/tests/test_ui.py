@@ -361,41 +361,151 @@ def test_verbose_view_exposes_trace_text_but_not_raw_model_responses() -> None:
     ]
 
 
+# A minimal DOM for `renderMap`: element children and class/text properties.
+_MAP_DOM = """
+class Node {
+  constructor() {
+    this.children = [];
+    this.className = "";
+    this.textContent = "";
+  }
+  append(...nodes) { this.children.push(...nodes); }
+  replaceChildren(...nodes) {
+    this.children = nodes.flatMap(
+      (node) => node.fragment ? node.children : [node],
+    );
+  }
+}
+globalThis.document = {
+  createDocumentFragment: () => Object.assign(new Node(), { fragment: true }),
+  createElement: () => new Node(),
+  createTextNode: (text) => ({ className: "", textContent: text }),
+};
+const { renderMap } = await import("./render.js");
+const spans = (observation, intent) => {
+  const pre = new Node();
+  renderMap(pre, observation, intent);
+  return pre.children.map((node) => [node.className, node.textContent]);
+};
+"""
+
+
 @pytest.mark.skipif(NODE is None, reason="Node.js is unavailable")
 def test_map_highlights_only_explicit_pet_evidence() -> None:
     result = _run_renderer_module(
-        """
-        class Node {
-          constructor() {
-            this.children = [];
-            this.className = "";
-            this.textContent = "";
-          }
-          append(...nodes) { this.children.push(...nodes); }
-          replaceChildren(...nodes) {
-            this.children = nodes.flatMap(
-              (node) => node.fragment ? node.children : [node],
-            );
-          }
-        }
-        globalThis.document = {
-          createDocumentFragment: () => Object.assign(new Node(), { fragment: true }),
-          createElement: () => new Node(),
-          createTextNode: (text) => ({ className: "", textContent: text }),
-        };
-        const { renderMap } = await import("./render.js");
-        const spans = (petRows) => {
-          const pre = new Node();
-          renderMap(pre, {
-            map: { rows: ["@dd"], color_rows: ["070202"], pet_rows: petRows },
-            player: { x: 0, y: 0 },
-          });
-          return pre.children.map((node) => [node.className, node.textContent]);
-        };
-        console.log(JSON.stringify({ known: spans(["000100"]), unknown: spans(null) }));
+        _MAP_DOM
+        + """
+        const map = (petRows) => spans({
+          map: { rows: ["@dd"], color_rows: ["070202"], pet_rows: petRows },
+          player: { x: 0, y: 0 },
+        });
+        console.log(JSON.stringify({ known: map(["000100"]), unknown: map(null) }));
         """
     )
 
     # The same-character, same-color wild animal stays unhighlighted.
     assert result["known"] == [["player", "@"], ["pet c2", "d"], ["c2", "d"]]
     assert result["unknown"] == [["player", "@"], ["c2", "dd"]]
+
+
+@pytest.mark.skipif(NODE is None, reason="Node.js is unavailable")
+def test_map_marks_destination_and_attack_target_with_precedence() -> None:
+    result = _run_renderer_module(
+        _MAP_DOM
+        + """
+        const observation = {
+          map: {
+            rows: ["@r.f.", "....>"],
+            color_rows: ["0703070f07", "0707070707"],
+            pet_rows: ["0000000100", "0000000000"],
+          },
+          player: { x: 0, y: 0 },
+        };
+        const at = (x, y) => ({ x, y });
+        console.log(JSON.stringify({
+          both: spans(observation, {
+            destination: { kind: "downstairs", ...at(4, 1) },
+            attack_target: at(1, 0),
+          }),
+          onPet: spans(observation, {
+            destination: { kind: "frontier", ...at(3, 0) },
+            attack_target: null,
+          }),
+          sameCell: spans(observation, {
+            destination: { kind: "downstairs", ...at(1, 0) },
+            attack_target: at(1, 0),
+          }),
+          onPlayer: spans(observation, {
+            destination: { kind: "search_spot", ...at(0, 0) },
+            attack_target: null,
+          }),
+          none: spans(observation, null),
+        }));
+        """
+    )
+
+    newline = ["", "\n"]
+    rest_of_row = [["c7", "."], ["pet c15", "f"], ["c7", "."], newline]
+    # Distinct classes keep each cell's NetHack color.
+    assert result["both"] == [
+        ["player", "@"],
+        ["attack-target c3", "r"],
+        *rest_of_row,
+        ["c7", "...."],
+        ["destination c7", ">"],
+    ]
+    # A pet on the destination keeps its fill under the destination box.
+    assert result["onPet"][:4] == [
+        ["player", "@"],
+        ["c3", "r"],
+        ["c7", "."],
+        ["destination pet c15", "f"],
+    ]
+    # The attack-target box wins over a destination box on the same cell.
+    assert result["sameCell"][1] == ["attack-target c3", "r"]
+    # The player highlight wins; a destination under the hero is not boxed.
+    assert result["onPlayer"] == result["none"]
+    assert not any(
+        "destination" in key or "attack-target" in key for key, _ in result["none"]
+    )
+
+
+@pytest.mark.skipif(NODE is None, reason="Node.js is unavailable")
+def test_map_intent_comes_only_from_the_step_that_produced_the_observation() -> None:
+    result = _run_renderer_module(
+        """
+        const { intentFact, observationIntent } = await import("./render.js");
+        const intent = {
+          destination: { kind: "frontier", x: 57, y: 11 },
+          attack_target: { x: 56, y: 10 },
+        };
+        const step = (selection) => ({
+          kind: "step",
+          payload: { selection, observation: { step_index: 4 } },
+        });
+        const current = step({ source: "deterministic_skill", intent });
+        const legacy = step({ source: "deterministic_skill" });
+        console.log(JSON.stringify({
+          matching: observationIntent({ step_index: 4 }, current),
+          newerObservation: observationIntent({ step_index: 5 }, current),
+          noStep: observationIntent({ step_index: 0 }, null),
+          legacy: observationIntent({ step_index: 4 }, legacy),
+          fact: intentFact(intent),
+          legacyFact: intentFact(undefined),
+          nullFact: intentFact(null),
+        }));
+        """
+    )
+
+    assert result["matching"] == {
+        "destination": {"kind": "frontier", "x": 57, "y": 11},
+        "attack_target": {"x": 56, "y": 10},
+    }
+    assert result["newerObservation"] is None
+    assert result["noStep"] is None
+    # A step stored before intents existed has none; nothing is inferred.
+    assert result["legacy"] is None
+    assert result["legacyFact"] == result["nullFact"]
+    assert "(" not in result["legacyFact"]["text"]
+    assert "(57, 11)" in result["fact"]["text"]
+    assert "(56, 10)" in result["fact"]["text"]

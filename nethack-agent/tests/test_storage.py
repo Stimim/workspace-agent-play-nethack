@@ -6,10 +6,14 @@ import pytest
 
 from nethack_agent.contracts import ContractError
 from nethack_agent.decision import (
+    ActionIntent,
     ActionSelection,
     ActionSelectionSource,
     DecisionMetrics,
+    DestinationKind,
     Goal,
+    IntentDestination,
+    MapCell,
     RunOutcome,
     RunState,
     Skill,
@@ -68,6 +72,9 @@ def event_fixtures(tmp_path: Path):  # type: ignore[no-untyped-def]
             None,
             action.index,
             "Explore toward unexplored space.",
+            ActionIntent(
+                IntentDestination(DestinationKind.FRONTIER, 78, 20), MapCell(4, 2)
+            ),
         )
         return (
             RunStartedPayload(
@@ -176,6 +183,75 @@ def test_typed_event_payload_rejects_semantically_inconsistent_data(
     unexplained["selection"]["skill_selection"] = "model"  # type: ignore[index]
     with pytest.raises(ContractError, match="only after exploration is stuck"):
         StepPayload.from_json(unexplained)
+
+
+def test_step_intent_is_optional_for_legacy_steps(tmp_path: Path) -> None:
+    step = event_fixtures(tmp_path)[3]
+    assert isinstance(step, StepPayload)
+    serialized = step.to_json()
+    assert serialized["selection"]["intent"] == {  # type: ignore[index]
+        "destination": {"kind": "frontier", "x": 78, "y": 20},
+        "attack_target": {"x": 4, "y": 2},
+    }
+    assert StepPayload.from_json(json.loads(json.dumps(serialized))) == step
+
+    # Steps persisted before intents existed have no field: no intent is known
+    # and none is invented. Absent and null read the same way.
+    legacy = step.to_json()
+    del legacy["selection"]["intent"]  # type: ignore[attr-defined]
+    restored = StepPayload.from_json(legacy)
+    assert restored.selection.intent is None
+    assert restored.to_json()["selection"]["intent"] is None  # type: ignore[index]
+    assert StepPayload.from_json(restored.to_json()) == restored
+
+
+_DESTINATION = {"kind": "frontier", "x": 3, "y": 1}
+
+
+def _destination(**changes: object) -> dict[str, object]:
+    return {"destination": {**_DESTINATION, **changes}, "attack_target": None}
+
+
+def _attack(x: object, y: object) -> dict[str, object]:
+    return {"destination": None, "attack_target": {"x": x, "y": y}}
+
+
+@pytest.mark.parametrize(
+    ("key", "value", "match"),
+    [
+        (
+            "intent",
+            {"destination": None, "attack_target": None},
+            "requires a destination or an attack target",
+        ),
+        ("intent", {"destination": _DESTINATION}, r"missing \['attack_target'\]"),
+        ("intent", {**_destination(), "x": 1}, r"unexpected \['x'\]"),
+        ("intent", _destination(kind="stairs"), "destination kind must be one of"),
+        (
+            "intent",
+            {"destination": {"x": 3, "y": 1}, "attack_target": None},
+            r"missing \['kind'\]",
+        ),
+        ("intent", _attack(-1, 1), "attack_target x must be at least 0"),
+        ("intent", _attack(True, 1), "attack_target x must be an integer"),
+        ("intent", _destination(y="1"), "destination y must be an integer"),
+        ("intent", [3, 1], "intent must be an object"),
+        ("intent", _destination(x=79), "outside the observation map"),
+        ("intent", _attack(0, 21), "outside the observation map"),
+        ("target", _DESTINATION, r"unexpected \['target'\]"),
+        ("source", "deterministic_prompt", "only deterministic skill selections"),
+    ],
+)
+def test_malformed_step_intent_is_rejected(
+    tmp_path: Path, key: str, value: object, match: str
+) -> None:
+    step = event_fixtures(tmp_path)[3]
+    assert isinstance(step, StepPayload)
+    serialized = step.to_json()
+    serialized["selection"][key] = value  # type: ignore[index]
+
+    with pytest.raises(ContractError, match=match):
+        StepPayload.from_json(serialized)
 
 
 def test_unknown_and_corrupt_stored_events_fail_clearly(tmp_path: Path) -> None:

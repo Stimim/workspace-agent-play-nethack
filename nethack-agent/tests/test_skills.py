@@ -7,7 +7,11 @@ from nle import nethack
 from nethack_agent.coordinator import AgentCoordinator
 from nethack_agent.decision import (
     FORBIDDEN_ACTION_NAMES,
+    ActionIntent,
     ActionSelectionSource,
+    DestinationKind,
+    IntentDestination,
+    MapCell,
     RunOutcome,
     Skill,
     StuckReason,
@@ -149,12 +153,15 @@ def test_staircase_skill_routes_multiple_steps_then_waits_on_target(
     template: ProjectedObservation, actions: dict[str, LegalAction]
 ) -> None:
     skill = StaircaseNavigationSkill()
+    stairs = ActionIntent(IntentDestination(DestinationKind.DOWNSTAIRS, 5, 1), None)
     names = []
     for row in ("|.@..>|", "|..@.>|", "|...@>|"):
         memory = remembered(template, ("-------", row, "-------"))
         proposal = skill.select_action(memory, actions)
         assert proposal is not None
         names.append(action_name(actions, proposal.action_index))
+        # The intent names the remembered `>`, not the cell stepped into.
+        assert proposal.intent == stairs
     # Memory keeps the `>` the hero now hides.
     memory = remembered(
         template,
@@ -170,6 +177,37 @@ def test_staircase_skill_routes_multiple_steps_then_waits_on_target(
     ]
     assert on_stairs is not None
     assert action_name(actions, on_stairs.action_index) == "MiscDirection.WAIT"
+    assert on_stairs.intent == stairs
+
+
+def test_staircase_defense_keeps_the_chosen_downstairs_as_destination(
+    template: ProjectedObservation, actions: dict[str, LegalAction]
+) -> None:
+    memory = remembered(template, ("-------", "|.j...|", "|@...>|", "-------"))
+
+    proposal = StaircaseNavigationSkill().select_action(memory, actions)
+
+    assert proposal is not None
+    assert action_name(actions, proposal.action_index) == "CompassDirection.NE"
+    assert proposal.intent == ActionIntent(
+        IntentDestination(DestinationKind.DOWNSTAIRS, 5, 2), MapCell(2, 1)
+    )
+
+
+def test_exploration_intent_names_the_frontier_route_goal(
+    template: ProjectedObservation, actions: dict[str, LegalAction]
+) -> None:
+    memory = remembered(template, (" --------- ", " |@......D ", " --------- "))
+
+    result = ExploreLevelSkill().select_action(memory, actions)
+
+    assert result.action is not None
+    assert action_name(actions, result.action.action_index) == "CompassDirection.E"
+    assert result.action.record.target == (3, 1)
+    # Seven steps away: the doorway facing never-observed space.
+    assert result.action.intent == ActionIntent(
+        IntentDestination(DestinationKind.FRONTIER, 9, 1), None
+    )
 
 
 def test_staircase_skill_routes_around_monsters_and_boulders(
@@ -291,9 +329,11 @@ def test_locked_door_is_avoided_then_kicked_when_it_is_the_only_way(
 
     kick = skill.select_action(memory, actions)
 
+    door = ActionIntent(IntentDestination(DestinationKind.LOCKED_DOOR, 5, 2), None)
     assert (5, 2) in memory.locked_doors
     assert kick.action is not None
     assert action_name(actions, kick.action.action_index) == "Command.KICK"
+    assert kick.action.intent == door
     memory.record(kick.action.record)
     prompt = sketch(
         template,
@@ -306,6 +346,7 @@ def test_locked_door_is_avoided_then_kicked_when_it_is_the_only_way(
     direction = skill.continue_kick(prompt, memory, actions)
     assert direction is not None
     assert action_name(actions, direction.action_index) == "CompassDirection.E"
+    assert direction.intent == door
     memory.record(direction.record)
     memory.observe(
         sketch(
@@ -342,10 +383,15 @@ def test_exploration_attacks_adjacent_hostiles_but_not_passive_or_pets(
     assert hostile.action is not None
     assert action_name(actions, hostile.action.action_index) == "CompassDirection.E"
     assert hostile.action.record.target_glyph == _GLYPHS["j"]
+    # Exploration fights before choosing a frontier, so there is no destination.
+    assert hostile.action.intent == ActionIntent(None, MapCell(4, 2))
     # The floating eye and the kitten are left alone; exploration continues.
     assert quiet.action is not None
     assert quiet.action.record.target_glyph is None
     assert quiet.action.record.goal == (5, 2)
+    assert quiet.action.intent == ActionIntent(
+        IntentDestination(DestinationKind.FRONTIER, 5, 2), None
+    )
 
 
 def test_object_in_dark_corridor_is_passable_and_door_under_hero_is_open(
@@ -381,6 +427,10 @@ def test_search_rotates_spots_then_reports_exhaustion(
         if result.action is None:
             break
         record = result.action.record
+        assert record.search_spot is not None
+        assert result.action.intent == ActionIntent(
+            IntentDestination(DestinationKind.SEARCH_SPOT, *record.search_spot), None
+        )
         if record.kind is ActionKind.SEARCH:
             searches += 1
             spots.add(record.origin)

@@ -1,7 +1,7 @@
 import { ApiError, EventStream, findLastSequence, request, runPath } from "./client.js";
 import { appendEventLog, resetAgentLogs } from "./event-log.js";
 import {
-
+  observationIntent,
   promptText,
   renderInventory,
   renderMap,
@@ -21,6 +21,7 @@ import {
 const ATTACH_HISTORY_EVENTS = 50;
 const STATUS_REFRESH_DELAY_MS = 250;
 const FINISHED_STATES = new Set(["terminal", "stopped", "error"]);
+
 
 
 function emptyTotals() {
@@ -307,7 +308,7 @@ function render() {
   setText(view.streamState, state.streamState);
 
   const observation = state.observation;
-  renderMap(view.map, observation);
+  renderMap(view.map, observation, observationIntent(observation, state.latestStep));
   setText(view.mapStep, observation ? `step ${observation.step_index}` : "");
   view.message.textContent = observation?.message || "\u00a0";
   view.prompt.textContent = promptText(observation?.prompt);
