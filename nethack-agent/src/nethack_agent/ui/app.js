@@ -1,55 +1,27 @@
 import { ApiError, EventStream, findLastSequence, request, runPath } from "./client.js";
+import { appendEventLog, resetAgentLogs } from "./event-log.js";
 import {
-  eventSummary,
+
   promptText,
-  renderDecision,
   renderInventory,
   renderMap,
   renderMetrics,
   renderStats,
+  setExplainedText,
   setText,
 } from "./render.js";
+import {
+  element,
+  initializeView,
+  repositionShownTooltip,
+  view,
+} from "./view.js";
 
 // Attaching to an existing run replays only this many trailing events.
 const ATTACH_HISTORY_EVENTS = 50;
-const MAX_EVENT_LOG_ENTRIES = 300;
 const STATUS_REFRESH_DELAY_MS = 250;
 const FINISHED_STATES = new Set(["terminal", "stopped", "error"]);
 
-const element = (id) => document.getElementById(id);
-const view = {
-  seed: element("seed"),
-  maxSteps: element("max-steps"),
-  autoStart: element("auto-start"),
-  start: element("start"),
-  attachId: element("attach-id"),
-  attach: element("attach"),
-  pause: element("pause"),
-  resume: element("resume"),
-  step: element("step"),
-  stop: element("stop"),
-  error: element("error"),
-  runId: element("run-id"),
-  runState: element("run-state"),
-  runOutcome: element("run-outcome"),
-  runSeed: element("run-seed"),
-  runModel: element("run-model"),
-  runGoal: element("run-goal"),
-  runSkill: element("run-skill"),
-  runError: element("run-error"),
-  streamState: element("stream-state"),
-  map: element("map"),
-  mapStep: element("map-step"),
-  message: element("message"),
-  prompt: element("prompt"),
-  stats: element("stats"),
-  inventory: element("inventory"),
-  decision: element("decision"),
-  decisionStep: element("decision-step"),
-  candidates: element("candidates"),
-  metrics: element("metrics"),
-  events: element("events"),
-};
 
 function emptyTotals() {
   return { steps: 0, modelCalls: 0, promptTokens: 0, outputTokens: 0, latencyMs: 0, repairs: 0 };
@@ -73,6 +45,7 @@ const state = {
   renderQueued: false,
   statusTimer: null,
 };
+
 
 function showError(error) {
   view.error.textContent = error instanceof Error ? error.message : String(error);
@@ -168,27 +141,14 @@ function handleEvent(generation, event) {
     default:
       break;
   }
-  appendEventLog(event);
+  appendEventLog(view, event, state.actionNames);
   if (event.kind !== "step" || payload.outcome) {
     scheduleStatusRefresh(generation);
   }
   scheduleRender();
 }
 
-function appendEventLog(event) {
-  const log = view.events;
-  const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 8;
-  const entry = document.createElement("li");
-  entry.className = `kind-${event.kind}`;
-  entry.textContent = eventSummary(event);
-  log.append(entry);
-  while (log.childElementCount > MAX_EVENT_LOG_ENTRIES) {
-    log.firstElementChild.remove();
-  }
-  if (atBottom) {
-    log.scrollTop = log.scrollHeight;
-  }
-}
+
 
 function scheduleStatusRefresh(generation) {
   clearTimeout(state.statusTimer);
@@ -241,7 +201,7 @@ async function attach(runId, { initialStatus = null } = {}) {
     totals: emptyTotals(),
     streamState: "loading",
   });
-  view.events.replaceChildren();
+  resetAgentLogs(view);
   view.attachId.value = runId;
   history.replaceState(null, "", `#run=${encodeURIComponent(runId)}`);
   scheduleRender();
@@ -341,8 +301,8 @@ function render() {
   setText(view.runOutcome, run?.outcome);
   setText(view.runSeed, run ? `${run.suite_seed} (max ${run.max_episode_steps} steps)` : null);
   setText(view.runModel, run ? `${run.model}; policy ${run.policy_version}` : null);
-  setText(view.runGoal, state.goal);
-  setText(view.runSkill, state.skill);
+  setExplainedText(view.runGoal, state.goal);
+  setExplainedText(view.runSkill, state.skill);
   setText(view.runError, state.lastError);
   setText(view.streamState, state.streamState);
 
@@ -353,8 +313,6 @@ function render() {
   view.prompt.textContent = promptText(observation?.prompt);
   renderStats(view.stats, observation?.player);
   renderInventory(view.inventory, observation?.inventory);
-  renderDecision(view.decision, view.candidates, state.latestStep, state.actionNames);
-  setText(view.decisionStep, state.latestStep ? `event #${state.latestStep.sequence}` : "");
   renderMetrics(view.metrics, state.latestStep, state.totals);
 
   const live = state.controllable && !state.busy && runState !== null && !FINISHED_STATES.has(runState);
@@ -364,7 +322,9 @@ function render() {
   view.stop.disabled = !live;
   view.start.disabled = state.busy;
   view.attach.disabled = state.busy;
+  repositionShownTooltip();
 }
+
 
 element("start-form").addEventListener("submit", (event) => {
   event.preventDefault();
@@ -381,7 +341,7 @@ for (const command of ["pause", "resume", "step", "stop"]) {
   view[command].addEventListener("click", () => runAction(() => control(command)));
 }
 view.error.addEventListener("click", clearError);
-
+initializeView();
 const initialRun = new URLSearchParams(location.hash.slice(1)).get("run");
 if (initialRun) {
   runAction(() => attach(initialRun));

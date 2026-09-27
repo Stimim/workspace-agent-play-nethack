@@ -7,7 +7,12 @@ from nle import nethack
 
 from nethack_agent.contracts import ContractError
 from nethack_agent.environment import NleEnvironment, ScenarioConfig
-from nethack_agent.observation import ObservationProjector, ProjectedObservation
+from nethack_agent.observation import (
+    BucStatus,
+    ObservationProjector,
+    ProjectedObservation,
+    _buc_status,
+)
 
 
 def test_projection_copies_compact_public_state(tmp_path: Path) -> None:
@@ -32,6 +37,36 @@ def test_projection_copies_compact_public_state(tmp_path: Path) -> None:
         assert "yes_no" not in serialized["prompt"]
         assert serialized["map"]["glyph_rows"]
         assert ProjectedObservation.from_json(serialized) == projected
+        assert [item.buc for item in projected.inventory] == [
+            BucStatus.UNKNOWN,
+            BucStatus.UNKNOWN,
+            BucStatus.UNCURSED,
+            BucStatus.UNCURSED,
+        ]
+        assert [item["buc"] for item in serialized["inventory"]] == [
+            "unknown",
+            "unknown",
+            "uncursed",
+            "uncursed",
+        ]
+
+
+@pytest.mark.parametrize(
+    ("description", "expected"),
+    [
+        ("a blessed potion of healing", BucStatus.BLESSED),
+        ("an uncursed food ration", BucStatus.UNCURSED),
+        ("2 cursed darts", BucStatus.CURSED),
+        ("a +1 long sword", BucStatus.UNKNOWN),
+        ("a scroll labeled CURSED", BucStatus.UNKNOWN),
+        ("a wand called cursed hope", BucStatus.UNKNOWN),
+        ("a cursed-looking potion", BucStatus.UNKNOWN),
+    ],
+)
+def test_buc_uses_only_an_exact_leading_inventory_adjective(
+    description: str, expected: BucStatus
+) -> None:
+    assert _buc_status(description) is expected
 
 
 def test_nle_map_glyph_is_one_display_category_not_layered_terrain(
@@ -54,6 +89,7 @@ def test_nle_map_glyph_is_one_display_category_not_layered_terrain(
     assert not nethack.glyph_is_cmap(object_glyph)
     # Each observed cell is one scalar glyph category. NLE has no public
     # parallel terrain layer from which a stair under the object can be read.
+    assert raw.glyphs.shape == raw.chars.shape == (21, 79)
 
 
 def test_projection_survives_next_nle_step_and_reports_map_delta(
@@ -112,4 +148,41 @@ def test_observation_contract_rejects_inconsistent_map_shapes(tmp_path: Path) ->
     serialized["map"]["glyph_rows"][0].pop()
 
     with pytest.raises(ContractError, match="shape does not match"):
+        ProjectedObservation.from_json(serialized)
+
+
+def _stepped_observation(tmp_path: Path) -> ProjectedObservation:
+    projector = ObservationProjector()
+    with NleEnvironment(
+        ScenarioConfig(seed=6, artifact_directory=tmp_path, max_episode_steps=20)
+    ) as environment:
+        projector.project(environment.reset(), step_index=0)
+        transition = environment.step(2)  # CompassDirection.E
+        return projector.project(
+            transition.observation, step_index=transition.step_index
+        )
+
+
+def test_observation_stored_before_buc_evidence_reads_as_unknown(
+    tmp_path: Path,
+) -> None:
+    current = _stepped_observation(tmp_path)
+    legacy = current.to_json()
+    for item in legacy["inventory"]:
+        del item["buc"]
+
+    restored = ProjectedObservation.from_json(legacy)
+
+    assert restored.inventory
+    assert all(item.buc is BucStatus.UNKNOWN for item in restored.inventory)
+    serialized = restored.to_json()
+    assert all(item["buc"] == "unknown" for item in serialized["inventory"])
+    assert ProjectedObservation.from_json(serialized) == restored
+
+
+def test_observation_contract_rejects_invalid_buc_status(tmp_path: Path) -> None:
+    serialized = _stepped_observation(tmp_path).to_json()
+    serialized["inventory"][0]["buc"] = "probably"
+
+    with pytest.raises(ContractError, match="inventory buc must be one of"):
         ProjectedObservation.from_json(serialized)

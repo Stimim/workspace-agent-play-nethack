@@ -8,7 +8,7 @@
   <script type="module" src="ui/app.js"></script>
 </head>
 <body>
-  <header class="bar">
+  <header class="control-panel">
     <h1>NetHack Agent</h1>
     <form id="start-form" class="controls" autocomplete="off">
       <label>Seed <input id="seed" name="seed" type="number" min="1" step="1" value="6" required></label>
@@ -25,63 +25,110 @@
       <button id="resume" type="button" disabled>Resume</button>
       <button id="step" type="button" disabled>Step</button>
       <button id="stop" type="button" disabled>Stop</button>
+      <button id="agent-toggle" class="agent-toggle" type="button"
+              aria-controls="agent-column" aria-expanded="false">Agent info</button>
     </div>
   </header>
 
   <p id="error" class="error" role="alert" hidden></p>
 
-  <main class="layout">
-    <section class="panel run" aria-labelledby="run-heading">
-      <h2 id="run-heading">Run</h2>
-      <dl class="facts">
-        <dt>Run id</dt><dd id="run-id">none</dd>
-        <dt>State</dt><dd id="run-state">-</dd>
-        <dt>Outcome</dt><dd id="run-outcome">-</dd>
-        <dt>Seed</dt><dd id="run-seed">-</dd>
-        <dt>Model</dt><dd id="run-model">-</dd>
-        <dt>Goal</dt><dd id="run-goal">-</dd>
-        <dt>Skill</dt><dd id="run-skill">-</dd>
-        <dt>Stream</dt><dd id="stream-state">idle</dd>
-        <dt>Last error</dt><dd id="run-error" class="wrap">-</dd>
-      </dl>
-    </section>
+  <main class="workspace">
+    <div class="primary-column">
+      <section class="panel" aria-labelledby="run-heading">
+        <h2 id="run-heading">Run information</h2>
+        <dl class="facts">
+          <dt data-help-key="Run id">Run id</dt><dd id="run-id">none</dd>
+          <dt data-help-key="State">State</dt><dd id="run-state">-</dd>
+          <dt data-help-key="Outcome">Outcome</dt><dd id="run-outcome">-</dd>
+          <dt data-help-key="Seed">Seed</dt><dd id="run-seed">-</dd>
+          <dt data-help-key="Model">Model</dt><dd id="run-model">-</dd>
+          <dt data-help-key="Goal">Goal</dt><dd id="run-goal">-</dd>
+          <dt data-help-key="Skill">Skill</dt><dd id="run-skill">-</dd>
+          <dt data-help-key="Stream">Stream</dt><dd id="stream-state">idle</dd>
+          <dt data-help-key="Last error">Last error</dt><dd id="run-error" class="wrap">-</dd>
+        </dl>
+      </section>
 
-    <section class="panel map-panel" aria-labelledby="map-heading">
-      <h2 id="map-heading">Map <span id="map-step" class="muted"></span></h2>
-      <p id="message" class="message">&nbsp;</p>
-      <pre id="map" class="map" aria-label="NetHack map"></pre>
-      <p id="prompt" class="muted">Prompt: -</p>
-    </section>
+      <section class="panel map-panel" aria-labelledby="map-heading">
+        <h2 id="map-heading">Map <span id="map-step" class="muted"></span></h2>
+        <p id="message" class="message">&nbsp;</p>
+        <pre id="map" class="map" aria-label="Fixed 79 by 21 NetHack map"></pre>
+        <p id="prompt" class="muted">Prompt: -</p>
+      </section>
 
-    <section class="panel" aria-labelledby="stats-heading">
-      <h2 id="stats-heading">Player</h2>
-      <dl id="stats" class="facts"></dl>
-    </section>
+      <section class="panel" aria-labelledby="stats-heading">
+        <h2 id="stats-heading">Player state</h2>
+        <dl id="stats" class="stats-grid"></dl>
+      </section>
+    </div>
 
-    <section class="panel" aria-labelledby="inventory-heading">
+    <section class="panel inventory-column" aria-labelledby="inventory-heading">
       <h2 id="inventory-heading">Inventory</h2>
+      <ul class="inventory-buc-legend" aria-label="Inventory BUC status legend">
+        <li><span class="buc-marker buc-blessed" aria-hidden="true">[B]</span>
+          <span data-help-key="Blessed">Blessed</span></li>
+        <li><span class="buc-marker buc-uncursed" aria-hidden="true">[U]</span>
+          <span data-help-key="Uncursed">Uncursed</span></li>
+        <li><span class="buc-marker buc-cursed" aria-hidden="true">[C]</span>
+          <span data-help-key="Cursed">Cursed</span></li>
+        <li><span class="buc-marker buc-unknown" aria-hidden="true">[?]</span>
+          <span data-help-key="Unknown">Unknown</span></li>
+      </ul>
       <ul id="inventory" class="inventory"></ul>
     </section>
 
-    <section class="panel decision" aria-labelledby="decision-heading">
-      <h2 id="decision-heading">Latest decision <span id="decision-step" class="muted"></span></h2>
-      <dl id="decision" class="facts"></dl>
-      <table class="candidates">
-        <caption>Candidates</caption>
-        <thead><tr><th>Action</th><th>Score</th><th>Reason</th></tr></thead>
-        <tbody id="candidates"></tbody>
-      </table>
-    </section>
+    <aside id="agent-column" class="agent-column" aria-labelledby="agent-heading">
+      <div class="agent-column-header">
+        <h2 id="agent-heading">Agent information</h2>
+        <button id="agent-close" class="agent-close" type="button">Close</button>
+      </div>
 
-    <section class="panel" aria-labelledby="metrics-heading">
-      <h2 id="metrics-heading">Metrics</h2>
-      <dl id="metrics" class="facts"></dl>
-    </section>
+      <section class="panel metrics-card" aria-labelledby="metrics-heading">
+        <h2 id="metrics-heading">Metrics</h2>
+        <dl id="metrics" class="facts"></dl>
+      </section>
 
-    <section class="panel events" aria-labelledby="events-heading">
-      <h2 id="events-heading">Events</h2>
-      <ol id="events" class="event-log"></ol>
-    </section>
+      <section class="panel agent-tabs" aria-label="Agent event information">
+        <div class="tab-list" role="tablist" aria-label="Agent information views">
+          <button id="tab-events" class="tab-button" type="button" role="tab"
+                  aria-selected="true" aria-controls="panel-events" tabindex="0">Events</button>
+          <button id="tab-tools" class="tab-button" type="button" role="tab"
+                  aria-selected="false" aria-controls="panel-tools" tabindex="-1">Tools</button>
+          <button id="tab-verbose" class="tab-button" type="button" role="tab"
+                  aria-selected="false" aria-controls="panel-verbose" tabindex="-1">Verbose</button>
+        </div>
+
+        <section id="panel-events" class="tab-panel" role="tabpanel"
+                 aria-labelledby="tab-events">
+          <label class="auto-scroll"><input id="events-auto-scroll" type="checkbox" checked>
+            Auto-scroll to latest event</label>
+          <ol id="events" class="agent-log tab-body" aria-live="polite">
+            <li class="empty-state">No events received.</li>
+          </ol>
+        </section>
+
+        <section id="panel-tools" class="tab-panel" role="tabpanel"
+                 aria-labelledby="tab-tools" hidden>
+          <label class="auto-scroll"><input id="tools-auto-scroll" type="checkbox" checked>
+            Auto-scroll to latest execution</label>
+          <ol id="tools" class="agent-log tab-body" aria-live="polite">
+            <li class="empty-state">No deterministic execution evidenced by an event.</li>
+          </ol>
+        </section>
+
+        <section id="panel-verbose" class="tab-panel" role="tabpanel"
+                 aria-labelledby="tab-verbose" hidden>
+          <label class="auto-scroll"><input id="verbose-auto-scroll" type="checkbox" checked>
+            Auto-scroll to latest detail</label>
+          <ol id="verbose" class="agent-log verbose-log tab-body" aria-live="polite">
+            <li class="empty-state">No unstructured details received.</li>
+          </ol>
+        </section>
+      </section>
+    </aside>
+
+    <button id="agent-scrim" class="agent-scrim" type="button"
+            aria-label="Close agent information" tabindex="-1" hidden></button>
   </main>
 </body>
 </html>

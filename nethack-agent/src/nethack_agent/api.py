@@ -29,7 +29,9 @@ _UI_ASSETS: Final = {
     "app.css": "text/css; charset=utf-8",
     "app.js": "text/javascript; charset=utf-8",
     "client.js": "text/javascript; charset=utf-8",
+    "event-log.js": "text/javascript; charset=utf-8",
     "render.js": "text/javascript; charset=utf-8",
+    "view.js": "text/javascript; charset=utf-8",
 }
 UI_CONTENT_SECURITY_POLICY: Final = (
     "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; "

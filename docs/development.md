@@ -195,13 +195,38 @@ and WebSocket endpoints are listed in `ARCHITECTURE.md`.
 
 While `serve` is running, open <http://127.0.0.1:8000/> (or the chosen loopback
 host and port). The page is served by the control service itself; it needs no
-build step, extra dependency, or network access. Use the header to start a run
-(seed, max steps, auto start) or attach to an existing run id, then pause,
-resume, single-step, or stop it. `#run=RUN_ID` in the URL reattaches after a
-reload. Starting while another run is active shows the service's 409 detail;
-stop the active run first. Runs from before a service restart are shown
-read-only.
+build step, extra dependency, or network access. The full-width control panel
+starts a run (seed, max steps, auto start), attaches to an existing run id, and
+pauses, resumes, single-steps, or stops the attached run. `#run=RUN_ID` in the
+URL reattaches after a reload. Starting while another run is active shows the
+service's 409 detail; stop the active run first. Runs from before a service
+restart are shown read-only.
 
+The workspace keeps the run/map/player and inventory columns at fixed widths;
+agent information consumes the remaining width. At narrower viewport widths,
+use **Agent info** to open that third column as an overlay instead of squeezing
+the map or inventory. The breakpoint in `app.css` and `NARROW_AGENT_QUERY` in
+`view.js` must change together. The overlay closes with its Close button, the
+dimmed background, or Escape. Its Events, Tools, and Verbose tabs support click
+and arrow-key navigation. Every tab has an independent auto-scroll checkbox.
+Events and evidenced deterministic-execution rows expand on click; the newest
+step decision is expanded by default. Tools lists only step events that record
+`deterministic_skill` or `deterministic_prompt` as their selection source and
+an executed action. Verbose shows game messages and concise trace text, not raw
+model responses; each summary previews its first text field. Focus or hover
+dotted field and goal/skill labels for their accessible explanations; Escape
+dismisses a shown tooltip, and a second Escape closes the narrow overlay.
+
+Player state is a compact semantic description-list grid. It places three
+labeled stat cells per row at the normal primary-column width, while
+auto-fitting to two or one column if the container is constrained; Conditions
+spans the full grid. Every field and focusable field tooltip remains available,
+and abilities use the full Strength, Dexterity, Constitution, Intelligence,
+Wisdom, and Charisma labels. Each inventory item begins with a visible `[B]`,
+`[U]`, `[C]`, or `[?]` marker derived from the typed observation `buc` field,
+with a distinct class and focusable tooltip; the panel repeats those markers in
+a textual legend. `unknown` means no explicit leading beatitude adjective was
+present, including for records written before this evidence field existed.
 For a no-Ollama UI check, serve with the scripted development model on a
 scratch data directory:
 
@@ -211,11 +236,15 @@ uv run nethack-agent serve --development-scripted-model \
 ```
 
 Assets live in `src/nethack_agent/ui/` and are listed in the `_UI_ASSETS`
-allowlist in `api.py`; add any new file there. The Content-Security-Policy
-permits only same-origin scripts, styles, images, and connections, so do not
-add inline scripts, inline `style`/`on*` attributes, or external URLs, and
-insert model or game text with `textContent`. `tests/test_ui.py` enforces the
-headers, the served module graph, and these asset rules.
+allowlist in `api.py`; add any new file there. `app.js` is the run controller,
+`view.js` owns DOM/panel/tab/focus/tooltip behavior, `event-log.js` owns the
+bounded logs, `render.js` owns rendering, and `client.js` owns transport. The
+Content-Security-Policy permits only same-origin scripts, styles, images, and
+connections, so do not add inline scripts, inline `style`/`on*` attributes, or
+external URLs, and insert model or game text with `textContent`.
+`tests/test_ui.py` enforces the headers and full served module graph, checks
+these asset rules, and executes renderer classification, ability labels, and
+inventory BUC cues with Node.js when Node is available.
 
 ### Owned headless scenarios
 

@@ -5,20 +5,189 @@ const HUNGER = ["satiated", "not hungry", "hungry", "weak", "fainting", "fainted
 const ENCUMBRANCE = ["unencumbered", "burdened", "stressed", "strained", "overtaxed", "overloaded"];
 const ALIGNMENT = new Map([[-1, "chaotic"], [0, "neutral"], [1, "lawful"]]);
 
+const FIELD_HELP = Object.freeze({
+  "Run id": "The stable identifier used by the API, event stream, and URL fragment.",
+  State: "The persisted run lifecycle state. Control availability also depends on whether this service owns the run.",
+  Outcome: "The terminal task result, when the run has ended.",
+  Seed: "The suite seed and configured maximum episode step count.",
+  Model: "The local model identity and fixed policy version recorded for this run.",
+  Goal: "The typed objective from the Goal enum in decision.py.",
+  Skill: "The typed executing skill from the Skill enum in decision.py.",
+  Stream: "The browser's WebSocket connection state, including reconnects and normal closure.",
+  "Last error": "The latest coordinator or persisted run error.",
+  HP: "Current and maximum hit points.",
+  Pw: "Current and maximum magical energy.",
+  AC: "Armor class; lower values provide better protection in NetHack.",
+  Level: "Experience level and accumulated experience points.",
+  Depth: "Displayed depth plus the dungeon and level identifiers reported by NLE.",
+  Position: "Zero-based map coordinates from the projected player state.",
+  Turn: "The NetHack turn counter.",
+  Gold: "Gold currently carried.",
+  Score: "The score reported by NLE.",
+  Hunger: "The decoded NetHack hunger state and its numeric value.",
+  Encumbrance: "The decoded carrying-load state and its numeric value.",
+  Alignment: "The player's alignment.",
+  Strength: "Strength, including NetHack's 18/xx exceptional-strength notation.",
+  Dexterity: "Dexterity.",
+  Constitution: "Constitution.",
+  Intelligence: "Intelligence.",
+  Wisdom: "Wisdom.",
+  Charisma: "Charisma.",
+  Blessed: "B: explicitly described by NetHack as blessed.",
+  Uncursed: "U: explicitly described by NetHack as uncursed.",
+  Cursed: "C: explicitly described by NetHack as cursed.",
+  Unknown: "?: no explicit blessed, uncursed, or cursed adjective is present in the NLE inventory description.",
+  Conditions: "Active status conditions projected from NLE.",
+  Source: "The typed ActionSelectionSource that produced the executed action.",
+  "Skill selected by": "The typed SkillSelectionSource: the arbiter or a stuck-state model consultation.",
+  Action: "The executed legal action, stable action index, and NetHack command value.",
+  Rationale: "The persisted concise rationale. This is an auditable decision trace, not hidden chain-of-thought.",
+  Stuck: "The typed reason deterministic exploration could not propose an action.",
+  "Skill choice": "The typed skill returned by the model consultation.",
+  "Skill rationale": "The concise rationale returned with the model skill choice.",
+  "Model rationale": "The concise rationale returned with a model fallback action.",
+  Reward: "The reward returned by NLE for this executed step.",
+  Ended: "Whether this step terminated or truncated the episode.",
+  "Skill model": "Inference metrics for a skill consultation on the latest step.",
+  "Action model": "Inference metrics for a fallback-action consultation on the latest step.",
+  "Steps seen": "Step events received by this browser attachment.",
+  "Model calls": "Skill and action model calls represented by received step events.",
+  Tokens: "Prompt and output token totals represented by received events.",
+  "Mean latency": "Mean reported model latency across received model calls.",
+  Repairs: "Received model calls that used the one allowed schema-repair attempt.",
+  "Observation step": "The projected observation's one-based action count, or zero immediately after reset.",
+  "Legal actions": "The number of indexed actions exposed by the environment for this run.",
+  Transition: "The lifecycle transition represented by this event.",
+  "Error phase": "The typed phase in which the agent error occurred.",
+  Error: "The persisted error message associated with the event.",
+  "Decision failure": "The bounded model-decision failure recorded with an agent error.",
+  "Failed attempts": "The number of failed initial or schema-repair model attempts.",
+  "Previous state": "The lifecycle state immediately before the run was stopped.",
+  "Event kind": "The discriminated event variant from the typed event contract.",
+  Evidence: "The exact typed event field that qualifies this row as deterministic execution.",
+});
+
+const VALUE_HELP = Object.freeze({
+  stand_on_downstairs: "Goal.STAND_ON_DOWNSTAIRS: stand on a downstairs tile (>) without issuing the descend command.",
+  staircase_navigation: "Skill.STAIRCASE_NAVIGATION: route to the nearest remembered reachable downstairs, handling an adjacent hostile first.",
+  explore_level: "Skill.EXPLORE_LEVEL: explore unseen space, handle doors and adjacent hostiles, and search for hidden passages.",
+  arbiter: "The deterministic arbiter selected the skill for this step.",
+  model: "The model selected the skill after deterministic exploration reported that it was stuck.",
+  deterministic_skill: "A deterministic skill selected this action.",
+  deterministic_prompt: "The deterministic safe-prompt handler selected this response.",
+  model_fallback: "The local model selected this action for an unhandled prompt or stuck fallback.",
+});
+
+const DETERMINISTIC_SOURCES = new Set(["deterministic_skill", "deterministic_prompt"]);
+let tooltipSequence = 0;
+// Live renders run on every event. Unchanged content keeps its DOM so a hovered
+// or keyboard-focused tooltip is not replaced; changed content restores focus
+// to the trigger at the same position.
+const renderedContent = new WeakMap();
+
+function replaceExplained(element, signature, build) {
+  if (renderedContent.get(element) === signature) {
+    return;
+  }
+  const triggers = Array.from(element.querySelectorAll(".tooltip-trigger"));
+  const focused = triggers.indexOf(document.activeElement);
+  build();
+  renderedContent.set(element, signature);
+  if (focused >= 0) {
+    element.querySelectorAll(".tooltip-trigger")[focused]?.focus();
+  }
+}
+
+function displayed(value) {
+  return value === null || value === undefined || value === "" ? "-" : String(value);
+}
+
+function appendTooltip(parent, text, help, markerClass = null) {
+  if (!help) {
+    parent.textContent = text;
+    return;
+  }
+  tooltipSequence += 1;
+  const tooltipId = `tooltip-${tooltipSequence}`;
+  const wrapper = document.createElement("span");
+  wrapper.className = markerClass ? `tooltip ${markerClass}` : "tooltip";
+  const trigger = document.createElement("span");
+  trigger.className = "tooltip-trigger";
+  trigger.tabIndex = 0;
+  trigger.setAttribute("aria-describedby", tooltipId);
+  const tooltip = document.createElement("span");
+  trigger.textContent = text;
+  tooltip.id = tooltipId;
+  tooltip.className = "tooltip-content";
+  tooltip.setAttribute("role", "tooltip");
+  tooltip.textContent = help;
+  wrapper.append(trigger, tooltip);
+  parent.append(wrapper);
+}
+
 export function setText(element, value) {
-  element.textContent = value === null || value === undefined || value === "" ? "-" : String(value);
+  element.textContent = displayed(value);
+}
+
+export function setExplainedText(element, value) {
+  const text = displayed(value);
+  replaceExplained(element, text, () => {
+    element.replaceChildren();
+    appendTooltip(element, text, VALUE_HELP[text]);
+  });
+}
+
+export function installFieldTooltips(root) {
+  for (const element of root.querySelectorAll("[data-help-key]")) {
+    const label = element.dataset.helpKey;
+    element.replaceChildren();
+    appendTooltip(element, label, FIELD_HELP[label]);
+  }
 }
 
 export function setFacts(list, pairs) {
-  const fragment = document.createDocumentFragment();
-  for (const [label, value] of pairs) {
-    const term = document.createElement("dt");
-    term.textContent = label;
-    const description = document.createElement("dd");
-    setText(description, value);
-    fragment.append(term, description);
-  }
-  list.replaceChildren(fragment);
+  const rows = pairs.map(([label, value, options = {}]) => {
+    const text = displayed(value);
+    return [label, text, options.help ?? FIELD_HELP[label], options.valueHelp ?? VALUE_HELP[text]];
+  });
+  replaceExplained(list, JSON.stringify(rows), () => {
+    const fragment = document.createDocumentFragment();
+    for (const [label, text, help, valueHelp] of rows) {
+      const term = document.createElement("dt");
+      appendTooltip(term, label, help);
+      const description = document.createElement("dd");
+      appendTooltip(description, text, valueHelp);
+      fragment.append(term, description);
+    }
+    list.replaceChildren(fragment);
+  });
+}
+
+function setStatCells(list, pairs) {
+  const cells = pairs.map(([label, value, options = {}]) => {
+    const text = displayed(value);
+    return [
+      label,
+      text,
+      options.help ?? FIELD_HELP[label],
+      options.valueHelp ?? VALUE_HELP[text],
+      options.wide ?? false,
+    ];
+  });
+  replaceExplained(list, JSON.stringify(cells), () => {
+    const fragment = document.createDocumentFragment();
+    for (const [label, text, help, valueHelp, wide] of cells) {
+      const cell = document.createElement("div");
+      cell.className = wide ? "stat-cell stat-cell-wide" : "stat-cell";
+      const term = document.createElement("dt");
+      appendTooltip(term, label, help);
+      const description = document.createElement("dd");
+      appendTooltip(description, text, valueHelp);
+      cell.append(term, description);
+      fragment.append(cell);
+    }
+    list.replaceChildren(fragment);
+  });
 }
 
 export function hexToBytes(hex) {
@@ -88,10 +257,10 @@ function labelled(names, value) {
 
 export function renderStats(list, player) {
   if (!player) {
-    list.replaceChildren();
+    setFacts(list, []);
     return;
   }
-  setFacts(list, [
+  setStatCells(list, [
     ["HP", `${player.hit_points} / ${player.max_hit_points}`],
     ["Pw", `${player.energy} / ${player.max_energy}`],
     ["AC", player.armor_class],
@@ -104,17 +273,52 @@ export function renderStats(list, player) {
     ["Hunger", labelled(HUNGER, player.hunger)],
     ["Encumbrance", labelled(ENCUMBRANCE, player.encumbrance)],
     ["Alignment", ALIGNMENT.get(player.alignment) ?? String(player.alignment)],
-    ["St Dx Co", `${strength(player)} ${player.dexterity} ${player.constitution}`],
-    ["In Wi Ch", `${player.intelligence} ${player.wisdom} ${player.charisma}`],
-    ["Conditions", player.conditions.length ? player.conditions.join(", ") : "none"],
+    ["Strength", strength(player)],
+    ["Dexterity", player.dexterity],
+    ["Constitution", player.constitution],
+    ["Intelligence", player.intelligence],
+    ["Wisdom", player.wisdom],
+    ["Charisma", player.charisma],
+    [
+      "Conditions",
+      player.conditions.length ? player.conditions.join(", ") : "none",
+      { wide: true },
+    ],
   ]);
 }
+
+const BUC_MARKERS = Object.freeze({
+  blessed: {
+    text: "[B]",
+    help: "Blessed: the NLE inventory description explicitly starts with the adjective blessed.",
+  },
+  uncursed: {
+    text: "[U]",
+    help: "Uncursed: the NLE inventory description explicitly starts with the adjective uncursed.",
+  },
+  cursed: {
+    text: "[C]",
+    help: "Cursed: the NLE inventory description explicitly starts with the adjective cursed.",
+  },
+  unknown: {
+    text: "[?]",
+    help: "Unknown BUC: the NLE inventory description contains no explicit leading beatitude adjective.",
+  },
+});
+
 
 export function renderInventory(list, inventory) {
   const fragment = document.createDocumentFragment();
   for (const item of inventory ?? []) {
     const entry = document.createElement("li");
-    entry.textContent = `${item.letter} - ${item.description}`;
+    const status = Object.hasOwn(BUC_MARKERS, item.buc) ? item.buc : "unknown";
+    const marker = BUC_MARKERS[status];
+    entry.className = `inventory-item buc-${status}`;
+    appendTooltip(entry, marker.text, marker.help, `buc-marker buc-${status}`);
+    const description = document.createElement("span");
+    description.className = "inventory-description";
+    description.textContent = ` ${item.letter} - ${item.description}`;
+    entry.append(description);
     fragment.append(entry);
   }
   if (!fragment.childNodes.length) {
@@ -161,7 +365,8 @@ export function renderDecision(list, candidateBody, stepEvent, actionNames) {
   const pairs = [
     ["Source", selection.source],
     ["Goal", selection.goal],
-    ["Skill", `${selection.skill} (${selection.skill_selection})`],
+    ["Skill", selection.skill],
+    ["Skill selected by", selection.skill_selection],
     ["Action", `${action.name} (#${action.index}, command ${action.command})`],
     ["Rationale", selection.rationale],
   ];
@@ -169,10 +374,10 @@ export function renderDecision(list, candidateBody, stepEvent, actionNames) {
     pairs.push(["Stuck", selection.stuck_reason]);
   }
   if (payload.skill_decision) {
-    pairs.push([
-      "Skill choice",
-      `${payload.skill_decision.skill}: ${payload.skill_decision.rationale}`,
-    ]);
+    pairs.push(
+      ["Skill choice", payload.skill_decision.skill],
+      ["Skill rationale", payload.skill_decision.rationale],
+    );
   }
   if (payload.action_decision) {
     pairs.push(["Model rationale", payload.action_decision.rationale]);
@@ -251,4 +456,187 @@ export function eventSummary(event) {
     default:
       return prefix;
   }
+}
+
+function candidateTable() {
+  const table = document.createElement("table");
+  table.className = "candidates";
+  const caption = document.createElement("caption");
+  caption.textContent = "Model fallback candidates";
+  const head = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  for (const label of ["Action", "Score", "Reason"]) {
+    const cell = document.createElement("th");
+    cell.scope = "col";
+    cell.textContent = label;
+    headRow.append(cell);
+  }
+  head.append(headRow);
+  const body = document.createElement("tbody");
+  table.append(caption, head, body);
+  return table;
+}
+
+function renderEventDetails(container, event, actionNames) {
+  const payload = event.payload ?? {};
+  if (event.kind === "step") {
+    const facts = document.createElement("dl");
+    facts.className = "facts";
+    const table = candidateTable();
+    renderDecision(facts, table.tBodies[0], event, actionNames);
+    container.append(facts, table);
+    return;
+  }
+
+  const facts = document.createElement("dl");
+  facts.className = "facts";
+  switch (event.kind) {
+    case "run_started":
+      setFacts(facts, [
+        ["Goal", payload.goal],
+        ["Skill", payload.skill],
+        ["Observation step", payload.observation?.step_index],
+        ["Legal actions", payload.legal_actions?.length],
+      ]);
+      break;
+    case "run_resumed":
+      setFacts(facts, [["Transition", "run resumed"]]);
+      break;
+    case "run_paused":
+      setFacts(facts, [["Transition", "run paused"]]);
+      break;
+    case "agent_error":
+      setFacts(facts, [
+        ["Error phase", payload.phase],
+        ["State", payload.state],
+        ["Error", payload.error],
+        ["Decision failure", payload.decision_failure?.message],
+        ["Failed attempts", payload.decision_failure?.attempts?.length],
+      ]);
+      break;
+    case "run_stopped":
+      setFacts(facts, [["Previous state", payload.previous_state]]);
+      break;
+    default:
+      setFacts(facts, [["Event kind", event.kind]]);
+      break;
+  }
+  container.append(facts);
+}
+
+export function renderEventEntry(event, actionNames, expandDecision = false) {
+  const entry = document.createElement("li");
+  entry.className = `kind-${event.kind}`;
+  const details = document.createElement("details");
+  details.className = "agent-row";
+  if (event.kind === "step") {
+    details.dataset.decision = "true";
+    details.open = expandDecision;
+  }
+  const summary = document.createElement("summary");
+  summary.textContent = eventSummary(event);
+  const content = document.createElement("div");
+  content.className = "event-detail";
+  renderEventDetails(content, event, actionNames);
+  details.append(summary, content);
+  entry.append(details);
+  return entry;
+}
+
+export function deterministicExecution(event) {
+  if (event?.kind !== "step") {
+    return null;
+  }
+  const payload = event.payload;
+  const source = payload?.selection?.source;
+  if (!DETERMINISTIC_SOURCES.has(source) || !payload?.action) {
+    return null;
+  }
+  return {
+    event,
+    source,
+    action: payload.action,
+    selection: payload.selection,
+    reward: payload.reward,
+    outcome: payload.outcome,
+  };
+}
+
+export function renderToolEntry(execution) {
+  const { event, source, action, selection, reward, outcome } = execution;
+  const entry = document.createElement("li");
+  const details = document.createElement("details");
+  details.className = "agent-row";
+  const summary = document.createElement("summary");
+  summary.textContent = `#${event.sequence} ${action.name} via ${source}`;
+  const content = document.createElement("div");
+  content.className = "event-detail";
+  const facts = document.createElement("dl");
+  facts.className = "facts";
+  setFacts(facts, [
+    ["Evidence", `event.payload.selection.source = ${source}`],
+    ["Action", `${action.name} (#${action.index}, command ${action.command})`],
+    ["Goal", selection.goal],
+    ["Skill", selection.skill],
+    ["Skill selected by", selection.skill_selection],
+    ["Rationale", selection.rationale],
+    ["Reward", reward],
+    ["Outcome", outcome],
+  ]);
+  content.append(facts);
+  details.append(summary, content);
+  entry.append(details);
+  return entry;
+}
+
+export function verboseDetails(event) {
+  const payload = event?.payload ?? {};
+  const values = [];
+  const add = (label, value) => {
+    if (typeof value === "string" && value.length) {
+      values.push({ label, value });
+    }
+  };
+
+  add("Game message", payload.observation?.message);
+  if (event?.kind === "step") {
+    add("Selection rationale", payload.selection?.rationale);
+    add("Skill rationale", payload.skill_decision?.rationale);
+    add("Model rationale", payload.action_decision?.rationale);
+    for (const candidate of payload.action_decision?.candidates ?? []) {
+      add(`Candidate #${candidate.action_index}`, candidate.reason);
+    }
+  } else if (event?.kind === "agent_error") {
+    add("Agent error", payload.error);
+    add("Decision failure", payload.decision_failure?.message);
+    for (const [index, attempt] of (payload.decision_failure?.attempts ?? []).entries()) {
+      add(`Attempt ${index + 1}`, attempt.error);
+    }
+  }
+  return values;
+}
+
+export function renderVerboseEntry(event, values) {
+  const entry = document.createElement("li");
+  const details = document.createElement("details");
+  details.className = "agent-row";
+  const summary = document.createElement("summary");
+  const preview = values[0].value.replace(/\s+/g, " ");
+  const shortened = preview.length > 80 ? `${preview.slice(0, 79)}…` : preview;
+  summary.textContent = `#${event.sequence} ${event.kind} · ${values[0].label}: ${shortened}`;
+  const content = document.createElement("div");
+  content.className = "event-detail";
+  const list = document.createElement("dl");
+  list.className = "verbose-fields";
+  for (const { label, value } of values) {
+    const term = document.createElement("dt");
+    term.textContent = label;
+    const description = document.createElement("dd");
+    description.textContent = value;
+    list.append(term, description);
+  }
+  content.append(list);
+  details.append(summary, content);
+  entry.append(details);
+  return entry;
 }

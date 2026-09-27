@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import re
 from dataclasses import asdict, dataclass
+from enum import Enum
 from typing import Final, Self
 
 from nle import nethack
@@ -9,6 +11,7 @@ from nethack_agent.contracts import (
     ContractError,
     array_value,
     boolean_value,
+    enum_value,
     integer_value,
     object_value,
     string_value,
@@ -97,12 +100,39 @@ class PromptState:
         return self.single_character_choice or self.text_input or self.wait_for_space
 
 
+class BucStatus(Enum):
+    """Explicit beatitude evidence available in an inventory description."""
+
+    BLESSED = "blessed"
+    UNCURSED = "uncursed"
+    CURSED = "cursed"
+    UNKNOWN = "unknown"
+
+
+# NLE exposes no separate inventory BUC array. NetHack puts a known beatitude
+# adjective at the start of the displayed noun phrase, after only an article or
+# stack count. Do not infer it from words elsewhere in an item name.
+_BUC_PREFIX: Final = re.compile(
+    r"^(?:(?:a|an|the|\d+) )?(blessed|uncursed|cursed)(?: |$)"
+)
+
+
+def _buc_status(description: str) -> BucStatus:
+    match = _BUC_PREFIX.match(description)
+    return BucStatus.UNKNOWN if match is None else BucStatus(match.group(1))
+
+
 @dataclass(frozen=True, slots=True)
 class InventoryItem:
     letter: str
     description: str
     glyph: int
     object_class: int
+    buc: BucStatus
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.buc, BucStatus):
+            raise TypeError("buc must be a BucStatus")
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,7 +192,16 @@ class ProjectedObservation:
             "player": player,
             "message": self.message,
             "prompt": asdict(self.prompt),
-            "inventory": [asdict(item) for item in self.inventory],
+            "inventory": [
+                {
+                    "letter": item.letter,
+                    "description": item.description,
+                    "glyph": item.glyph,
+                    "object_class": item.object_class,
+                    "buc": item.buc.value,
+                }
+                for item in self.inventory
+            ],
         }
 
     @classmethod
@@ -320,7 +359,10 @@ def _prompt_state_from_json(value: object) -> PromptState:
 
 def _inventory_item_from_json(value: object) -> InventoryItem:
     payload = object_value(
-        value, "inventory item", {"letter", "description", "glyph", "object_class"}
+        value,
+        "inventory item",
+        {"letter", "description", "glyph", "object_class"},
+        {"buc"},
     )
     return InventoryItem(
         letter=string_value(
@@ -333,6 +375,7 @@ def _inventory_item_from_json(value: object) -> InventoryItem:
         object_class=integer_value(
             payload["object_class"], "inventory object_class", minimum=0
         ),
+        buc=enum_value(payload.get("buc", "unknown"), "inventory buc", BucStatus),
     )
 
 
@@ -489,12 +532,14 @@ class ObservationProjector:
             letter_value = int(letter)
             if letter_value == 0:
                 continue
+            decoded_description = _decode_c_string(description)
             items.append(
                 InventoryItem(
                     letter=chr(letter_value),
-                    description=_decode_c_string(description),
+                    description=decoded_description,
                     glyph=int(glyph),
                     object_class=int(object_class),
+                    buc=_buc_status(decoded_description),
                 )
             )
         return tuple(items)

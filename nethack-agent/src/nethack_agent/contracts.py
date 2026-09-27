@@ -10,14 +10,21 @@ class ContractError(ValueError):
     """A persisted or transported value violates a domain contract."""
 
 
-def object_value(value: object, name: str, fields: Iterable[str]) -> dict[str, object]:
+def object_value(
+    value: object,
+    name: str,
+    fields: Iterable[str],
+    optional: Iterable[str] = (),
+) -> dict[str, object]:
+    """Require exactly `fields`, plus any subset of the `optional` fields."""
     if not isinstance(value, dict) or not all(isinstance(key, str) for key in value):
         raise ContractError(f"{name} must be an object")
     expected = set(fields)
+    allowed = expected | set(optional)
     actual = set(value)
-    if actual != expected:
-        missing = sorted(expected - actual)
-        extra = sorted(actual - expected)
+    missing = sorted(expected - actual)
+    extra = sorted(actual - allowed)
+    if missing or extra:
         details = []
         if missing:
             details.append(f"missing {missing}")

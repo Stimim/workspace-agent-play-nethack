@@ -69,9 +69,18 @@ characters plus glyph IDs (`glyph_rows`), color, and special bytes, all public
 bottom-line statistics, decoded message and inventory strings, prompt flags
 (`single_character_choice` for single-character prompts, `text_input`, and
 `wait_for_space`), and changed map cells with their updated glyph and character
-data. The result is JSON-serializable for prompts, persistence, APIs, and UI
-clients. Map deltas are computed against the previous projection without
-retaining NLE buffers. Raw arrays do not cross this boundary.
+data. NLE exposes inventory glyph, letter, object-class, and description arrays
+but no BUC array. The projector therefore derives a typed `BucStatus` only from
+an exact leading `blessed`, `uncursed`, or `cursed` adjective after an article
+or stack count; every other description is `unknown`. The result is
+JSON-serializable for prompts, persistence, APIs, and UI clients. Map deltas are
+computed against the previous projection without retaining NLE buffers. Raw
+arrays do not cross this boundary.
+
+Inventory observations stored before `buc` existed load as `unknown`; the
+reader never reparses their description and invents evidence. Present values
+must be one of the four enum states. This follows the same evidence rule as
+legacy pet observations.
 
 ### Agent coordinator
 
@@ -258,6 +267,9 @@ the projected observation. Events recorded before the `hierarchical-explore-v1`
 selection fields existed no longer satisfy the strict reader; their evaluation
 reports remain the evidence for those runs.
 
+Inventory records written before typed BUC evidence remain readable: absent
+`buc` becomes `unknown`, never a description-derived claim.
+
 The exact-field construction helpers and domain parsers remain authoritative
 instead of adding a second runtime JSON Schema validation pass; see
 [ADR 0003](docs/decisions/0003-typed-contract-construction.md). Ollama's two
@@ -341,21 +353,57 @@ production gameplay, and does not produce a valid evaluation episode.
 
 The browser UI is a dependency-free single page (plain HTML, CSS, and vanilla
 JavaScript modules in `nethack_agent/ui/`, packaged in the wheel) served by the
-same FastAPI app at `/` with assets under an allowlisted `/ui/{name}` route. It
-uses only this HTTP API and the event WebSocket through page-relative URLs, so
-it works on any loopback host and port. It shows the colored floor map with the
-player highlighted, player statistics, inventory, message, prompt flags, current
-goal and skill, run state, outcome, and last error, the latest structured step
-decision (selection source, goal, skill, model candidates and scores, chosen
-action, and concise rationales), and per-step and streamed-total latency and
-token metrics. Controls start a run (seed, episode cap, auto start), attach to
-an existing run id (also via `#run=<id>`), and pause, resume, single-step, or
-stop it; API error details are displayed. Attaching locates the newest event
-with O(log n) single-event page probes and replays only the last 50 events. The
-stream reconnects with backoff from the last delivered sequence after abnormal
-closure and stops after a 1000 (finished run) or 4404 close. UI responses carry
-a same-origin-only Content-Security-Policy with no inline script or style, and
-all model and game text is inserted as text, never parsed as HTML. It displays
+same FastAPI app at `/` with assets under an allowlisted `/ui/{name}` route.
+`app.js` owns run/API/stream state, `view.js` owns DOM selection, responsive
+panel/tab behavior, focus, and tooltips, `event-log.js` owns the three bounded
+logs, `render.js` owns pure DOM rendering, and `client.js` owns HTTP/WebSocket
+transport. It uses only this HTTP API and the event WebSocket through
+page-relative URLs, so it works on any loopback host and port. It shows the
+NetHack-colored floor map with the player highlighted. Player statistics use a
+specialized semantic description list: each `dt`/`dd` pair is one responsive
+stat cell, arranged in three columns in the normal primary column and
+automatically reduced to fewer columns if its container is constrained.
+Conditions spans the full grid. This compact display keeps every field, the
+separate Strength, Dexterity, Constitution, Intelligence, Wisdom, and Charisma
+labels, and their focusable tooltips. The UI also shows inventory, message,
+prompt flags, current goal and skill, run state, outcome, last error, and
+decision metrics. Every inventory item has a visible `[B]`, `[U]`, `[C]`, or
+`[?]` marker, a matching accessible class and tooltip, and the inventory panel
+includes the same textual legend, so color is not the only BUC cue. A
+full-width control panel sits above three workspace columns: the fixed-width
+first column contains run information, the fixed 79-by-21 map, and player
+state; the fixed-width second column contains inventory; and the third column
+consumes the remaining width for metrics and agent information. When the
+viewport cannot fit all three without narrowing the fixed columns, the third
+column is hidden
+behind an accessible Agent info control and opens as an overlay over the other
+workspace columns.
+
+Agent information has Events, Tools, and Verbose tabs. Each tab has an
+independent auto-scroll control and scrolling body. Event rows are native
+expand/collapse details; each newly received step becomes the one decision
+expanded by default and exposes the selection, model decisions, candidates,
+executed action, reward, and outcome. Tools contains expandable rows only for
+step events whose typed `selection.source` is `deterministic_skill` or
+`deterministic_prompt` and whose executed `action` is present; it does not
+infer tool calls. Verbose groups the remaining game messages, concise
+rationales, candidate reasons, and decision-attempt errors, but deliberately
+does not expose raw model responses or hidden chain-of-thought. Focusable,
+semantic tooltips explain displayed fields and the exact `Goal` and `Skill`
+enum values. They are fixed-position layers placed through CSSOM custom
+properties, so scrolling tab bodies and overflow-clipped panels cannot clip
+them, and Escape dismisses a shown tooltip before closing the overlay. Live
+renders keep unchanged tooltip DOM and restore focus to the same trigger when
+values change.
+
+Controls start a run (seed, episode cap, auto start), attach to an existing run
+id (also via `#run=<id>`), and pause, resume, single-step, or stop it; API error
+details are displayed. Attaching locates the newest event with O(log n)
+single-event page probes and replays only the last 50 events. The stream
+reconnects with backoff from the last delivered sequence after abnormal closure
+and stops after a 1000 (finished run) or 4404 close. UI responses carry a
+same-origin-only Content-Security-Policy with no inline script or style, and all
+model and game text is inserted as text, never parsed as HTML. It displays
 structured decision traces, not hidden chain-of-thought.
 
 The service binds to loopback by default and the same control contract must be
