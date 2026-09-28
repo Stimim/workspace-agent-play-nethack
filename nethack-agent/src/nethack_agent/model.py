@@ -326,16 +326,10 @@ def _failure_metrics(
     )
 
 
-_SKILL_DESCRIPTIONS: Final = {
-    Skill.STAIRCASE_NAVIGATION: (
-        "route over known terrain to a remembered downstairs; it can act only "
-        "while a downstairs is known and reachable"
-    ),
-    Skill.EXPLORE_LEVEL: (
-        "walk to the nearest unexplored space, open doors, and search walls and "
-        "dead ends for hidden passages within a bounded budget"
-    ),
-}
+_EXPLORE_DESCRIPTION: Final = (
+    "walk to the nearest unexplored space, open doors, and search walls and "
+    "dead ends for hidden passages within a bounded budget"
+)
 _STUCK_DESCRIPTIONS: Final = {
     StuckReason.SEARCH_EXHAUSTED: (
         "no unexplored space is reachable and this round's search budget is spent"
@@ -366,6 +360,19 @@ def describe_goal(goal: Goal) -> str:
     return f"reach {stairs} and use it"
 
 
+def _skill_description(skill: Skill, goals: tuple[Goal, ...]) -> str:
+    if skill is Skill.EXPLORE_LEVEL:
+        return _EXPLORE_DESCRIPTION
+    staircases = " or ".join(
+        dict.fromkeys(_STAIR_NAMES[goal.target.direction][0] for goal in goals)
+    )
+    return (
+        f"route over known terrain to a remembered {staircases} matching the "
+        "goal, then stand on it or use it as the goal says; it can act only while "
+        "such a staircase is known and reachable"
+    )
+
+
 def _skill_prompt(
     observation: ProjectedObservation,
     available_goals: tuple[Goal, ...],
@@ -374,7 +381,11 @@ def _skill_prompt(
     knowledge_context: str,
 ) -> str:
     skills = "\n".join(
-        f"- {skill.value}: {_SKILL_DESCRIPTIONS[skill]}" for skill in available_skills
+        f"- {skill.value}: {_skill_description(skill, available_goals)}"
+        for skill in available_skills
+    )
+    goals = "\n".join(
+        f"- {goal.token}: {describe_goal(goal)}" for goal in available_goals
     )
     if stuck is None:
         situation = "The episode is starting."
@@ -383,23 +394,25 @@ def _skill_prompt(
         map_text = "\n".join(observation.map.rows)
         situation = (
             f"Deterministic exploration is stuck: {_STUCK_DESCRIPTIONS[stuck]}. "
-            "staircase_navigation cannot act now: no downstairs is known and "
-            "reachable. Choose explore_level to grant exploration one more bounded "
-            "search round for hidden doors and corridors; that is normally right. "
-            "Choose staircase_navigation only to pick each action yourself until "
-            "exploration makes progress."
+            "staircase_navigation cannot act now: no staircase matching the goal "
+            "is known and reachable. Choose explore_level to grant exploration one "
+            "more bounded search round for hidden doors and corridors; that is "
+            "normally right. Choose staircase_navigation only to pick each action "
+            "yourself until exploration makes progress."
         )
         map_section = f"\nVisible map:\n```text\n{map_text}\n```\n"
     return f"""You control a lawful dwarven Valkyrie in NetHack.
-Choose the current goal and skill. The current goal is to
-{describe_goal(available_goals[0])}. A deterministic arbiter runs
-staircase_navigation whenever a matching staircase is known and reachable and
-explore_level otherwise; you are consulted
-at the start and when exploration is stuck. Return only one JSON object with
-exactly goal, skill, and rationale. Use one of the supplied identifiers. Keep the
-rationale to one short sentence; do not provide hidden chain-of-thought.
+Choose the current goal and skill. A deterministic arbiter runs
+staircase_navigation whenever a staircase matching the goal is known and
+reachable and explore_level otherwise; you are consulted at the start and when
+exploration is stuck. Return only one JSON object with exactly goal, skill, and
+rationale. Use one of the supplied identifiers. Keep the rationale to one short
+sentence; do not provide hidden chain-of-thought.
 
 {knowledge_context}
+
+Goals:
+{goals}
 
 Skills:
 {skills}

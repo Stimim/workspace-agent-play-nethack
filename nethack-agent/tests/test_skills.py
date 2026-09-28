@@ -48,9 +48,13 @@ from nethack_agent.traversal import (
     UNKNOWN_STAIR,
     IdentityEvidence,
     LevelKey,
+    StairConnection,
     StairDirection,
     StairIdentity,
     StairIdentityKind,
+    StairTarget,
+    StandOnStairsGoal,
+    TraverseStairsGoal,
 )
 
 _CMAP = nethack.GLYPH_CMAP_OFF
@@ -243,6 +247,100 @@ def test_staircase_skill_uses_route_distance_then_row_and_column_for_multiple_st
         None,
         cells((3, 2), (2, 2), (1, 1)),
     )
+
+
+_DOWN_ACTION = LegalAction(18, ord(">"), "MiscDirection.DOWN")
+_MAIN_DOWN = TraverseStairsGoal(
+    StairTarget(StairDirection.DOWN, StairConnection.MAIN, None)
+)
+_MINES_DOWN = TraverseStairsGoal(
+    StairTarget(StairDirection.DOWN, StairConnection.BRANCH, 2)
+)
+
+
+def test_traversal_goal_uses_the_matching_staircase_under_the_hero(
+    template: ProjectedObservation, actions: dict[str, LegalAction]
+) -> None:
+    memory = remembered(template, ("|.>...|", "|.@...|"))
+    memory.observe(sketch(template, ("|.@...|", "|.....|"), step=1))
+    skill = StaircaseNavigationSkill()
+
+    proposal = skill.select_action(memory, actions, _MAIN_DOWN, _DOWN_ACTION)
+
+    assert proposal is not None
+    assert proposal.action_index == _DOWN_ACTION.index
+    assert proposal.record == ActionRecord(ActionKind.TRAVERSE, (2, 0))
+    # The use happens in place: the intent names the staircase and its
+    # believed identity, with no route.
+    assert proposal.intent == ActionIntent(
+        IntentDestination(DestinationKind.DOWNSTAIRS, 2, 0, UNKNOWN_STAIR), None, None
+    )
+    # Without the level-change action there is nothing to propose, and a
+    # standing goal waits instead.
+    assert skill.select_action(memory, actions, _MAIN_DOWN, None) is None
+    wait = skill.select_action(memory, actions)
+    assert wait is not None
+    assert action_name(actions, wait.action_index) == "MiscDirection.WAIT"
+
+
+def test_traversal_ranks_established_stairs_before_probes_and_skips_mismatches(
+    template: ProjectedObservation, actions: dict[str, LegalAction]
+) -> None:
+    memory = remembered(template, ("|>.@....>|",))
+    skill = StaircaseNavigationSkill()
+    # Two `>` are known and neither is established: the nearer one is probed
+    # for the main staircase.
+    probe = skill.select_action(memory, actions, _MAIN_DOWN, _DOWN_ACTION)
+    assert probe is not None and probe.intent is not None
+    assert probe.intent.destination == IntentDestination(
+        DestinationKind.DOWNSTAIRS, 1, 0, UNKNOWN_STAIR
+    )
+
+    # Once the far `>` is known to be the Mines branch, the near one is main
+    # by elimination; each goal takes its own staircase.
+    memory.stair_identities[(8, 0)] = StairIdentity(
+        StairIdentityKind.BRANCH, 2, IdentityEvidence.TRAVERSED
+    )
+    main = skill.select_action(memory, actions, _MAIN_DOWN, _DOWN_ACTION)
+    mines = skill.select_action(memory, actions, _MINES_DOWN, _DOWN_ACTION)
+    assert main is not None and main.intent is not None
+    assert mines is not None and mines.intent is not None
+    assert main.intent.destination == IntentDestination(
+        DestinationKind.DOWNSTAIRS,
+        1,
+        0,
+        StairIdentity(StairIdentityKind.MAIN, 0, IdentityEvidence.ELIMINATION),
+    )
+    assert mines.intent.destination == IntentDestination(
+        DestinationKind.DOWNSTAIRS,
+        8,
+        0,
+        StairIdentity(StairIdentityKind.BRANCH, 2, IdentityEvidence.TRAVERSED),
+    )
+
+    # A lone unknown `>` is never probed for a branch.
+    lone = remembered(template, ("|.@....>|",))
+    assert skill.select_action(lone, actions, _MINES_DOWN, _DOWN_ACTION) is None
+
+
+def test_upstairs_goals_route_to_and_wait_on_the_upstairs(
+    template: ProjectedObservation, actions: dict[str, LegalAction]
+) -> None:
+    up = StandOnStairsGoal(StairTarget(StairDirection.UP, StairConnection.ANY, None))
+    skill = StaircaseNavigationSkill()
+    # On (0, 1) the only `<` is the dungeon exit, which no goal may target.
+    top = remembered(template, ("|<..@.>|",))
+    assert skill.select_action(top, actions, up) is None
+    memory = LevelMemory()
+    memory.observe(sketch(template, ("|<..@.>|",), dungeon_level=2))
+
+    proposal = skill.select_action(memory, actions, up)
+
+    assert proposal is not None
+    assert action_name(actions, proposal.action_index) == "CompassDirection.W"
+    assert proposal.intent is not None and proposal.intent.destination is not None
+    assert proposal.intent.destination.kind is DestinationKind.UPSTAIRS
+    assert (proposal.intent.destination.x, proposal.intent.destination.y) == (1, 0)
 
 
 def test_staircase_defense_keeps_the_chosen_downstairs_as_destination(

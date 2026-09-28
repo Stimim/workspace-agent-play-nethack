@@ -30,18 +30,20 @@ Dependency order for the four capability items below: traversal goals, then NLE 
 - [ ] Add bounded navigation, combat-risk, hunger, inventory, and prompt-handling skills as evidence requires.
   - [ ] Combat risk: fight an adjacent hostile before waiting on stairs (baseline seeds 1, 2, 4 died on `>`); retreat/rest rules only after traversal or Scout deaths with HP traces.
   - [ ] Hunger: a new action profile with only the keys eating needs (item letter as a prompt answer, ESC) and eating a known-safe inventory ration when Hungry (seeds 2, 3, 5 starved or fainted with a ration uneaten).
-  - [ ] Covered stairs: recognized from look-here messages as part of traversal memory (seed 5).
+  - [x] Covered stairs: recognized from look-here messages as part of traversal memory (seed 5).
   - [ ] Prompt handlers ship with the actions that cause them (eat item selection, "eat it?", "pray?"); no generic prompt skill while suites show no unhandled prompts.
   - [ ] Navigation and inventory skills only after a failure class recurs in traversal or task-suite evidence.
 - [ ] Evaluate whether Laya improves routine action ranking enough to justify another model runtime.
 - [ ] Survey the [Janelia FlyEM male CNS connectome](https://www.janelia.org/project-team/flyem/male-cns-connectome) and define a bounded, evidence-driven comparison of any connectome-inspired planning or action-ranking approach against current baselines; this is research, not a production commitment.
 - [ ] Replace the fixed downstairs-only milestone goal with typed traversal goals that can select upstairs, downstairs, and a branch-specific staircase identity; extend memory, intents, and evaluation cases before allowing level changes.
-  - [ ] Typed `TaskSpec` (NLE task, action profile, objective legs) selected per run; fix step caps above 5,000 (NLE cap above `TimeLimit`); `runs.task` column.
-  - [ ] Typed `Goal` union (`stand_on_stairs`, `traverse_stairs` with direction and main/branch target) replacing the enum; legacy `stand_on_downstairs` reads exactly.
-  - [ ] `DungeonMemory` keyed by `(dungeon_number, dungeon_level)`: per-visit versus persistent state, stair links, evidence-backed stair identity, look-here stair messages.
-  - [ ] `ObjectivePlanner` and goal-aware staircase navigation and exploration; `objective_complete` outcome.
-  - [ ] Traversal permits in `ActionGate` and the same predicate in the evaluator audit; `<` on (0, 1) stays forbidden.
-  - [ ] Intents gain `upstairs`, stair identity, and level; UI and legacy readability.
+  - [x] Typed `TaskSpec` (NLE task, action profile, objective legs) selected per run; fix step caps above 5,000 (NLE cap above `TimeLimit`); `runs.task` column.
+  - [x] Typed `Goal` union (`stand_on_stairs`, `traverse_stairs` with direction and main/branch target) replacing the enum; legacy `stand_on_downstairs` reads exactly.
+  - [x] `DungeonMemory` keyed by `(dungeon_number, dungeon_level)`: per-visit versus persistent state, stair links, evidence-backed stair identity, look-here stair messages.
+  - [x] `ObjectivePlanner` and goal-aware staircase navigation and exploration; `objective_complete` outcome.
+  - [x] Traversal permits in `ActionGate` and the same predicate in the evaluator audit; `<` on (0, 1) stays forbidden.
+  - [x] Intents gain `upstairs`, stair identity, and level; UI and legacy readability.
+  - [x] Interim policy `hierarchical-traversal-v1-dev`; `eval run` refuses schema-1 `staircase-v1` under any policy but `hierarchical-explore-v1` before any episode.
+  - [ ] Replace the staircase knowledge card with a direction- and identity-neutral stairs card, set the final traversal policy id, and record milestone A in a note (ADR 0004 step 8).
   - [ ] Suite schema 2 pinning policy and knowledge, report schema 3 with traversal metrics, `staircase-v2` regression and `traversal-v1` (descend, round trip, enter Mines); `staircase-v1` stays unchanged and bound to `hierarchical-explore-v1`.
 - [ ] Evaluate model-owned high-level choices when benchmarks expose real trade-offs: descend versus gain resources/levels, pray or use another recovery, and prioritize dangerous visible threats.
   - [ ] Only after suites contain a pre-declared number of decision points with two or more applicable goals.

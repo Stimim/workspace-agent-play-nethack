@@ -6,7 +6,7 @@ Build a local, autonomous NetHack agent whose long-term success criterion is asc
 
 ## Current status
 
-The deterministic NLE adapter, immutable observation projector, hierarchical goal/skill coordinator with per-level terrain memory, deterministic staircase navigation and level exploration, and an action gate, structured Ollama decision model, reviewed local knowledge bundle, typed SQLite event log, loopback HTTP/WebSocket control service with the dependency-free browser UI, headless scenario orchestrator, executable socket-boundary verifier, and the committed 10-seed evaluation suite with its `eval run` and `eval abort` harness are implemented. Milestone 1 is accepted: the first complete real-model suite run of policy `hierarchical-explore-v1` passed with 10/10 task successes (`nethack-agent/evaluation/reports/staircase-v1-20260926T211301Z.json`). With the current `staircase-reviewed-v2` knowledge bundle and explicit `autoopen`, the same suite and model passed again with 10/10 and step-identical trajectories (`nethack-agent/evaluation/reports/staircase-v1-20260927T065500Z.json`).
+The deterministic NLE adapter, immutable observation projector, hierarchical goal/skill coordinator with typed traversal goals from an objective planner, per-level dungeon memory with stair identities, deterministic staircase navigation and level exploration, and a permit-based action gate, structured Ollama decision model, reviewed local knowledge bundle, typed SQLite event log, loopback HTTP/WebSocket control service with the dependency-free browser UI, headless scenario orchestrator, executable socket-boundary verifier, and the committed 10-seed evaluation suite with its `eval run` and `eval abort` harness are implemented. Milestone 1 is accepted: the first complete real-model suite run of policy `hierarchical-explore-v1` passed with 10/10 task successes (`nethack-agent/evaluation/reports/staircase-v1-20260926T211301Z.json`). With the current `staircase-reviewed-v2` knowledge bundle and explicit `autoopen`, the same suite and model passed again with 10/10 and step-identical trajectories (`nethack-agent/evaluation/reports/staircase-v1-20260927T065500Z.json`).
 
 ## System context
 
@@ -109,9 +109,23 @@ They persist as objects such as
 the string `stand_on_downstairs` stored before typed goals reads as exactly that
 goal. The model is offered goals by token (`stand_on_stairs:down:any`) through
 a per-call generation schema, and the parser maps a token back to the offered
-goal. The current goal is still fixed to stand on any `>` without issuing the
-descend command; traversal goals, stair identity, and level changes follow the
-rest of ADR 0004.
+goal.
+
+Each run's `TaskSpec` objective (1-8 legs: `stand_on_stairs`, `reach_level`,
+`enter_dungeon`) drives `planner.ObjectivePlanner`, a pure function of the
+current leg and dungeon memory that sets every step's goal. A `stand_on_stairs`
+leg keeps that goal. A `reach_level` leg in the same dungeon takes the main
+staircase toward the level; from another dungeon it retraces the recorded
+branch link. `enter_dungeon(2)` (the Gnomish Mines; Sokoban's number 4 is
+unverified) descends to the DL2-4 branch range, searches each range level for
+a second `>`, probes two unknown `>` (the nearest first), moves on when a
+level is exhausted with one `>`, and re-arms each exhausted range level's
+exploration once before giving up. Legs are checked after every step whose
+NLE episode continues (NLE zeroes the bottom-line statistics of a terminal
+observation). On `NetHackStaircase-v0` (and later Oracle) NLE's success
+state ends the run; on other tasks, completing the last leg ends it with
+`objective_complete` and closes NLE. The coordinator snapshot reports the
+current leg (`objective_leg`) and the last live `level`.
 
 Model role ([ADR 0002](docs/decisions/0002-deterministic-skill-arbiter.md)):
 a deterministic arbiter, not the local model, chooses the executing skill on
@@ -125,31 +139,48 @@ an unfamiliar state but cannot modify the policy. Between runs or suites,
 coding agents review persisted evidence and either revise reviewed knowledge
 or implement a deterministic skill for a simple recurring case.
 
-`AgentCoordinator` consults the model for goal and skill at the start of an
-episode. A deterministic arbiter then owns skill switching on every step:
-`staircase_navigation` whenever a remembered downstairs is reachable, otherwise
-`explore_level`. The start decision is recorded but cannot override the
-arbiter. Per step, in order:
+`AgentCoordinator` consults the model for skill at the start of an episode,
+offering exactly the planner's goal. A deterministic arbiter then owns skill
+switching on every step: `staircase_navigation` whenever a remembered
+staircase matching the goal is reachable, otherwise `explore_level`. The start
+decision is recorded but cannot override the arbiter. Per step, in order:
 
 1. a pending direction prompt from exploration's own kick is answered;
 2. `SafePromptHandler` acknowledges wait-for-space prompts, cancels text input
    with an empty response, and declines recognizable yes/no prompts (which
    includes "Really attack?" for peaceful monsters);
 3. any other prompt goes to the model as a fallback action;
-4. `StaircaseNavigationSkill` routes to the reachable remembered `>` with the
-   shortest breadth-first route; equal distances choose the topmost, then
-   leftmost coordinate. If already standing on any remembered `>`, it waits.
-   It steps straight onto the chosen `>` when adjacent and otherwise first
-   fights an adjacent hostile. It does not model staircase identity or route
-   upward;
-5. `ExploreLevelSkill` acts, or reports a typed `StuckReason`.
+4. `StaircaseNavigationSkill` ranks the remembered staircases of the goal's
+   direction whose identity is compatible with its target: an established
+   match before a probe of an unknown identity, then the shortest
+   breadth-first route, then the topmost, then leftmost coordinate. For
+   `stand_on_stairs(down, any)` every `>` ranks alike, as in milestone 1. On
+   the chosen staircase it waits (`stand_on_stairs`) or uses it with the
+   level-change action (`traverse_stairs`). It steps straight onto the
+   staircase when adjacent and otherwise first fights an adjacent hostile;
+5. `ExploreLevelSkill` acts, biased toward unreachable compatible staircases,
+   or reports a typed `StuckReason`. The first `search_exhausted` report on a
+   level marks it exhausted and replans; only if the replanned goal yields no
+   action does the stuck consultation below run.
 
-Both skills route over `navigation.LevelMemory`, a coordinator-owned,
-per-level record bounded by the 21x79 map. It remembers the last terrain glyph
-of every cell (NetHack draws the hero, monsters, and objects over terrain), the
-cells the hero has been adjacent to, search coverage, learned blocked moves,
-locked doors, kicks, peaceful monster glyphs, abandoned goals, and a short
-position history. It resets on `start` and whenever the dungeon level changes.
+Both skills route over the current `navigation.LevelMemory`, a bounded
+per-level record of the 21x79 map owned by the coordinator's
+`navigation.DungeonMemory`, which keeps one record per `(dungeon_number,
+dungeon_level)`. A level record remembers the last terrain glyph of every cell
+(NetHack draws the hero, monsters, and objects over terrain), the cells the
+hero has been adjacent to, search coverage, learned blocked moves, locked
+doors, kicks, peaceful monster glyphs, stair identities and links, and whether
+exploration exhausted it; these persist across visits. Abandoned goals,
+suspect edges, the position history, waits, stuck consultations, and pending
+actions are cleared whenever the hero enters the level, and everything resets
+on `start`. The look-here messages "There is a staircase down/up here." mark a
+staircase hidden under an object. A stair action followed by a level change
+links both staircases and records their identities (`traversed` and
+`arrival`); on a level with two staircases of one direction the complement of
+an established one follows by `elimination`, and `<` on (0, 1) is the dungeon
+exit by `rule`. A level change without a stair action (a trap door, hole, or
+level teleport) links nothing, and main versus branch stairs cannot be told
+apart before one of these rules applies.
 Breadth-first routes follow NetHack 3.6.7 `test_move`: no diagonal move into or
 out of an open or closed door (doorless and broken doorways allow diagonals),
 closed doors are entered orthogonally because moving into one opens it,

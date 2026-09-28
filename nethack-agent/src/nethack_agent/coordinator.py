@@ -24,19 +24,35 @@ from nethack_agent.decision import (
 )
 from nethack_agent.environment import LegalAction, NleEnvironment, StepTransition
 from nethack_agent.model import DecisionFailure, HierarchicalDecisionModel
-from nethack_agent.navigation import ActionKind, ActionRecord, DungeonMemory
+from nethack_agent.navigation import (
+    ActionKind,
+    ActionRecord,
+    DungeonMemory,
+    LevelMemory,
+)
 from nethack_agent.observation import ObservationProjector, ProjectedObservation
+from nethack_agent.planner import ObjectivePlanner
 from nethack_agent.skills import (
     ExploreLevelSkill,
     SafePromptHandler,
     SkillAction,
     StaircaseNavigationSkill,
 )
-from nethack_agent.traversal import STAND_ON_DOWNSTAIRS, Goal, StairDirection
+from nethack_agent.tasks import NleTask
+from nethack_agent.traversal import (
+    STAND_ON_DOWNSTAIRS,
+    Goal,
+    LevelKey,
+    StairDirection,
+    TraverseStairsGoal,
+)
 
 # While exploration stays stuck after a stuck consultation, the model chooses
 # fallback actions and is asked to reselect a skill at most this often.
 STUCK_RECONSULT_STEPS: Final = 20
+# Tasks whose NLE success state ends the episode; a completed objective does
+# not end them early.
+_NLE_SUCCESS_TASKS: Final = frozenset({NleTask.STAIRCASE, NleTask.ORACLE})
 
 
 class CoordinatorError(RuntimeError):
@@ -130,6 +146,10 @@ class CoordinatorSnapshot:
     current_goal: Goal
     current_skill: Skill | None
     last_error: str | None
+    # The objective leg being pursued; equal to the leg count once all are met.
+    objective_leg: int
+    # The level of the last live observation, None before the first.
+    level: LevelKey | None
 
     def to_json(self) -> dict[str, object]:
         return {
@@ -139,6 +159,8 @@ class CoordinatorSnapshot:
             "current_goal": self.current_goal.to_json(),
             "current_skill": self.current_skill.value if self.current_skill else None,
             "last_error": self.last_error,
+            "objective_leg": self.objective_leg,
+            "level": self.level.to_json() if self.level else None,
         }
 
 
@@ -164,8 +186,14 @@ class AgentCoordinator:
         self._projector = projector
         self._model = model
         self._gate = ActionGate(environment.legal_actions)
+        task = environment.task
+        self._planner = ObjectivePlanner(task.objective)
         # Only an objective with a leg beyond standing on stairs may change level.
-        self._level_changes_allowed = environment.task.objective.changes_level
+        self._level_changes_allowed = task.objective.changes_level
+        # NLE's own success state ends these tasks; otherwise completing the
+        # last objective leg ends the run.
+        self._objective_ends_run = task.environment not in _NLE_SUCCESS_TASKS
+        self._leg = 0
         self._navigation = StaircaseNavigationSkill()
         self._exploration = ExploreLevelSkill()
         self._prompt_handler = SafePromptHandler()
@@ -206,6 +234,9 @@ class AgentCoordinator:
             try:
                 raw = self._environment.reset()
                 self._observation = self._projector.project(raw, step_index=0)
+                self._dungeon.observe(self._observation)
+                self._leg = 0
+                self._goal = self._planner.plan(0, self._dungeon).goal
             except Exception as error:
                 self._mark_error_locked(error)
                 raise
@@ -258,6 +289,7 @@ class AgentCoordinator:
             revision = self._lifecycle_revision
             started_state = self._state
             model_skill = self._skill_decision
+            leg = self._leg
             self._advance_in_flight = True
 
         def canceled() -> bool:
@@ -266,7 +298,7 @@ class AgentCoordinator:
 
         try:
             try:
-                plan = self._decide(before, model_skill, canceled)
+                plan = self._decide(before, model_skill, canceled, leg)
                 if plan is None:
                     return None
             except DecisionFailure as error:
@@ -304,6 +336,8 @@ class AgentCoordinator:
                     self._observation = after
                     self._commit_plan_locked(plan, before)
                     outcome = self._terminal_outcome(transition)
+                    if outcome is None:
+                        outcome = self._advance_objective_locked(after)
                     if outcome is not None:
                         self._outcome = outcome
                         self._state = RunState.TERMINAL
@@ -331,24 +365,42 @@ class AgentCoordinator:
             with self._lock:
                 self._advance_in_flight = False
 
+    def _advance_objective_locked(
+        self, after: ProjectedObservation
+    ) -> RunOutcome | None:
+        """Fold a live observation into memory and advance completed legs.
+
+        Only called while NLE's episode continues: NLE zeroes the bottom-line
+        statistics of a terminal observation, so those carry no level.
+        """
+        self._dungeon.observe(after)
+        self._leg = self._planner.advance(self._leg, self._dungeon)
+        if self._leg == len(self._planner.legs) and self._objective_ends_run:
+            return RunOutcome.OBJECTIVE_COMPLETE
+        return None
+
     def _decide(
         self,
         before: ProjectedObservation,
         model_skill: SkillDecision | None,
         canceled: Callable[[], bool],
+        leg: int,
     ) -> _Plan | None:
         """Choose one action; return None when a lifecycle change canceled it.
 
-        Priority: a pending exploration kick direction, safe prompt answers,
-        the model for unhandled prompts, staircase navigation to a reachable
-        remembered `>`, then level exploration. Exploration that reports stuck
-        triggers a model skill consultation (rate-limited) and otherwise a
-        model fallback action.
+        The objective planner sets the step's goal. Priority: a pending
+        exploration kick direction, safe prompt answers, the model for
+        unhandled prompts, staircase navigation to a reachable remembered
+        staircase matching the goal, then level exploration. When exploration
+        first exhausts the level, the level is marked exhausted and the goal
+        replanned; if that yields no action, the stuck report triggers a model
+        skill consultation (rate-limited) and otherwise a model fallback.
         """
         memory = self._dungeon.observe(before)
+        goal = self._plan_goal(leg, memory)
         skill_model_decision: ModelSkillDecision | None = None
         if model_skill is None:
-            skill_model_decision = self._select_skill(before, None)
+            skill_model_decision = self._select_skill(before, None, goal)
             model_skill = skill_model_decision.decision
             if canceled():
                 return None
@@ -358,17 +410,13 @@ class AgentCoordinator:
         kick = self._exploration.continue_kick(before, memory, actions)
         if kick is not None:
             return self._skill_plan(
-                kick, Skill.EXPLORE_LEVEL, arbiter, None, skill_model_decision
+                kick, goal, Skill.EXPLORE_LEVEL, arbiter, None, skill_model_decision
             )
 
         prompt = self._prompt_handler.select_action(
             before, actions, self._gate.actions_by_command
         )
-        navigation = (
-            None
-            if before.prompt.active
-            else self._navigation.select_action(memory, actions)
-        )
+        navigation = None if before.prompt.active else self._navigate(memory, goal)
         arbiter_skill = (
             Skill.STAIRCASE_NAVIGATION
             if navigation is not None
@@ -377,6 +425,7 @@ class AgentCoordinator:
         if prompt is not None:
             return self._skill_plan(
                 prompt,
+                goal,
                 arbiter_skill,
                 arbiter,
                 None,
@@ -385,17 +434,24 @@ class AgentCoordinator:
             )
         if before.prompt.active:
             return self._fallback_plan(
-                before, arbiter_skill, arbiter, None, skill_model_decision, canceled
+                before,
+                goal,
+                arbiter_skill,
+                arbiter,
+                None,
+                skill_model_decision,
+                canceled,
             )
         if navigation is not None:
             return self._skill_plan(
-                navigation, arbiter_skill, arbiter, None, skill_model_decision
+                navigation, goal, arbiter_skill, arbiter, None, skill_model_decision
             )
 
-        explored = self._exploration.select_action(memory, actions)
+        explored = self._exploration.select_action(memory, actions, goal.target)
         if explored.action is not None:
             return self._skill_plan(
                 explored.action,
+                goal,
                 Skill.EXPLORE_LEVEL,
                 arbiter,
                 None,
@@ -403,12 +459,41 @@ class AgentCoordinator:
             )
         stuck = explored.stuck
         assert stuck is not None
+        if stuck is StuckReason.SEARCH_EXHAUSTED and not memory.exhausted:
+            # The level is exhausted: the objective may now want another
+            # staircase or level. The staircase objective keeps its goal.
+            memory.mark_exhausted()
+            replanned = self._plan_goal(leg, memory)
+            if replanned != goal:
+                goal = replanned
+                navigation = self._navigate(memory, goal)
+                if navigation is not None:
+                    return self._skill_plan(
+                        navigation,
+                        goal,
+                        Skill.STAIRCASE_NAVIGATION,
+                        arbiter,
+                        None,
+                        skill_model_decision,
+                    )
+                explored = self._exploration.select_action(memory, actions, goal.target)
+                if explored.action is not None:
+                    return self._skill_plan(
+                        explored.action,
+                        goal,
+                        Skill.EXPLORE_LEVEL,
+                        arbiter,
+                        None,
+                        skill_model_decision,
+                    )
+                assert explored.stuck is not None
+                stuck = explored.stuck
         consulted = skill_model_decision is None and (
             memory.stuck_consult_step is None
             or before.step_index - memory.stuck_consult_step >= STUCK_RECONSULT_STEPS
         )
         if consulted:
-            skill_model_decision = self._select_skill(before, stuck)
+            skill_model_decision = self._select_skill(before, stuck, goal)
             model_skill = skill_model_decision.decision
             if canceled():
                 return None
@@ -416,10 +501,11 @@ class AgentCoordinator:
                 # The re-arm is kept even if a later pause discards this step;
                 # it only widens the deterministic search budget.
                 memory.rearm()
-                rearmed = self._exploration.select_action(memory, actions)
+                rearmed = self._exploration.select_action(memory, actions, goal.target)
                 if rearmed.action is not None:
                     return self._skill_plan(
                         rearmed.action,
+                        goal,
                         Skill.EXPLORE_LEVEL,
                         SkillSelectionSource.MODEL,
                         stuck,
@@ -428,12 +514,34 @@ class AgentCoordinator:
                     )
         return self._fallback_plan(
             before,
+            goal,
             model_skill.skill,
             SkillSelectionSource.MODEL,
             stuck,
             skill_model_decision,
             canceled,
             stuck_consulted=consulted,
+        )
+
+    def _plan_goal(self, leg: int, memory: LevelMemory) -> Goal:
+        """The planner's goal for this step, applying a requested branch re-arm.
+
+        The re-arm is kept even if a later pause discards this step; it only
+        widens the deterministic search budget of an exhausted level.
+        """
+        planned = self._planner.plan(leg, self._dungeon)
+        if planned.rearm:
+            memory.rearm_for_branch()
+        return planned.goal
+
+    def _navigate(self, memory: LevelMemory, goal: Goal) -> SkillAction | None:
+        level_change = (
+            self._gate.level_change_actions.get(goal.target.direction)
+            if isinstance(goal, TraverseStairsGoal)
+            else None
+        )
+        return self._navigation.select_action(
+            memory, self._gate.actions_by_name, goal, level_change
         )
 
     def _traversal_permit(
@@ -479,15 +587,19 @@ class AgentCoordinator:
         return TraversalPermit(direction, level, MapCell(*position))
 
     def _select_skill(
-        self, before: ProjectedObservation, stuck: StuckReason | None
+        self, before: ProjectedObservation, stuck: StuckReason | None, goal: Goal
     ) -> ModelSkillDecision:
-        decision = self._model.select_skill(before, (self._goal,), tuple(Skill), stuck)
-        self._validate_skill_decision(decision.decision)
+        decision = self._model.select_skill(before, (goal,), tuple(Skill), stuck)
+        if decision.decision.goal != goal:
+            raise CoordinatorInvariantError(
+                f"model selected unavailable goal {decision.decision.goal.token}"
+            )
         return decision
 
     def _skill_plan(
         self,
         proposal: SkillAction,
+        goal: Goal,
         skill: Skill,
         skill_selection: SkillSelectionSource,
         stuck: StuckReason | None,
@@ -499,7 +611,7 @@ class AgentCoordinator:
         return _Plan(
             selection=ActionSelection(
                 source=source,
-                goal=self._goal,
+                goal=goal,
                 skill=skill,
                 skill_selection=skill_selection,
                 stuck_reason=stuck,
@@ -520,6 +632,7 @@ class AgentCoordinator:
     def _fallback_plan(
         self,
         before: ProjectedObservation,
+        goal: Goal,
         skill: Skill,
         skill_selection: SkillSelectionSource,
         stuck: StuckReason | None,
@@ -529,7 +642,7 @@ class AgentCoordinator:
         stuck_consulted: bool = False,
     ) -> _Plan | None:
         action_model_decision = self._model.select_action(
-            before, self.allowed_actions, self._goal, skill
+            before, self.allowed_actions, goal, skill
         )
         if canceled():
             return None
@@ -537,7 +650,7 @@ class AgentCoordinator:
         return _Plan(
             selection=ActionSelection(
                 source=ActionSelectionSource.MODEL_FALLBACK,
-                goal=self._goal,
+                goal=goal,
                 skill=skill,
                 skill_selection=skill_selection,
                 stuck_reason=stuck,
@@ -556,6 +669,7 @@ class AgentCoordinator:
         if plan.skill_model_decision is not None:
             self._skill_decision = plan.skill_model_decision.decision
         self._current_skill = selection.skill
+        self._goal = selection.goal
         memory = self._dungeon.current
         if plan.stuck_consulted:
             memory.stuck_consult_step = before.step_index
@@ -590,6 +704,7 @@ class AgentCoordinator:
             self._mark_error_locked(error)
 
     def _snapshot_locked(self) -> CoordinatorSnapshot:
+        current = self._dungeon.current if self._dungeon.levels else None
         return CoordinatorSnapshot(
             state=self._state,
             outcome=self._outcome,
@@ -597,6 +712,8 @@ class AgentCoordinator:
             current_goal=self._goal,
             current_skill=self._current_skill,
             last_error=self._last_error,
+            objective_leg=self._leg,
+            level=None if current is None else current.level,
         )
 
     def _advance_was_canceled_locked(
@@ -613,12 +730,6 @@ class AgentCoordinator:
             self._environment.close()
         except Exception as close_error:
             self._last_error = f"{error}; environment close failed: {close_error}"
-
-    def _validate_skill_decision(self, decision: SkillDecision) -> None:
-        if decision.goal != self._goal:
-            raise CoordinatorInvariantError(
-                f"model selected unavailable goal {decision.goal.token}"
-            )
 
     @staticmethod
     def _terminal_outcome(transition: StepTransition) -> RunOutcome | None:

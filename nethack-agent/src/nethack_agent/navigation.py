@@ -261,6 +261,8 @@ class LevelMemory:
         self.stair_identities: dict[Point, StairIdentity] = {}
         self.links: dict[Point, StairLink] = {}
         self._exhausted_knowledge: int | None = None
+        # One extra search round was granted to find a branch staircase here.
+        self.branch_rearmed = False
         self.enter()
 
     def enter(self) -> None:
@@ -587,6 +589,12 @@ class LevelMemory:
 
     def mark_exhausted(self) -> None:
         self._exhausted_knowledge = self.knowledge
+
+    def rearm_for_branch(self) -> None:
+        """Search this exhausted level once more for a branch staircase."""
+        self.rearm()
+        self.branch_rearmed = True
+        self._exhausted_knowledge = None
 
     def take_traversal(self) -> tuple[Point, StairDirection] | None:
         """The staircase the last executed action used, consuming that record."""

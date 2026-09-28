@@ -215,9 +215,22 @@ exists). `NetHackStaircase-v0` accepts only its single
 Oracle are rejected until their objectives exist. Unknown or duplicate keys
 and invalid values fail before the service is contacted. The run record
 stores the spec in `runs.task` and returns it as `run.task`; runs stored
-before tasks existed return `null`. Until the coordinator is wired to
-objectives (ADR 0004 step 4), a run still pursues the staircase goal and never
-changes level whatever objective it records.
+before tasks existed return `null`. The coordinator's objective planner turns
+the legs into typed goals; on `NetHackScore-v0` a completed last leg ends the
+run with outcome `objective_complete`, while `NetHackStaircase-v0` still ends
+on NLE's own success. For example, from `nethack-agent/`, with the JSON above
+in `/tmp/descend.json`:
+
+```bash
+uv run nethack-agent scenario run --seed 4 --max-steps 600 --auto \
+  --task /tmp/descend.json --development-scripted-model \
+  --data-dir /tmp/nethack-traversal --port 8011 --timeout 300 --json
+```
+
+Seed 4 first probes the Gnomish Mines `>` on dungeon level 2, climbs back by
+the recorded branch link, and reaches (0, 3) through the main `>` identified by
+elimination. Each stair use is a `MiscDirection.DOWN` or `UP` step whose
+intent names the staircase identity and level.
 
 Every task receives NLE's own option choice plus `autoopen` (Gold's is
 `pickup_types:$`). The episode cap is enforced by Gymnasium's `TimeLimit` and

@@ -11,6 +11,7 @@ from nethack_agent.coordinator import (
     StepRecord,
 )
 from nethack_agent.decision import (
+    LEVEL_CHANGE_ACTIONS,
     ActionCandidate,
     ActionDecision,
     ActionSelectionSource,
@@ -27,9 +28,23 @@ from nethack_agent.decision import (
     TraversalPermit,
 )
 from nethack_agent.environment import LegalAction, NleEnvironment, ScenarioConfig
-from nethack_agent.model import DecisionFailure, HierarchicalDecisionModel
+from nethack_agent.model import (
+    DecisionFailure,
+    HierarchicalDecisionModel,
+    ScriptedDevelopmentModel,
+)
 from nethack_agent.observation import ObservationProjector
-from nethack_agent.traversal import STAND_ON_DOWNSTAIRS, Goal, LevelKey, StairDirection
+from nethack_agent.tasks import STAIRCASE_TASK, ActionProfile, NleTask, TaskSpec
+from nethack_agent.traversal import (
+    STAND_ON_DOWNSTAIRS,
+    EnterDungeonLeg,
+    Goal,
+    LevelKey,
+    Objective,
+    ObjectiveLeg,
+    ReachLevelLeg,
+    StairDirection,
+)
 
 _METRICS = DecisionMetrics(1, 1, 1.0, False)
 
@@ -357,3 +372,166 @@ def test_unexpected_model_exception_closes_environment_and_enters_error(
     assert snapshot.outcome is RunOutcome.ERROR
     assert snapshot.last_error == "unexpected model failure"
     assert len(agent.ttyrec_files) == 1
+
+
+def score_task(*legs: ObjectiveLeg) -> TaskSpec:
+    return TaskSpec(NleTask.SCORE, ActionProfile.NLE_TASK_ACTIONS, Objective(legs))
+
+
+def run_to_end(
+    directory: Path, seed: int, task: TaskSpec, max_steps: int
+) -> tuple[AgentCoordinator, list[StepRecord]]:
+    agent = AgentCoordinator(
+        NleEnvironment(
+            ScenarioConfig(
+                seed=seed,
+                artifact_directory=directory,
+                max_episode_steps=max_steps,
+                task=task,
+            )
+        ),
+        ObservationProjector(),
+        ScriptedDevelopmentModel(),
+    )
+    agent.start()
+    agent.resume()
+    records: list[StepRecord] = []
+    while not records or records[-1].outcome is None:
+        record = agent.advance()
+        assert record is not None
+        records.append(record)
+    return agent, records
+
+
+def traversals(records: list[StepRecord]) -> list[tuple[object, ...]]:
+    """Each level change: action, goal token, levels, and the stair belief."""
+    used = []
+    for record in records:
+        if record.action.name not in LEVEL_CHANGE_ACTIONS:
+            continue
+        intent = record.selection.intent
+        assert intent is not None and intent.destination is not None
+        stair = intent.destination.stair
+        assert stair is not None
+        before, after = record.before.player, record.after.player
+        used.append(
+            (
+                record.action.name,
+                record.selection.goal.token,
+                (before.dungeon_number, before.dungeon_level),
+                (after.dungeon_number, after.dungeon_level),
+                stair.kind.value,
+                stair.evidence.value if stair.evidence else None,
+            )
+        )
+    return used
+
+
+DOWN_ACTION = "MiscDirection.DOWN"
+UP_ACTION = "MiscDirection.UP"
+
+
+def test_round_trip_descends_by_probes_and_climbs_by_arrival_stairs(
+    tmp_path: Path,
+) -> None:
+    agent, records = run_to_end(
+        tmp_path,
+        6,
+        score_task(ReachLevelLeg(LevelKey(0, 3)), ReachLevelLeg(LevelKey(0, 1))),
+        max_steps=600,
+    )
+
+    assert traversals(records) == [
+        (DOWN_ACTION, "traverse_stairs:down:main", (0, 1), (0, 2), "unknown", None),
+        (DOWN_ACTION, "traverse_stairs:down:main", (0, 2), (0, 3), "unknown", None),
+        (UP_ACTION, "traverse_stairs:up:main", (0, 3), (0, 2), "main", "arrival"),
+        (UP_ACTION, "traverse_stairs:up:main", (0, 2), (0, 1), "main", "arrival"),
+    ]
+    last = records[-1]
+    # NetHack continues; the coordinator ends the run once every leg is met.
+    assert last.outcome is RunOutcome.OBJECTIVE_COMPLETE
+    assert not last.transition.terminated and not last.transition.truncated
+    snapshot = agent.snapshot()
+    assert snapshot.state is RunState.TERMINAL
+    assert snapshot.objective_leg == 2
+    assert snapshot.level == LevelKey(0, 1)
+    assert len(agent.ttyrec_files) == 1
+    # Level changes happen only through deterministic staircase navigation.
+    assert {
+        record.selection.skill
+        for record in records
+        if record.action.name in LEVEL_CHANGE_ACTIONS
+    } == {Skill.STAIRCASE_NAVIGATION}
+
+
+def test_a_mines_probe_is_retraced_and_the_main_stair_found_by_elimination(
+    tmp_path: Path,
+) -> None:
+    _, records = run_to_end(
+        tmp_path, 4, score_task(ReachLevelLeg(LevelKey(0, 3))), max_steps=600
+    )
+
+    assert traversals(records) == [
+        (DOWN_ACTION, "traverse_stairs:down:main", (0, 1), (0, 2), "unknown", None),
+        # The nearer unknown `>` on DL2 is the Gnomish Mines branch.
+        (DOWN_ACTION, "traverse_stairs:down:main", (0, 2), (2, 1), "unknown", None),
+        (UP_ACTION, "traverse_stairs:up:branch:0", (2, 1), (0, 2), "branch", "arrival"),
+        (
+            DOWN_ACTION,
+            "traverse_stairs:down:main",
+            (0, 2),
+            (0, 3),
+            "main",
+            "elimination",
+        ),
+    ]
+    assert records[-1].outcome is RunOutcome.OBJECTIVE_COMPLETE
+
+
+def test_entering_the_mines_probes_both_downstairs_of_the_branch_level(
+    tmp_path: Path,
+) -> None:
+    agent, records = run_to_end(
+        tmp_path, 4, score_task(EnterDungeonLeg(2)), max_steps=600
+    )
+
+    assert traversals(records) == [
+        (DOWN_ACTION, "traverse_stairs:down:main", (0, 1), (0, 2), "unknown", None),
+        # Two unknown `>` on DL2: the nearer probe leads to DL3, the main one.
+        (
+            DOWN_ACTION,
+            "traverse_stairs:down:branch:2",
+            (0, 2),
+            (0, 3),
+            "unknown",
+            None,
+        ),
+        (UP_ACTION, "traverse_stairs:up:main", (0, 3), (0, 2), "main", "arrival"),
+        (
+            DOWN_ACTION,
+            "traverse_stairs:down:branch:2",
+            (0, 2),
+            (2, 1),
+            "branch",
+            "elimination",
+        ),
+    ]
+    assert records[-1].outcome is RunOutcome.OBJECTIVE_COMPLETE
+    assert agent.snapshot().level == LevelKey(2, 1)
+
+
+def test_terminal_steps_keep_the_last_live_level(tmp_path: Path) -> None:
+    # NLE zeroes the bottom-line statistics of a terminal observation.
+    staircase, success = run_to_end(tmp_path / "staircase", 2, STAIRCASE_TASK, 100)
+    assert success[-1].outcome is RunOutcome.TASK_SUCCESS
+    assert success[-1].after.player.dungeon_level == 0
+    assert staircase.snapshot().level == LevelKey(0, 1)
+    assert staircase.snapshot().objective_leg == 0
+
+    score, death = run_to_end(
+        tmp_path / "score", 9, score_task(ReachLevelLeg(LevelKey(0, 12))), 600
+    )
+    assert death[-1].outcome is RunOutcome.DEATH
+    assert death[-1].after.player.dungeon_level == 0
+    assert score.snapshot().level == LevelKey(0, 5)
+    assert score.snapshot().state is RunState.TERMINAL

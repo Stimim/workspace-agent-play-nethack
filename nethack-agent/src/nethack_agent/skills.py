@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Final
 
 from nethack_agent.decision import (
+    STAIR_DESTINATIONS,
     ActionIntent,
     DestinationKind,
     IntentDestination,
@@ -23,7 +24,16 @@ from nethack_agent.navigation import (
     route_tree,
 )
 from nethack_agent.observation import ProjectedObservation
-from nethack_agent.traversal import DUNGEONS_OF_DOOM, LevelKey, StairDirection
+from nethack_agent.traversal import (
+    DUNGEONS_OF_DOOM,
+    STAND_ON_DOWNSTAIRS,
+    Goal,
+    LevelKey,
+    StairDirection,
+    StairTarget,
+    TraverseStairsGoal,
+    candidate_tier,
+)
 
 # Each search finds an adjacent hidden door or corridor with probability 1/7
 # at Luck 0 (NetHackWiki "Search"); ten searches find it about 79% of the time.
@@ -68,50 +78,89 @@ class ExploreResult:
             raise ValueError("exploration returns exactly one action or stuck reason")
 
 
+_STAIR_NAMES: Final = {
+    StairDirection.DOWN: "downstairs",
+    StairDirection.UP: "upstairs",
+}
+
+
+def stair_candidates(memory: LevelMemory, target: StairTarget) -> dict[Point, int]:
+    """Remembered staircases compatible with `target`, mapped to their tier.
+
+    Tier 0 is an established match and tier 1 a probe of a staircase whose
+    identity is not established (ADR 0004).
+    """
+    pair_known = memory.pair_known(target.direction)
+    candidates: dict[Point, int] = {}
+    for stair in memory.stairs(target.direction):
+        tier = candidate_tier(target, memory.identity(stair), pair_known=pair_known)
+        if tier is not None:
+            candidates[stair] = tier
+    return candidates
+
+
 class StaircaseNavigationSkill:
-    """Route to a remembered downstairs over conservatively known terrain."""
+    """Route to a remembered staircase matching the goal, then wait or use it.
+
+    Candidates rank by tier (established before probe), then route distance,
+    then map row and column. A stand_on_stairs goal waits on the chosen
+    staircase; a traverse_stairs goal uses it with the level-change action,
+    which only the coordinator's traversal permit lets through the gate.
+    """
 
     def select_action(
-        self, memory: LevelMemory, actions_by_name: dict[str, LegalAction]
+        self,
+        memory: LevelMemory,
+        actions_by_name: dict[str, LegalAction],
+        goal: Goal = STAND_ON_DOWNSTAIRS,
+        level_change: LegalAction | None = None,
     ) -> SkillAction | None:
-        stairs = memory.stairs(StairDirection.DOWN)
-        if not stairs:
+        target = goal.target
+        candidates = stair_candidates(memory, target)
+        if not candidates:
             return None
+        name = _STAIR_NAMES[target.direction]
+        kind = STAIR_DESTINATIONS[target.direction]
         origin = memory.position
-        if origin in stairs:
+        tree = route_tree(memory)
+        chosen = _best_stair(tree, candidates)
+        blocked: RouteTree | None = None
+        if chosen is None:
+            blocked = route_tree(memory, through_monsters=True)
+            chosen = _best_stair(blocked, candidates)
+            if chosen is None:
+                return None
+        destination = IntentDestination(kind, *chosen, memory.identity(chosen))
+        if chosen == origin:
+            here = ActionIntent(destination, None, None)
+            if isinstance(goal, TraverseStairsGoal):
+                if level_change is None:
+                    return None
+                return SkillAction(
+                    level_change.index,
+                    f"Use the {name} at {_cell(origin)} "
+                    f"({memory.identity(origin).kind.value} identity) for goal "
+                    f"{goal.token}.",
+                    ActionRecord(ActionKind.TRAVERSE, origin),
+                    here,
+                )
             wait = actions_by_name.get("MiscDirection.WAIT")
             if wait is None:
                 return None
             return SkillAction(
                 wait.index,
-                "Wait safely while already standing on the downstairs.",
+                f"Wait safely while already standing on the {name}.",
                 ActionRecord(ActionKind.OTHER, origin),
-                ActionIntent(
-                    IntentDestination(
-                        DestinationKind.DOWNSTAIRS, *origin, memory.identity(origin)
-                    ),
-                    None,
-                    None,
-                ),
+                here,
             )
-        tree = route_tree(memory)
-        target = _nearest(tree, stairs)
-        blocked: RouteTree | None = None
-        if target is None:
-            blocked = route_tree(memory, through_monsters=True)
-            target = _nearest(blocked, stairs)
-            if target is None:
-                return None
-        destination = IntentDestination(
-            DestinationKind.DOWNSTAIRS, *target, memory.identity(target)
-        )
-        if blocked is None and tree.distances[target] == 1:
-            # Stepping onto `>` ends the task at once; that beats any fight.
+        if blocked is None and tree.distances[chosen] == 1:
+            # Stepping onto the staircase completes or enables the goal at
+            # once; that beats any fight.
             return _route_step(
                 memory,
-                tree.route(target),
+                tree.route(chosen),
                 actions_by_name,
-                f"Step onto the downstairs at {_cell(target)}.",
+                f"Step onto the {name} at {_cell(chosen)}.",
                 destination,
             )
         defense = _attack_adjacent_hostile(memory, actions_by_name, destination)
@@ -120,14 +169,14 @@ class StaircaseNavigationSkill:
         if blocked is None:
             return _route_step(
                 memory,
-                tree.route(target),
+                tree.route(chosen),
                 actions_by_name,
-                f"Follow the known route to the downstairs at {_cell(target)} "
-                f"({tree.distances[target]} steps).",
+                f"Follow the known route to the {name} at {_cell(chosen)} "
+                f"({tree.distances[chosen]} steps).",
                 destination,
             )
         return _past_monster(
-            memory, blocked, actions_by_name, target, "downstairs", destination
+            memory, blocked, actions_by_name, chosen, name, destination
         )
 
 
@@ -161,12 +210,16 @@ class ExploreLevelSkill:
         )
 
     def select_action(
-        self, memory: LevelMemory, actions_by_name: dict[str, LegalAction]
+        self,
+        memory: LevelMemory,
+        actions_by_name: dict[str, LegalAction],
+        target: StairTarget = STAND_ON_DOWNSTAIRS.target,
     ) -> ExploreResult:
+        """Explore, biased toward remembered staircases compatible with `target`."""
         defense = _attack_adjacent_hostile(memory, actions_by_name, None)
         if defense is not None:
             return ExploreResult(defense, None)
-        stairs = memory.stairs(StairDirection.DOWN)
+        stairs = tuple(stair_candidates(memory, target))
         tree = route_tree(memory)
         goal = _frontier_goal(memory, tree, stairs)
         if goal is not None:
@@ -258,13 +311,14 @@ def _toward(kind: DestinationKind, point: Point) -> ActionIntent:
     return ActionIntent(IntentDestination(kind, *point), None, None)
 
 
-def _nearest(tree: RouteTree, targets: tuple[Point, ...]) -> Point | None:
+def _best_stair(tree: RouteTree, candidates: dict[Point, int]) -> Point | None:
+    """The reachable candidate with the lowest tier, distance, row, and column."""
     reachable = [
-        (tree.distances[target], target[1], target[0], target)
-        for target in targets
-        if target in tree.distances
+        (tier, tree.distances[stair], stair[1], stair[0], stair)
+        for stair, tier in candidates.items()
+        if stair in tree.distances
     ]
-    return min(reachable)[3] if reachable else None
+    return min(reachable)[4] if reachable else None
 
 
 def _route_step(

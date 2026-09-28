@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import stat
+import time
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
@@ -30,7 +32,12 @@ from nethack_agent.evaluation import (
     summarize_run,
 )
 from nethack_agent.events import StepPayload
-from nethack_agent.storage import RunStore
+from nethack_agent.model import ScriptedDevelopmentModel
+from nethack_agent.ollama import OllamaConfig
+from nethack_agent.run_manager import RunManager
+from nethack_agent.storage import RunRecord, RunStore
+from nethack_agent.tasks import ActionProfile, NleTask, TaskSpec
+from nethack_agent.traversal import LevelKey, Objective, ReachLevelLeg
 
 SUITE_PATH = Path(__file__).resolve().parents[1] / "evaluation" / "staircase-v1.json"
 
@@ -636,3 +643,75 @@ def test_requested_seeds_must_belong_to_the_suite() -> None:
             report_directory=Path("reports"),
             seeds=(11,),
         )
+
+
+def test_audit_accepts_permitted_traversals_and_flags_unpermitted_ones(
+    tmp_path: Path,
+) -> None:
+    data_directory = tmp_path / "data"
+    manager = RunManager(
+        data_directory,
+        OllamaConfig(model="scripted"),
+        model_factory=lambda _client: ScriptedDevelopmentModel(),
+    )
+    task = TaskSpec(
+        NleTask.SCORE,
+        ActionProfile.NLE_TASK_ACTIONS,
+        Objective((ReachLevelLeg(LevelKey(0, 3)), ReachLevelLeg(LevelKey(0, 1)))),
+    )
+    try:
+        run_id = manager.create_run(
+            seed=6, max_episode_steps=600, auto_start=True, task=task
+        ).id
+        deadline = time.monotonic() + 120
+        while manager.store.get_run(run_id).state is RunState.RUNNING:
+            assert time.monotonic() < deadline
+            time.sleep(0.05)
+    finally:
+        manager.close()
+    store = RunStore(data_directory / "runs.sqlite3")
+    suite = replace(
+        load_suite(SUITE_PATH),
+        environment=NleTask.SCORE.value,
+        max_episode_steps=600,
+    )
+
+    def audit(record: RunRecord) -> SeedResult:
+        return summarize_run(
+            record,
+            store.events_after(run_id, limit=1000),
+            suite=suite,
+            seed=6,
+            ended_by="terminal",
+            wall_seconds=0.0,
+            data_directory=data_directory,
+        )
+
+    record = store.get_run(run_id)
+    assert record.outcome is RunOutcome.OBJECTIVE_COMPLETE
+    result = audit(record)
+    assert result.integrity_problems == ()
+    assert result.invalid_actions == 0
+    assert result.gate_rejections == 0
+
+    # The same stored level changes are invalid for a run stored before task
+    # specs, which executed the staircase task.
+    assert audit(replace(record, task=None)).invalid_actions == 4
+
+    # An intent that claims a staircase the hero was not standing on is
+    # caught against the observation the step was decided on.
+    with sqlite3.connect(data_directory / "runs.sqlite3") as connection:
+        rowid, payload = next(
+            (rowid, payload)
+            for rowid, text in connection.execute(
+                "SELECT rowid, payload_json FROM events ORDER BY sequence"
+            )
+            if (payload := json.loads(text)).get("action", {}).get("name")
+            == "MiscDirection.DOWN"
+        )
+        payload["selection"]["intent"]["destination"]["x"] += 1
+        connection.execute(
+            "UPDATE events SET payload_json = ? WHERE rowid = ?",
+            (json.dumps(payload), rowid),
+        )
+    assert audit(record).invalid_actions == 1
