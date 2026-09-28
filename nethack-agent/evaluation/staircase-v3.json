@@ -1,0 +1,41 @@
+{
+  "schema_version": 2,
+  "suite_id": "staircase-v3",
+  "character": "val-dwa-law",
+  "policy_version": "hierarchical-task-progression-v1",
+  "knowledge_bundle_id": "staircase-reviewed-v3",
+  "seed_selection": "This regression case deliberately reuses the staircase-v1 and staircase-v2 seeds 1 through 10, in their original order and including reference seed 6, so policy hierarchical-task-progression-v1 can be compared with the accepted milestone and traversal-policy trajectories. staircase-v2 stays pinned to its own policy; this suite id exists because a new policy requires a new suite.",
+  "step_cap_rationale": "The 1000-step cap and the acceptance of at least six successes including seed 6 are reused unchanged from staircase-v1 and staircase-v2. They were fixed before any staircase-v3 episode ran.",
+  "cases": [
+    {
+      "case_id": "staircase",
+      "task": {
+        "environment": "NetHackStaircase-v0",
+        "action_profile": "nle-task-actions",
+        "objective": {
+          "legs": [
+            {
+              "kind": "stand_on_stairs",
+              "target": {
+                "direction": "down",
+                "connection": "any",
+                "dungeon_number": null
+              }
+            }
+          ]
+        }
+      },
+      "seeds": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      "max_episode_steps": 1000,
+      "acceptance": {
+        "min_successes": 6,
+        "required_success_seeds": [6]
+      }
+    }
+  ],
+  "acceptance": {
+    "max_invalid_actions": 0,
+    "max_gate_rejections": 0,
+    "require_complete_records": true
+  }
+}

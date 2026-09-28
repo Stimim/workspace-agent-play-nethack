@@ -6,7 +6,7 @@ Build a local, autonomous NetHack agent whose long-term success criterion is asc
 
 ## Current status
 
-The deterministic NLE adapter, immutable observation projector, typed traversal planner, per-level dungeon memory, deterministic staircase-navigation, exploration and bounded hunger skills, contextual action gate, structured Ollama decision model, reviewed local knowledge, typed SQLite event log, loopback control service and browser UI, scenario orchestrator, network-boundary verifier, and policy-pinned evaluation harness are implemented. Milestone 1 and traversal-policy evidence remain accepted records; the current behavior is `hierarchical-survival-v1`.
+The deterministic NLE adapter, immutable observation projector, typed traversal planner, per-level dungeon memory, deterministic staircase-navigation, exploration and bounded hunger skills, contextual action gate, structured Ollama decision model, reviewed local knowledge, typed SQLite event log, loopback control service and browser UI, scenario orchestrator, network-boundary verifier, exhaustion-marker replay, and policy-pinned evaluation harness with typed metric thresholds are implemented. Milestone 1, traversal-policy, and survival-policy evidence remain accepted or recorded as they were; the current behavior is `hierarchical-task-progression-v1`.
 
 ## System context
 
@@ -52,9 +52,11 @@ The adapter must:
 `tasks.TaskSpec` (`ScenarioConfig.task`, default `STAIRCASE_TASK`): an NLE task
 id (`NleTask`: Staircase, Score, Scout, Gold, Eat, Oracle), an action profile,
 and a `traversal.Objective`. `NetHackStaircase-v0` accepts only its single
-`stand_on_stairs(down, any)` leg and `NetHackScore-v0` any legs; Scout, Gold,
-Eat, and Oracle are rejected until ADR 0004 section 8 defines their
-objectives. An `ActionProfile` is a named, code-defined tuple of NLE action
+`stand_on_stairs(down, any)` leg and `NetHackScore-v0` any stair or level legs.
+`NetHackScout-v0` with `nle-task-actions` and `NetHackEat-v0` with
+`nle-hunger-actions` each accept exactly one `explore_dungeon` leg, which no
+other task accepts; Gold and Oracle are rejected until ADR 0004 section 8
+defines their objectives. An `ActionProfile` is a named, code-defined tuple of NLE action
 members. `nle-task-actions` is NLE's 23 `TASK_ACTIONS`.
 `nle-hunger-actions` keeps those actions in order, then adds ESC and one enum
 member for every otherwise-missing `a-z`/`A-Z` inventory letter, deduplicated
@@ -122,24 +124,34 @@ enum; `SkillDecision`, `ActionDecision`, `ActionSelection`, and their metrics
 are immutable typed records. Goals are the typed `traversal.Goal` union
 ([ADR 0004](docs/decisions/0004-traversal-goals-and-task-progression.md)):
 `stand_on_stairs` or `traverse_stairs`, each with a `StairTarget` (direction
-`up`/`down` and connection `any`, `main`, or `branch` with a dungeon number).
+`up`/`down` and connection `any`, `main`, or `branch` with a dungeon number),
+or `explore_level` with the `LevelKey` to explore and no staircase target.
 They persist as objects such as
-`{"kind": "stand_on_stairs", "target": {"direction": "down", "connection": "any", "dungeon_number": null}}`;
+`{"kind": "stand_on_stairs", "target": {"direction": "down", "connection": "any", "dungeon_number": null}}`
+or `{"kind": "explore_level", "level": {"dungeon_number": 0, "dungeon_level": 2}}`;
 the string `stand_on_downstairs` stored before typed goals reads as exactly that
-goal. The model is offered goals by token (`stand_on_stairs:down:any`) through
-a per-call generation schema, and the parser maps a token back to the offered
-goal.
+goal. The model is offered goals by token (`stand_on_stairs:down:any`,
+`explore_level:0:2`) through a per-call generation schema, and the parser maps
+a token back to the offered goal.
 
 Each run's `TaskSpec` objective (1-8 legs: `stand_on_stairs`, `reach_level`,
-`enter_dungeon`) drives `planner.ObjectivePlanner`, a pure function of the
-current leg and dungeon memory that sets every step's goal. A `stand_on_stairs`
+`enter_dungeon`, `explore_dungeon`) drives `planner.ObjectivePlanner`, a pure
+function of the current leg and dungeon memory that sets every step's goal. A
+`stand_on_stairs`
 leg keeps that goal. A `reach_level` leg in the same dungeon takes the main
 staircase toward the level; from another dungeon it retraces the recorded
 branch link. `enter_dungeon(2)` (the Gnomish Mines; Sokoban's number 4 is
 unverified) descends to the DL2-4 branch range, searches each range level for
 a second `>`, probes two unknown `>` (the nearest first), moves on when a
 level is exhausted with one `>`, and re-arms each exhausted range level's
-exploration once before giving up. Legs are checked after every step whose
+exploration once before giving up. `explore_dungeon(max_level)` requires
+every Dungeons of Doom level 1..`max_level` to be explored: it plans
+`explore_level` on the shallowest unexplored required level, main stairs
+toward it otherwise (so a level skipped by a trap door is revisited by
+climbing), and retraces the branch link out of another dungeon. A level is
+explored once exploration has found it exhausted; that flag, unlike
+`exhausted`, survives later knowledge growth. Legs are checked after every
+step whose
 NLE episode continues (NLE zeroes the bottom-line statistics of a terminal
 observation). On `NetHackStaircase-v0` (and later Oracle) NLE's success
 state ends the run; on other tasks, completing the last leg ends it with
@@ -159,9 +171,11 @@ coding agents review persisted evidence and either revise reviewed knowledge
 or implement a deterministic skill for a simple recurring case.
 
 `AgentCoordinator` consults the model for skill at the start of an episode,
-offering exactly the planner's goal and only staircase navigation and
-exploration. A deterministic arbiter owns execution; the hunger skill is never
-a model choice. Per step, in order:
+offering exactly the planner's goal and the skills that can serve it
+(`decision.model_selectable_skills`): staircase navigation and exploration for
+a stair goal, exploration alone for an `explore_level` goal. A deterministic
+arbiter owns execution; the hunger skill is never a model choice. Per step, in
+order:
 
 1. a pending direction prompt from exploration's own kick is answered;
 2. on `nle-hunger-actions` runs, `HungerSkill` continues its one-prompt
@@ -178,9 +192,15 @@ a model choice. Per step, in order:
    On the chosen staircase it fights an adjacent safe-to-melee hostile before
    either waiting or traversing. Stepping onto an adjacent staircase still
    completes or enables the goal immediately;
-6. `ExploreLevelSkill` acts, biased toward unreachable compatible staircases,
-   or reports a typed `StuckReason`. The first `search_exhausted` report marks
-   the level exhausted and replans before a stuck consultation.
+6. `ExploreLevelSkill` acts, biased toward unreachable compatible staircases
+   of a stair goal, or reports a typed `StuckReason`. The first
+   `search_exhausted` report at the level's current knowledge marks the level
+   exhausted and explored and records `selection.exhausted_level` on that
+   step. If that completes the current leg, the step is a deterministic
+   `WAIT` confirmation, so the final required level completes without a model
+   consultation. Otherwise the coordinator replans before a stuck
+   consultation. A decision discarded by a pause or failure restores the
+   level's exhaustion marks, so every recorded marker matches memory.
 
 Navigation and exploration both route over the current
 `navigation.LevelMemory`, a bounded
@@ -432,7 +452,10 @@ reads as JSON `null` (no intent recorded), and an absent intent `path` reads as
 `null` (no route recorded), never as an inferred target or route. Intents
 recorded before levels, stair identities, and staircase-pair evidence read
 with `level: null`, `stair: null`, and `pair_known: null` (not recorded), and the goal string `stand_on_downstairs` reads
-as the typed goal it meant. A step's `outcome` is required exactly when NLE
+as the typed goal it meant. New selections always write `exhausted_level`
+(null unless the step's decision found that level exhausted; a prompt answer
+never carries one); selections recorded before it existed read it as `null`
+(not recorded). A step's `outcome` is required exactly when NLE
 terminated or truncated the episode, except `objective_complete`, which the
 coordinator records when it ends a run whose NLE episode continues.
 Inventory records written before typed BUC evidence remain readable in the
@@ -458,7 +481,7 @@ Run creation accepts validated run execution parameters (`seed`,
 (`StrictInt` and `StrictBool`, with `extra="forbid"`, and the `TaskSpec` domain
 parser for `task`) rather than arbitrary command lines. The character
 (`val-dwa-law`), model (`gemma4-nethack:latest`), policy
-(`hierarchical-survival-v1`), and knowledge settings are fixed by the service
+(`hierarchical-task-progression-v1`), and knowledge settings are fixed by the service
 configuration rather than accepted per request. A run without `task` executes
 the legacy staircase task and action profile; a supplied traversal task's
 objective and action profile drive the coordinator.
@@ -654,13 +677,21 @@ produce evidence for it.
 
 Suite schema 2 supports several named cases. It pins both `policy_version` and
 `knowledge_bundle_id` at suite level; each case carries a strict typed
-`TaskSpec`, seeds, episode cap, minimum successes, and any required successful
-seeds. Global acceptance sets the invalid-action and gate-rejection limits and
-whether complete records are required. Unknown fields, malformed task objects,
-duplicate case ids, duplicate seeds within a case, out-of-case required seeds,
-and invalid thresholds are rejected. Before creating a run store, report, or
-episode, the evaluator requires both pins to match the checkout's policy and
-loaded knowledge bundle.
+`TaskSpec`, seeds, episode cap, minimum successes, any required successful
+seeds, and optional typed `metric_thresholds`. A threshold names a per-episode
+metric (`task_return`, `explored_cells`, `max_depth`, `final_gold`,
+`worst_hunger_state` as the NLE hunger index, `death`, or `starvation_death`
+as 0/1), a statistic over the case's episodes (`minimum`, `median`, `mean`,
+`maximum`, or `sum`), and a bound (`at_least` or `at_most` a finite number);
+an unavailable value fails. Minimum successes must be at least 1 unless the
+case declares at least one threshold, which lets a task without an NLE success
+state be gated as a metric baseline. Global acceptance sets the
+invalid-action and gate-rejection limits and whether complete records are
+required. Unknown fields, malformed task objects, duplicate case ids,
+duplicate seeds within a case, out-of-case required seeds, duplicate or empty
+threshold lists, and invalid thresholds are rejected. Before creating a run
+store, report, or episode, the evaluator requires both pins to match the
+checkout's policy and loaded knowledge bundle.
 
 Two schema-2 suites are fixed for policy `hierarchical-traversal-v1` and bundle
 `staircase-reviewed-v3`. `staircase-v2` repeats the milestone regression.
@@ -680,11 +711,13 @@ pass: the three cases achieved 3/5, 3/5, and 1/5, so entering the Mines missed
 its fixed 2/5 threshold. A completed failing suite is retained as evidence;
 thresholds and seeds are not rewritten after observing it.
 
-The current `hierarchical-survival-v1` checkout retains
-`staircase-reviewed-v3` but refuses both traversal-policy schema-2 suites before
-creating a run store, report, or episode. Their files and reports are not
-rerun, rewritten, or relabeled; a survival evaluation requires a new fixed
-suite.
+Neither later checkout can rerun them: `hierarchical-survival-v1` and the
+current `hierarchical-task-progression-v1` retain `staircase-reviewed-v3` but
+refuse both traversal-policy schema-2 suites before creating a run store,
+report, or episode. Their files and reports are not rerun, rewritten, or
+relabeled. `staircase-v3` and `traversal-v2` repeat their cases, seeds, caps,
+and thresholds unchanged under the current policy, as their `seed_selection`
+states.
 
 `nethack-agent eval run` drives every case/seed pair in-process through one
 `RunManager` with `create_run(auto_start=True)`: the same coordinator, worker
@@ -707,16 +740,29 @@ only when the recorded intent has `pair_known: true`, preserving the
 coordinator's evidence that two stairs of that direction were known; false,
 null, and legacy-absent evidence never broaden permission. Runs stored before
 task specs are audited as the staircase task, which prohibits level changes.
+A run with an `explore_dungeon` leg or any `exhausted_level` marker is replayed
+by `replay.ExplorationReplay`, which rebuilds the coordinator's dungeon memory
+step by step (re-deriving each executed action's memory record from its
+selection and intent, and replaying planner and model re-arms) and confirms a
+marker only if the shared exploration skill reports `search_exhausted` on the
+decided-on observation of that level. An unconfirmed marker is an integrity
+problem, and only confirmed markers complete an `explore_dungeon` leg.
 
 Report schema 3 groups results and acceptance by case and retains a global
 aggregate and gate. Each episode records steps, game turns, maximum depth,
 deepest `LevelKey`, ordered levels visited, up/down traversals, unknown-stair
 probes and misses, level changes without a stair action, completed objective
-legs, final gold/score/HP/XL, total task return, observed hunger states, and a
-death cause matched from NLE's xlog when available. Objective completion is
-rederived from stored public observations rather than trusted from the run
-outcome. A zeroed terminal NLE observation is not treated as final player state;
-the last live observation remains authoritative.
+legs, final gold/score/HP/XL, total task return, observed hunger states, a
+death cause matched from NLE's xlog when available, and, for episodes
+evaluated since task progression, `explored_cells` (the sum over levels of the
+most non-blank glyphs seen live on each, NLE Scout's public count) and
+`worst_hunger_state`. Reports written before those two fields lack them and
+render unchanged. A case with thresholds records each threshold's computed
+value and pass/fail in its acceptance, and its Markdown prints a threshold
+table. Objective completion is
+rederived from stored public observations and confirmed markers rather than
+trusted from the run outcome. A zeroed terminal NLE observation is not treated
+as final player state; the last live observation remains authoritative.
 
 Acceptance requires every requested case/seed pair without interruption,
 the per-case thresholds, fixed shared configuration across cases (model,

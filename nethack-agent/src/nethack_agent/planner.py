@@ -15,6 +15,8 @@ from nethack_agent.traversal import (
     DUNGEONS_OF_DOOM,
     BranchStairs,
     EnterDungeonLeg,
+    ExploreDungeonLeg,
+    ExploreLevelGoal,
     Goal,
     LevelKey,
     Objective,
@@ -83,6 +85,8 @@ class ObjectivePlanner:
         if isinstance(leg, StandOnStairsLeg):
             return PlannedGoal(StandOnStairsGoal(leg.target))
         here = _level(dungeon.current)
+        if isinstance(leg, ExploreDungeonLeg):
+            return PlannedGoal(_explore_dungeon(leg, dungeon, here))
         target_dungeon = (
             leg.level.dungeon_number
             if isinstance(leg, ReachLevelLeg)
@@ -99,6 +103,38 @@ class ObjectivePlanner:
         )
 
 
+def unexplored_level(leg: ExploreDungeonLeg, dungeon: DungeonMemory) -> LevelKey | None:
+    """The shallowest required level exploration has not yet exhausted."""
+    return next(
+        (
+            level
+            for level in leg.levels
+            if level not in dungeon.levels or not dungeon.levels[level].explored
+        ),
+        None,
+    )
+
+
+def _explore_dungeon(
+    leg: ExploreDungeonLeg, dungeon: DungeonMemory, here: LevelKey
+) -> Goal:
+    """Explore the shallowest unexplored required level, moving by main stairs.
+
+    A branch dungeon is left by its recorded link. A level skipped by a trap
+    door or hole is revisited by climbing the main staircases.
+    """
+    if here.dungeon_number != DUNGEONS_OF_DOOM:
+        return _leave_branch(dungeon, here)
+    target = unexplored_level(leg, dungeon)
+    if target is None:
+        raise ObjectivePlanningError(
+            "an explored dungeon leg has no goal; the coordinator ends the run"
+        )
+    if target == here:
+        return ExploreLevelGoal(here)
+    return _toward(here, target.dungeon_level)
+
+
 def leg_complete(leg: ObjectiveLeg, dungeon: DungeonMemory) -> bool:
     """Whether the hero's current position satisfies `leg`."""
     memory = dungeon.current
@@ -107,6 +143,8 @@ def leg_complete(leg: ObjectiveLeg, dungeon: DungeonMemory) -> bool:
         return here == leg.level
     if isinstance(leg, EnterDungeonLeg):
         return here.dungeon_number == leg.dungeon_number
+    if isinstance(leg, ExploreDungeonLeg):
+        return unexplored_level(leg, dungeon) is None
     position = memory.position
     direction = memory.stair_direction(position)
     return direction is leg.target.direction and (

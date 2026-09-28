@@ -439,13 +439,22 @@ but not accepted: 3/5, 3/5, and 1/5 by case). Both have zero invalid actions,
 gate rejections, and integrity failures. Preserve the failing traversal report;
 do not tune the fixed suite after observing it.
 
-The current checkout runs policy `hierarchical-survival-v1` with the same
-knowledge bundle. It refuses both schema-2 suites above before creating a data
-directory because their policy pin is immutable. Reproduce them only from the
-recorded traversal-policy commit, with a fresh data directory. Do not rerun,
-rewrite, or relabel their reports as survival-policy evidence. A survival
-evaluation requires a new predeclared suite id, seeds, thresholds, and policy
-pin.
+The survival-policy checkout and the current `hierarchical-task-progression-v1`
+checkout run the same knowledge bundle but refuse both schema-2 suites above
+before creating a data directory because their policy pin is immutable.
+Reproduce them only from the recorded traversal-policy commit, with a fresh
+data directory. Do not rerun, rewrite, or relabel their reports as later-policy
+evidence. Policy `hierarchical-task-progression-v1` instead has its own
+regression suites, `evaluation/staircase-v3.json` and
+`evaluation/traversal-v2.json`, which repeat the cases, seeds, caps, and
+thresholds above under new suite ids.
+
+A case may also declare typed `metric_thresholds` (metric, statistic, and an
+`at_least`/`at_most` bound). A case with at least one threshold may set
+`min_successes` to 0, which is how Scout and Eat, tasks without an NLE success
+state, are gated as baselines. Suites with an `explore_dungeon` objective or
+any `exhausted_level` marker are audited by replaying the coordinator's memory
+(`replay.ExplorationReplay`); an unconfirmed marker is an integrity failure.
 
 `evaluation/staircase-v1.json` likewise remains the schema-1 milestone record
 bound to policy `hierarchical-explore-v1`. To reproduce that historical suite,
@@ -466,8 +475,12 @@ an `interrupted` report.
 Report schema 3 groups results by case and records traversal metrics for every
 episode: turns, depths and exact levels, stair traversals and probes, objective
 legs, return, final character state, hunger states, and an xlog death cause
-when available. Markdown is rendered from the JSON; keep both files together.
-Historical schema-2 reports remain renderable without rewriting them.
+when available. Episodes evaluated since task progression also record
+`explored_cells` and `worst_hunger_state`, and a case with metric thresholds
+records each computed value and result. Markdown is rendered from the JSON;
+keep both files together. Historical schema-2 reports and schema-3 reports
+written before these fields remain renderable, byte for byte, without
+rewriting them.
 
 If an interrupted (or crashed, still `running`) suite will not be finished, for
 example because the policy changed, finalize its report instead of deleting it:

@@ -39,6 +39,8 @@ from nethack_agent.ollama import (
     OllamaError,
 )
 from nethack_agent.traversal import (
+    STAIR_GOAL_TYPES,
+    ExploreLevelGoal,
     Goal,
     StairConnection,
     StairDirection,
@@ -347,6 +349,12 @@ _STAIR_NAMES: Final = {
 
 def describe_goal(goal: Goal) -> str:
     """Plain-language goal text for prompts, derived only from the typed goal."""
+    if isinstance(goal, ExploreLevelGoal):
+        level = goal.level
+        return (
+            f"explore level {level.dungeon_level} of dungeon {level.dungeon_number} "
+            "until no unexplored space, locked door to kick, or search spot is left"
+        )
     target = goal.target
     name, glyph, verb = _STAIR_NAMES[target.direction]
     if target.connection is StairConnection.ANY:
@@ -361,9 +369,13 @@ def describe_goal(goal: Goal) -> str:
 
 
 def _needed_stairs(goals: tuple[Goal, ...]) -> str:
-    """The staircase names the offered goals need, such as `downstairs`."""
+    """The staircase names the offered stair goals need, such as `downstairs`."""
     return " or ".join(
-        dict.fromkeys(_STAIR_NAMES[goal.target.direction][0] for goal in goals)
+        dict.fromkeys(
+            _STAIR_NAMES[goal.target.direction][0]
+            for goal in goals
+            if isinstance(goal, STAIR_GOAL_TYPES)
+        )
     )
 
 
@@ -404,12 +416,20 @@ def _skill_prompt(
         map_text = "\n".join(observation.map.rows)
         needed = _needed_stairs(available_goals)
         situation = (
-            f"Deterministic exploration is stuck: {_STUCK_DESCRIPTIONS[stuck]}. "
-            f"staircase_navigation cannot act now: no {needed} matching the goal "
-            "is known and reachable. Choose explore_level to grant exploration one "
-            "more bounded search round for hidden doors and corridors; that is "
-            "normally right. Choose staircase_navigation only to pick each action "
-            "yourself until exploration makes progress."
+            (
+                f"Deterministic exploration is stuck: {_STUCK_DESCRIPTIONS[stuck]}. "
+                f"staircase_navigation cannot act now: no {needed} matching the "
+                "goal is known and reachable. Choose explore_level to grant "
+                "exploration one more bounded search round for hidden doors and "
+                "corridors; that is normally right. Choose staircase_navigation "
+                "only to pick each action yourself until exploration makes progress."
+            )
+            if needed
+            else (
+                f"Deterministic exploration is stuck: {_STUCK_DESCRIPTIONS[stuck]}. "
+                "Choose explore_level to grant exploration one more bounded search "
+                "round for hidden doors and corridors."
+            )
         )
         map_section = f"\nVisible map:\n```text\n{map_text}\n```\n"
     return f"""You control a lawful dwarven Valkyrie in NetHack.

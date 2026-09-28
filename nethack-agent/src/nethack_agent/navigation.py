@@ -232,6 +232,14 @@ class Monster:
         return self.name in _NEVER_MELEE
 
 
+@dataclass(frozen=True, slots=True)
+class ExhaustionState:
+    """A level's exhaustion marks, restored when a marking step is discarded."""
+
+    knowledge: int | None
+    explored: bool
+
+
 class LevelMemory:
     """Bounded knowledge of one level, owned by the coordinator's dungeon memory.
 
@@ -264,6 +272,10 @@ class LevelMemory:
         self.stair_identities: dict[Point, StairIdentity] = {}
         self.links: dict[Point, StairLink] = {}
         self._exhausted_knowledge: int | None = None
+        # Exploration has found this level exhausted at least once. Unlike
+        # `exhausted`, later knowledge growth never clears it; an
+        # explore_dungeon objective counts the level as explored.
+        self.explored = False
         # One extra search round was granted to find a branch staircase here.
         self.branch_rearmed = False
         self.enter()
@@ -590,8 +602,17 @@ class LevelMemory:
         """Exploration found nothing more to do since knowledge last grew."""
         return self._exhausted_knowledge == self.knowledge
 
-    def mark_exhausted(self) -> None:
+    def mark_exhausted(self) -> ExhaustionState:
+        """Mark the level exhausted and explored; return the state it replaced."""
+        previous = ExhaustionState(self._exhausted_knowledge, self.explored)
         self._exhausted_knowledge = self.knowledge
+        self.explored = True
+        return previous
+
+    def restore_exhaustion(self, state: ExhaustionState) -> None:
+        """Undo `mark_exhausted` for a decision that was discarded."""
+        self._exhausted_knowledge = state.knowledge
+        self.explored = state.explored
 
     def rearm_for_branch(self) -> None:
         """Search this exhausted level once more for a branch staircase."""

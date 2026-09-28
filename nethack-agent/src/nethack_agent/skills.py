@@ -34,9 +34,9 @@ from nethack_agent.observation import (
 from nethack_agent.traversal import (
     DUNGEONS_OF_DOOM,
     STAND_ON_DOWNSTAIRS,
-    Goal,
     LevelKey,
     StairDirection,
+    StairGoal,
     StairTarget,
     TraverseStairsGoal,
     candidate_tier,
@@ -132,7 +132,7 @@ class StaircaseNavigationSkill:
         self,
         memory: LevelMemory,
         actions_by_name: dict[str, LegalAction],
-        goal: Goal = STAND_ON_DOWNSTAIRS,
+        goal: StairGoal = STAND_ON_DOWNSTAIRS,
         level_change: LegalAction | None = None,
     ) -> SkillAction | None:
         target = goal.target
@@ -241,13 +241,16 @@ class ExploreLevelSkill:
         self,
         memory: LevelMemory,
         actions_by_name: dict[str, LegalAction],
-        target: StairTarget = STAND_ON_DOWNSTAIRS.target,
+        target: StairTarget | None = STAND_ON_DOWNSTAIRS.target,
     ) -> ExploreResult:
-        """Explore, biased toward remembered staircases compatible with `target`."""
+        """Explore, biased toward remembered staircases compatible with `target`.
+
+        Without a target (an explore_level goal) no staircase biases the search.
+        """
         defense = _attack_adjacent_hostile(memory, actions_by_name, None)
         if defense is not None:
             return ExploreResult(defense, None)
-        stairs = tuple(stair_candidates(memory, target))
+        stairs = () if target is None else tuple(stair_candidates(memory, target))
         tree = route_tree(memory)
         goal = _frontier_goal(memory, tree, stairs)
         if goal is not None:

@@ -333,6 +333,8 @@ class GoalKind(Enum):
     STAND_ON_STAIRS = "stand_on_stairs"
     # Reach a matching staircase and use it to change level.
     TRAVERSE_STAIRS = "traverse_stairs"
+    # Explore one level until deterministic exploration is exhausted.
+    EXPLORE_LEVEL = "explore_level"
 
 
 @dataclass(frozen=True, slots=True)
@@ -373,8 +375,35 @@ class TraverseStairsGoal:
         return {"kind": self.kind.value, "target": self.target.to_json()}
 
 
-type Goal = StandOnStairsGoal | TraverseStairsGoal
-GOAL_TYPES: Final = (StandOnStairsGoal, TraverseStairsGoal)
+@dataclass(frozen=True, slots=True)
+class ExploreLevelGoal:
+    """Explore this level until exploration finds nothing left to do.
+
+    It names no staircase: exploration is not biased toward any stair.
+    """
+
+    level: LevelKey
+
+    kind: ClassVar[GoalKind] = GoalKind.EXPLORE_LEVEL
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.level, LevelKey):
+            raise TypeError("goal level must be a LevelKey")
+
+    @property
+    def token(self) -> str:
+        return (
+            f"{self.kind.value}:{self.level.dungeon_number}:{self.level.dungeon_level}"
+        )
+
+    def to_json(self) -> dict[str, object]:
+        return {"kind": self.kind.value, "level": self.level.to_json()}
+
+
+type StairGoal = StandOnStairsGoal | TraverseStairsGoal
+type Goal = StandOnStairsGoal | TraverseStairsGoal | ExploreLevelGoal
+STAIR_GOAL_TYPES: Final = (StandOnStairsGoal, TraverseStairsGoal)
+GOAL_TYPES: Final = (*STAIR_GOAL_TYPES, ExploreLevelGoal)
 
 # Milestone 1's goal: stand on any `>` without descending.
 STAND_ON_DOWNSTAIRS: Final = StandOnStairsGoal(
@@ -386,8 +415,13 @@ def goal_from_json(value: object, name: str = "goal") -> Goal:
     """Parse a typed goal, reading the legacy milestone-1 string exactly."""
     if value == LEGACY_STAND_ON_DOWNSTAIRS:
         return STAND_ON_DOWNSTAIRS
+    if not isinstance(value, dict):
+        raise ContractError(f"{name} must be an object")
+    kind = enum_value(value.get("kind"), f"{name} kind", GoalKind)
+    if kind is GoalKind.EXPLORE_LEVEL:
+        payload = object_value(value, name, {"kind", "level"})
+        return ExploreLevelGoal(LevelKey.from_json(payload["level"], f"{name} level"))
     payload = object_value(value, name, {"kind", "target"})
-    kind = enum_value(payload["kind"], f"{name} kind", GoalKind)
     target = StairTarget.from_json(payload["target"], f"{name} target")
     if kind is GoalKind.STAND_ON_STAIRS:
         return StandOnStairsGoal(target)
@@ -398,6 +432,7 @@ class ObjectiveLegKind(Enum):
     STAND_ON_STAIRS = "stand_on_stairs"
     REACH_LEVEL = "reach_level"
     ENTER_DUNGEON = "enter_dungeon"
+    EXPLORE_DUNGEON = "explore_dungeon"
 
 
 @dataclass(frozen=True, slots=True)
@@ -452,8 +487,47 @@ class EnterDungeonLeg:
         return {"kind": self.kind.value, "dungeon_number": self.dungeon_number}
 
 
-type ObjectiveLeg = StandOnStairsLeg | ReachLevelLeg | EnterDungeonLeg
-OBJECTIVE_LEG_TYPES: Final = (StandOnStairsLeg, ReachLevelLeg, EnterDungeonLeg)
+@dataclass(frozen=True, slots=True)
+class ExploreDungeonLeg:
+    """Complete once every Dungeons of Doom level 1..max_level is exhausted.
+
+    A level counts as exhausted after deterministic exploration once found
+    nothing left to do on it; the coordinator records that step with an
+    `exhausted_level` marker the evaluator re-derives.
+    """
+
+    max_level: int
+
+    kind: ClassVar[ObjectiveLegKind] = ObjectiveLegKind.EXPLORE_DUNGEON
+
+    def __post_init__(self) -> None:
+        integer_value(
+            self.max_level,
+            "objective leg max_level",
+            minimum=1,
+            maximum=MAX_DUNGEON_LEVEL,
+        )
+
+    @property
+    def levels(self) -> tuple[LevelKey, ...]:
+        """The required levels, shallowest first."""
+        return tuple(
+            LevelKey(DUNGEONS_OF_DOOM, level) for level in range(1, self.max_level + 1)
+        )
+
+    def to_json(self) -> dict[str, object]:
+        return {"kind": self.kind.value, "max_level": self.max_level}
+
+
+type ObjectiveLeg = (
+    StandOnStairsLeg | ReachLevelLeg | EnterDungeonLeg | ExploreDungeonLeg
+)
+OBJECTIVE_LEG_TYPES: Final = (
+    StandOnStairsLeg,
+    ReachLevelLeg,
+    EnterDungeonLeg,
+    ExploreDungeonLeg,
+)
 
 
 def objective_leg_from_json(value: object, name: str = "objective leg") -> ObjectiveLeg:
@@ -468,6 +542,16 @@ def objective_leg_from_json(value: object, name: str = "objective leg") -> Objec
     if kind is ObjectiveLegKind.REACH_LEVEL:
         payload = object_value(value, name, {"kind", "level"})
         return ReachLevelLeg(LevelKey.from_json(payload["level"], f"{name} level"))
+    if kind is ObjectiveLegKind.EXPLORE_DUNGEON:
+        payload = object_value(value, name, {"kind", "max_level"})
+        return ExploreDungeonLeg(
+            integer_value(
+                payload["max_level"],
+                f"{name} max_level",
+                minimum=1,
+                maximum=MAX_DUNGEON_LEVEL,
+            )
+        )
     payload = object_value(value, name, {"kind", "dungeon_number"})
     return EnterDungeonLeg(
         integer_value(

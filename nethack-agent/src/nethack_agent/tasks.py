@@ -23,7 +23,7 @@ from nethack_agent.contracts import (
     load_json_object,
     object_value,
 )
-from nethack_agent.traversal import STAIRCASE_OBJECTIVE, Objective
+from nethack_agent.traversal import STAIRCASE_OBJECTIVE, ExploreDungeonLeg, Objective
 
 
 class NleTask(Enum):
@@ -114,9 +114,17 @@ PROMPT_KEY_ACTION_NAMES: Final = frozenset(
     f"{type(action).__name__}.{action.name}" for action in _HUNGER_ADDITIONS
 )
 
-# Tasks whose objectives are defined. ADR 0004 section 8 adds Scout, Gold, Eat
-# and Oracle together with the objective legs they need.
-_SUPPORTED_TASKS: Final = frozenset({NleTask.STAIRCASE, NleTask.SCORE})
+# Tasks whose objectives are defined. Scout and Eat explore the Dungeons of
+# Doom with exactly one explore_dungeon leg (ADR 0004 section 8).
+_SUPPORTED_TASKS: Final = frozenset(
+    {NleTask.STAIRCASE, NleTask.SCORE, NleTask.SCOUT, NleTask.EAT}
+)
+# Each task-progression task's single action profile: Eat needs the hunger
+# profile to answer its item prompt; Scout needs nothing beyond NLE's actions.
+_EXPLORATION_TASK_PROFILES: Final = {
+    NleTask.SCOUT: ActionProfile.NLE_TASK_ACTIONS,
+    NleTask.EAT: ActionProfile.NLE_HUNGER_ACTIONS,
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,6 +151,25 @@ class TaskSpec:
             raise ContractError(
                 f"{NleTask.STAIRCASE.value} allows only the single objective leg "
                 "stand_on_stairs(down, any)"
+            )
+        explores = any(
+            isinstance(leg, ExploreDungeonLeg) for leg in self.objective.legs
+        )
+        profile = _EXPLORATION_TASK_PROFILES.get(self.environment)
+        if profile is None:
+            if explores:
+                raise ContractError(
+                    "an explore_dungeon leg is valid only on "
+                    + " and ".join(task.value for task in _EXPLORATION_TASK_PROFILES)
+                )
+            return
+        if len(self.objective.legs) != 1 or not explores:
+            raise ContractError(
+                f"{self.environment.value} requires exactly one explore_dungeon leg"
+            )
+        if self.action_profile is not profile:
+            raise ContractError(
+                f"{self.environment.value} requires action profile {profile.value}"
             )
 
     def to_json(self) -> dict[str, object]:

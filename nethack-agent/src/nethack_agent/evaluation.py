@@ -37,7 +37,7 @@ from nethack_agent.decision import (
     RunState,
     level_change_error,
 )
-from nethack_agent.environment import CHARACTER
+from nethack_agent.environment import CHARACTER, LegalAction
 from nethack_agent.events import (
     AgentErrorPayload,
     EventKind,
@@ -49,17 +49,19 @@ from nethack_agent.knowledge import load_default_knowledge_bundle
 from nethack_agent.model import ScriptedDevelopmentModel
 from nethack_agent.observation import ProjectedObservation
 from nethack_agent.ollama import OllamaClient, OllamaConfig, OllamaError
+from nethack_agent.replay import ExplorationReplay
 from nethack_agent.run_manager import POLICY_VERSION, ModelFactory, RunManager
 from nethack_agent.storage import MAX_EVENT_PAGE_LIMIT, RunRecord, RunStore
 from nethack_agent.tasks import STAIRCASE_TASK, NleTask, TaskSpec
 from nethack_agent.traversal import (
     EnterDungeonLeg,
+    ExploreDungeonLeg,
     LevelKey,
+    ObjectiveLeg,
     ReachLevelLeg,
     StairConnection,
     StairDirection,
     StairIdentityKind,
-    StandOnStairsLeg,
 )
 
 SUITE_SCHEMA_VERSION: Final = 2
@@ -125,16 +127,151 @@ class AcceptanceCriteria:
         }
 
 
+class MetricName(Enum):
+    """Per-episode values a suite case may gate on."""
+
+    TASK_RETURN = "task_return"
+    EXPLORED_CELLS = "explored_cells"
+    MAX_DEPTH = "max_depth"
+    FINAL_GOLD = "final_gold"
+    # The NLE hunger index (satiated 0 .. starved 6) of the worst live state.
+    WORST_HUNGER_STATE = "worst_hunger_state"
+    # 1 for an episode that ended in death, else 0.
+    DEATH = "death"
+    # 1 for an episode whose recorded death cause is starvation, else 0.
+    STARVATION_DEATH = "starvation_death"
+
+
+class MetricStatistic(Enum):
+    MINIMUM = "minimum"
+    MEDIAN = "median"
+    MEAN = "mean"
+    MAXIMUM = "maximum"
+    SUM = "sum"
+
+
+class MetricComparison(Enum):
+    AT_LEAST = "at_least"
+    AT_MOST = "at_most"
+
+
+@dataclass(frozen=True, slots=True)
+class MetricThreshold:
+    """A bound on one statistic of a per-episode metric over a case's results."""
+
+    metric: MetricName
+    statistic: MetricStatistic
+    comparison: MetricComparison
+    value: float
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.metric, MetricName):
+            raise TypeError("metric threshold metric must be a MetricName")
+        if not isinstance(self.statistic, MetricStatistic):
+            raise TypeError("metric threshold statistic must be a MetricStatistic")
+        if not isinstance(self.comparison, MetricComparison):
+            raise TypeError("metric threshold comparison must be a MetricComparison")
+        object.__setattr__(
+            self, "value", number_value(self.value, "metric threshold value")
+        )
+
+    @property
+    def key(self) -> tuple[MetricName, MetricStatistic, MetricComparison]:
+        return self.metric, self.statistic, self.comparison
+
+    @property
+    def check_name(self) -> str:
+        return f"{self.metric.value}:{self.statistic.value}:{self.comparison.value}"
+
+    @property
+    def bound_text(self) -> str:
+        return f"{self.comparison.value} {_compact_number(self.value)}"
+
+    def passes(self, observed: float | None) -> bool:
+        if observed is None:
+            return False
+        if self.comparison is MetricComparison.AT_LEAST:
+            return observed >= self.value
+        return observed <= self.value
+
+    def to_json(self) -> dict[str, object]:
+        return {
+            "metric": self.metric.value,
+            "statistic": self.statistic.value,
+            "bound": {
+                "comparison": self.comparison.value,
+                "value": _json_number(self.value),
+            },
+        }
+
+    @classmethod
+    def from_json(cls, value: object, name: str) -> MetricThreshold:
+        payload = object_value(value, name, {"metric", "statistic", "bound"})
+        bound = object_value(payload["bound"], f"{name} bound", {"comparison", "value"})
+        return cls(
+            metric=enum_value(payload["metric"], f"{name} metric", MetricName),
+            statistic=enum_value(
+                payload["statistic"], f"{name} statistic", MetricStatistic
+            ),
+            comparison=enum_value(
+                bound["comparison"], f"{name} bound comparison", MetricComparison
+            ),
+            value=number_value(bound["value"], f"{name} bound value"),
+        )
+
+
+def _metric_thresholds(value: object, name: str) -> tuple[MetricThreshold, ...]:
+    items = array_value(value, f"{name} metric_thresholds")
+    if not items:
+        raise ContractError(f"{name} metric_thresholds must not be empty")
+    thresholds = tuple(
+        MetricThreshold.from_json(item, f"{name} metric threshold {index}")
+        for index, item in enumerate(items)
+    )
+    if len({threshold.key for threshold in thresholds}) != len(thresholds):
+        raise ContractError(
+            f"{name} metric_thresholds must not repeat a metric, statistic, "
+            "and comparison"
+        )
+    return thresholds
+
+
+def _json_number(value: float) -> int | float:
+    """Write an integral bound as a JSON integer, as suites state it."""
+    return int(value) if value.is_integer() else value
+
+
+def _compact_number(value: float) -> str:
+    return f"{int(value)}" if value.is_integer() else f"{value:.3f}"
+
+
 @dataclass(frozen=True, slots=True)
 class CaseAcceptance:
     min_successes: int
     required_success_seeds: tuple[int, ...]
+    metric_thresholds: tuple[MetricThreshold, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not all(
+            isinstance(threshold, MetricThreshold)
+            for threshold in self.metric_thresholds
+        ):
+            raise TypeError("case metric_thresholds must contain MetricThreshold")
+        keys = [threshold.key for threshold in self.metric_thresholds]
+        if len(keys) != len(set(keys)):
+            raise ContractError("case metric_thresholds must be unique")
 
     def to_json(self) -> dict[str, object]:
-        return {
+        payload: dict[str, object] = {
             "min_successes": self.min_successes,
             "required_success_seeds": list(self.required_success_seeds),
         }
+        # Absent, not empty, so suites without thresholds keep their shape.
+        if self.metric_thresholds:
+            payload["metric_thresholds"] = [
+                threshold.to_json() for threshold in self.metric_thresholds
+            ]
+        return payload
 
 
 @dataclass(frozen=True, slots=True)
@@ -460,7 +597,12 @@ def _suite_text(value: object, name: str) -> str:
 def _case_acceptance(
     value: object, seeds: tuple[int, ...], name: str
 ) -> CaseAcceptance:
-    payload = object_value(value, name, {"min_successes", "required_success_seeds"})
+    payload = object_value(
+        value,
+        name,
+        _CASE_ACCEPTANCE_FIELDS,
+        optional=_CASE_ACCEPTANCE_OPTIONAL_FIELDS,
+    )
     required = tuple(
         integer_value(seed, f"{name} required success seed", minimum=1)
         for seed in array_value(
@@ -469,15 +611,26 @@ def _case_acceptance(
     )
     if len(required) != len(set(required)) or not set(required) <= set(seeds):
         raise ContractError(f"{name} required_success_seeds must be unique case seeds")
+    thresholds = (
+        _metric_thresholds(payload["metric_thresholds"], name)
+        if "metric_thresholds" in payload
+        else ()
+    )
     return CaseAcceptance(
         min_successes=integer_value(
             payload["min_successes"],
             f"{name} min_successes",
-            minimum=1,
+            minimum=_minimum_successes(thresholds),
             maximum=len(seeds),
         ),
         required_success_seeds=required,
+        metric_thresholds=thresholds,
     )
+
+
+def _minimum_successes(thresholds: tuple[MetricThreshold, ...]) -> int:
+    """A case gated by metric thresholds may require no objective success."""
+    return 0 if thresholds else 1
 
 
 def _global_acceptance(value: object, name: str) -> GlobalAcceptance:
@@ -639,6 +792,7 @@ class HungerState(Enum):
 
 
 _HUNGER_STATES: Final = tuple(HungerState)
+_EXPLORATION_METRIC_FIELDS: Final = frozenset({"explored_cells", "worst_hunger_state"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -661,6 +815,14 @@ class EpisodeMetrics:
     final_hit_points: int
     final_experience_level: int
     death_cause: str
+    # Sum over levels of the most map cells seen on each (NLE Scout's public
+    # count). None only when read from a report written before this metric
+    # existed: not recorded, which then also leaves worst_hunger_state None
+    # and makes to_json omit both keys, so such JSON round-trips exactly.
+    explored_cells: int | None
+    # The worst live hunger state in NLE hunger order; for recorded metrics
+    # None means the episode had no live observation.
+    worst_hunger_state: HungerState | None
 
     def __post_init__(self) -> None:
         for name in (
@@ -704,6 +866,21 @@ class EpisodeMetrics:
             minimum=1,
             maximum=1000,
         )
+        if self.explored_cells is None:
+            if self.worst_hunger_state is not None:
+                raise ContractError(
+                    "episode metrics worst_hunger_state requires explored_cells"
+                )
+        else:
+            integer_value(
+                self.explored_cells, "episode metrics explored_cells", minimum=0
+            )
+        if self.worst_hunger_state is not None and not isinstance(
+            self.worst_hunger_state, HungerState
+        ):
+            raise TypeError(
+                "episode metrics worst_hunger_state must be a HungerState or None"
+            )
 
     @classmethod
     def empty(cls) -> EpisodeMetrics:
@@ -726,10 +903,12 @@ class EpisodeMetrics:
             final_hit_points=0,
             final_experience_level=0,
             death_cause="unknown",
+            explored_cells=0,
+            worst_hunger_state=None,
         )
 
     def to_json(self) -> dict[str, object]:
-        return {
+        payload: dict[str, object] = {
             "steps": self.steps,
             "game_turns": self.game_turns,
             "max_depth": self.max_depth,
@@ -753,6 +932,14 @@ class EpisodeMetrics:
             "final_experience_level": self.final_experience_level,
             "death_cause": self.death_cause,
         }
+        if self.explored_cells is not None:
+            payload["explored_cells"] = self.explored_cells
+            payload["worst_hunger_state"] = (
+                None
+                if self.worst_hunger_state is None
+                else self.worst_hunger_state.value
+            )
+        return payload
 
     @classmethod
     def from_json(cls, value: object) -> EpisodeMetrics:
@@ -776,8 +963,19 @@ class EpisodeMetrics:
             "final_experience_level",
             "death_cause",
         }
-        payload = object_value(value, "episode metrics", fields)
+        # Reports written before exploration and worst hunger were recorded
+        # lack both keys; one without the other is malformed.
+        payload = object_value(
+            value, "episode metrics", fields, optional=_EXPLORATION_METRIC_FIELDS
+        )
+        recorded = _EXPLORATION_METRIC_FIELDS & payload.keys()
+        if recorded and recorded != _EXPLORATION_METRIC_FIELDS:
+            raise ContractError(
+                "episode metrics explored_cells and worst_hunger_state must be "
+                "recorded together"
+            )
         deepest = payload["deepest_level"]
+        worst = payload.get("worst_hunger_state")
         return cls(
             steps=integer_value(payload["steps"], "episode metrics steps", minimum=0),
             game_turns=integer_value(
@@ -855,6 +1053,22 @@ class EpisodeMetrics:
                 "episode metrics death_cause",
                 minimum=1,
                 maximum=1000,
+            ),
+            explored_cells=(
+                integer_value(
+                    payload["explored_cells"],
+                    "episode metrics explored_cells",
+                    minimum=0,
+                )
+                if recorded
+                else None
+            ),
+            worst_hunger_state=(
+                None
+                if worst is None
+                else enum_value(
+                    worst, "episode metrics worst_hunger_state", HungerState
+                )
             ),
         )
 
@@ -1041,12 +1255,17 @@ def summarize_run(
     elif not ttyrec_exists:
         problems.append("referenced ttyrec is missing or empty")
 
+    explored, replay_problems = _replay_exhaustion(
+        task, legal_actions, initial_observation, step_payloads
+    )
+    problems.extend(replay_problems)
     metrics = _episode_metrics(
         initial_observation,
         step_payloads,
         case.task,
         record.outcome,
         record.ttyrec_path,
+        explored,
     )
     if metrics.steps != len(step_payloads):
         problems.append("episode metrics step count differs from the event log")
@@ -1094,30 +1313,73 @@ def summarize_run(
     )
 
 
+def _replay_exhaustion(
+    task: TaskSpec,
+    legal_actions: tuple[LegalAction, ...] | None,
+    initial: ProjectedObservation | None,
+    steps: Sequence[StepPayload],
+) -> tuple[tuple[frozenset[LevelKey], ...], list[str]]:
+    """Re-derive exhaustion markers; return the confirmed levels after each step.
+
+    A marker counts only when replaying the coordinator's memory shows that
+    deterministic exploration was exhausted on the observation the step was
+    decided on. Runs without markers or explore_dungeon legs need no replay.
+    """
+    none: tuple[frozenset[LevelKey], ...] = (frozenset(),) * len(steps)
+    needed = any(
+        isinstance(leg, ExploreDungeonLeg) for leg in task.objective.legs
+    ) or any(payload.selection.exhausted_level is not None for payload in steps)
+    if not needed:
+        return none, []
+    if legal_actions is None or initial is None:
+        return none, ["exhaustion markers cannot be replayed without run_started"]
+    replay = ExplorationReplay(task, legal_actions, initial)
+    explored: list[frozenset[LevelKey]] = []
+    problems: list[str] = []
+    for number, payload in enumerate(steps, start=1):
+        try:
+            problem = replay.step(payload)
+        except ValueError as error:
+            problems.append(f"exploration replay failed at step {number}: {error}")
+            explored.extend([frozenset(replay.explored)] * (len(steps) - len(explored)))
+            break
+        if problem is not None:
+            problems.append(
+                f"step {number} exhausted_level marker is not supported: {problem}"
+            )
+        explored.append(frozenset(replay.explored))
+    return tuple(explored), problems
+
+
 def _episode_metrics(
     initial: ProjectedObservation | None,
     steps: Sequence[StepPayload],
     task: TaskSpec,
     outcome: RunOutcome | None,
     ttyrec_path: str | None,
+    explored: Sequence[frozenset[LevelKey]] | None = None,
 ) -> EpisodeMetrics:
     """Derive episode facts only from persisted public evidence.
 
     NLE zeroes bottom-line statistics in a terminal observation. Such an
     observation still proves that a step happened, but it is not a live level,
     turn, HP, hunger, or objective sample. The preceding live observation stays
-    authoritative for those metrics.
+    authoritative for those metrics. `explored` holds the levels whose
+    exhaustion markers were confirmed after each step.
     """
+    confirmed = explored or (frozenset(),) * len(steps)
     live: list[ProjectedObservation] = []
+    samples: list[tuple[ProjectedObservation, frozenset[LevelKey]]] = []
     if initial is not None and _observation_is_live(initial):
         live.append(initial)
+        samples.append((initial, frozenset()))
     previous = live[-1] if live else None
     up = 0
     down = 0
     probes = 0
     misses = 0
     changes_without_stairs = 0
-    for payload in steps:
+    for payload, levels_explored in zip(steps, confirmed, strict=True):
         direction = LEVEL_CHANGE_ACTIONS.get(payload.action.name)
         intent = payload.selection.intent
         destination = None if intent is None else intent.destination
@@ -1133,6 +1395,7 @@ def _episode_metrics(
         if not _observation_is_live(after):
             continue
         live.append(after)
+        samples.append((after, levels_explored))
         if previous is not None:
             changed = _observation_level(previous) != _observation_level(after)
             if changed and direction is StairDirection.UP:
@@ -1165,7 +1428,8 @@ def _episode_metrics(
             if 0 <= observation.player.hunger < len(_HUNGER_STATES)
         )
     )
-    legs_completed = _objective_legs_completed(task, live)
+    worst_hunger = max(hunger, key=_HUNGER_STATES.index, default=None)
+    legs_completed = _objective_legs_completed(task, samples)
     # Staircase's successful end state is NLE-owned and its terminal observation
     # has no live player cell. That task result is the direct evidence for its
     # equivalent single stand-on-downstairs objective.
@@ -1190,11 +1454,31 @@ def _episode_metrics(
         final_hit_points=0 if final is None else final.hit_points,
         final_experience_level=0 if final is None else final.experience_level,
         death_cause=_death_cause(outcome, ttyrec_path),
+        explored_cells=_explored_cells(live),
+        worst_hunger_state=worst_hunger,
     )
 
 
 def _observation_is_live(observation: ProjectedObservation) -> bool:
     return observation.player.dungeon_level >= 1
+
+
+def _explored_cells(live: Sequence[ProjectedObservation]) -> int:
+    """Sum each level's most seen map cells, as NLE Scout counts exploration.
+
+    Scout rewards changes in the count of glyphs other than GLYPH_CMAP_OFF per
+    (dungeon, level); that count is public in every observation's glyph map.
+    """
+    seen: dict[LevelKey, int] = {}
+    for observation in live:
+        level = _observation_level(observation)
+        cells = sum(
+            glyph != nethack.GLYPH_CMAP_OFF
+            for row in observation.map.glyph_rows
+            for glyph in row
+        )
+        seen[level] = max(seen.get(level, 0), cells)
+    return sum(seen.values())
 
 
 def _observation_level(observation: ProjectedObservation) -> LevelKey:
@@ -1203,13 +1487,14 @@ def _observation_level(observation: ProjectedObservation) -> LevelKey:
 
 
 def _objective_legs_completed(
-    task: TaskSpec, observations: Sequence[ProjectedObservation]
+    task: TaskSpec,
+    samples: Sequence[tuple[ProjectedObservation, frozenset[LevelKey]]],
 ) -> int:
     index = 0
     legs = task.objective.legs
-    for observation in observations:
+    for observation, explored in samples:
         while index < len(legs) and _observation_completes_leg(
-            observation, legs[index]
+            observation, legs[index], explored
         ):
             index += 1
     return index
@@ -1217,13 +1502,17 @@ def _objective_legs_completed(
 
 def _observation_completes_leg(
     observation: ProjectedObservation,
-    leg: StandOnStairsLeg | ReachLevelLeg | EnterDungeonLeg,
+    leg: ObjectiveLeg,
+    explored: frozenset[LevelKey],
 ) -> bool:
+    """Whether a live observation, with the confirmed explored levels, meets `leg`."""
     level = _observation_level(observation)
     if isinstance(leg, ReachLevelLeg):
         return level == leg.level
     if isinstance(leg, EnterDungeonLeg):
         return level.dungeon_number == leg.dungeon_number
+    if isinstance(leg, ExploreDungeonLeg):
+        return set(leg.levels) <= explored
     player = observation.player
     glyph = observation.map.glyph_rows[player.y][player.x]
     cmap = nethack.glyph_to_cmap(glyph) if nethack.glyph_is_cmap(glyph) else None
@@ -1336,6 +1625,75 @@ def _ttyrec(reference: str | None, data_directory: Path) -> tuple[str | None, bo
     return display, exists
 
 
+def _episode_metric_value(metric: MetricName, result: SeedResult) -> float | None:
+    """One episode's value of a threshold metric; None if it was not recorded."""
+    metrics = result.metrics
+    died = result.outcome is RunOutcome.DEATH
+    match metric:
+        case MetricName.TASK_RETURN:
+            return metrics.task_return
+        case MetricName.EXPLORED_CELLS:
+            return metrics.explored_cells
+        case MetricName.MAX_DEPTH:
+            return metrics.max_depth
+        case MetricName.FINAL_GOLD:
+            return metrics.final_gold
+        case MetricName.WORST_HUNGER_STATE:
+            worst = metrics.worst_hunger_state
+            return None if worst is None else _HUNGER_STATES.index(worst)
+        case MetricName.DEATH:
+            return 1 if died else 0
+        case MetricName.STARVATION_DEATH:
+            # NetHack's xlog death text for starving is "died of starvation".
+            return 1 if died and "starvation" in metrics.death_cause else 0
+
+
+def _metric_statistic(
+    statistic: MetricStatistic, values: Sequence[float]
+) -> float | None:
+    """A statistic over episode values; None when there are no values."""
+    if not values:
+        return None
+    ordered = sorted(values)
+    match statistic:
+        case MetricStatistic.MINIMUM:
+            return ordered[0]
+        case MetricStatistic.MAXIMUM:
+            return ordered[-1]
+        case MetricStatistic.SUM:
+            return math.fsum(ordered)
+        case MetricStatistic.MEAN:
+            return math.fsum(ordered) / len(ordered)
+        case MetricStatistic.MEDIAN:
+            middle = len(ordered) // 2
+            if len(ordered) % 2:
+                return ordered[middle]
+            return (ordered[middle - 1] + ordered[middle]) / 2
+
+
+def _threshold_statistics(
+    case: EvaluationCase, results: Sequence[SeedResult]
+) -> list[tuple[MetricThreshold, float | None]]:
+    """Each case threshold with its statistic over the case's results.
+
+    The statistic is unavailable (None, failing the threshold) when the case
+    has no results or any result did not record the metric.
+    """
+    statistics: list[tuple[MetricThreshold, float | None]] = []
+    for threshold in case.acceptance.metric_thresholds:
+        values = [_episode_metric_value(threshold.metric, result) for result in results]
+        present = [value for value in values if value is not None]
+        statistics.append(
+            (
+                threshold,
+                None
+                if len(present) != len(values)
+                else _metric_statistic(threshold.statistic, present),
+            )
+        )
+    return statistics
+
+
 @dataclass(frozen=True, slots=True)
 class AcceptanceResult:
     checks: dict[str, bool]
@@ -1423,6 +1781,29 @@ def evaluate_acceptance(
                     f"case {case.case_id} required seeds did not succeed: "
                     f"{missing_required}"
                 )
+            for threshold, observed in _threshold_statistics(case, case_results):
+                passed = threshold.passes(observed)
+                checks[f"{case.case_id}:{threshold.check_name}"] = passed
+                if passed:
+                    continue
+                label = (
+                    f"case {case.case_id}: {threshold.metric.value} "
+                    f"{threshold.statistic.value}"
+                )
+                if observed is None:
+                    reasons.append(
+                        f"{label} is unavailable; {threshold.bound_text} required"
+                    )
+                else:
+                    relation = (
+                        "below"
+                        if threshold.comparison is MetricComparison.AT_LEAST
+                        else "above"
+                    )
+                    reasons.append(
+                        f"{label} {_compact_number(observed)} is {relation} "
+                        f"{threshold.bound_text}"
+                    )
 
     criteria = suite.global_acceptance
     invalid = sum(result.invalid_actions for result in results)
@@ -1564,6 +1945,26 @@ class EvaluationReport:
         successes = sum(result.successful_for(case) for result in results)
         succeeded = {result.seed for result in results if result.successful_for(case)}
         required = case.acceptance.required_success_seeds
+        statistics = _threshold_statistics(case, results)
+        acceptance: dict[str, object] = {
+            "criteria": case.acceptance.to_json(),
+            "successes": successes,
+            "passed": (
+                successes >= case.acceptance.min_successes
+                and all(seed in succeeded for seed in required)
+                and all(threshold.passes(value) for threshold, value in statistics)
+            ),
+        }
+        # Absent for cases without thresholds so their report shape is unchanged.
+        if statistics:
+            acceptance["metrics"] = [
+                {
+                    **threshold.to_json(),
+                    "value": None if value is None else _json_number(round(value, 6)),
+                    "passed": threshold.passes(value),
+                }
+                for threshold, value in statistics
+            ]
         return {
             "case_id": case.case_id,
             "task": case.task.to_json(),
@@ -1571,14 +1972,7 @@ class EvaluationReport:
             "requested_seeds": list(self._requested_for_case(case)),
             "results": [result.to_json() for result in results],
             "aggregate": self.aggregate_json(results),
-            "acceptance": {
-                "criteria": case.acceptance.to_json(),
-                "successes": successes,
-                "passed": (
-                    successes >= case.acceptance.min_successes
-                    and all(seed in succeeded for seed in required)
-                ),
-            },
+            "acceptance": acceptance,
         }
 
     def to_json(self) -> dict[str, object]:
@@ -1736,6 +2130,7 @@ _SUITE_CASE_FIELDS: Final = frozenset(
     {"case_id", "task", "seeds", "max_episode_steps", "acceptance"}
 )
 _CASE_ACCEPTANCE_FIELDS: Final = frozenset({"min_successes", "required_success_seeds"})
+_CASE_ACCEPTANCE_OPTIONAL_FIELDS: Final = frozenset({"metric_thresholds"})
 _GLOBAL_ACCEPTANCE_FIELDS: Final = frozenset(
     {"max_invalid_actions", "max_gate_rejections", "require_complete_records"}
 )
@@ -1751,6 +2146,10 @@ _CASE_REPORT_FIELDS: Final = frozenset(
     }
 )
 _CASE_REPORT_ACCEPTANCE_FIELDS: Final = frozenset({"criteria", "successes", "passed"})
+_CASE_REPORT_ACCEPTANCE_OPTIONAL_FIELDS: Final = frozenset({"metrics"})
+_CASE_REPORT_METRIC_FIELDS: Final = frozenset(
+    {"metric", "statistic", "bound", "value", "passed"}
+)
 _REQUESTED_CASE_FIELDS: Final = frozenset({"case_id", "seeds"})
 _REPORT_FIELDS_V3: Final = frozenset(
     {
@@ -2074,13 +2473,15 @@ def _render_report_markdown_v3(payload: dict[str, object]) -> str:
     seen_case_reports: set[str] = set()
     all_problems: list[tuple[str, int, str]] = []
     all_errors: list[tuple[str, int, str]] = []
-    for item in array_value(report["case_results"], "report case_results"):
+    case_reports = array_value(report["case_results"], "report case_results")
+    records_exploration = _results_record_exploration(case_reports)
+    for item in case_reports:
         case_report = object_value(item, "report case", _CASE_REPORT_FIELDS)
         case_id = string_value(case_report["case_id"], "report case_id")
         if case_id not in suite_cases or case_id in seen_case_reports:
             raise ContractError("case_results must name every suite case once")
         seen_case_reports.add(case_id)
-        task, seeds, cap, suite_criteria = suite_cases[case_id]
+        task, seeds, cap, suite_criteria, thresholds = suite_cases[case_id]
         if (
             TaskSpec.from_json(case_report["task"], f"report case {case_id} task")
             != task
@@ -2108,16 +2509,19 @@ def _render_report_markdown_v3(payload: dict[str, object]) -> str:
             case_report["acceptance"],
             f"report case {case_id} acceptance",
             _CASE_REPORT_ACCEPTANCE_FIELDS,
+            optional=_CASE_REPORT_ACCEPTANCE_OPTIONAL_FIELDS,
         )
         criteria = object_value(
             case_acceptance["criteria"],
             f"report case {case_id} acceptance criteria",
             _CASE_ACCEPTANCE_FIELDS,
+            optional=_CASE_ACCEPTANCE_OPTIONAL_FIELDS,
         )
         if criteria != suite_criteria:
             raise ContractError(
                 f"report case {case_id} acceptance differs from the suite"
             )
+        threshold_rows = _validated_case_metrics(case_acceptance, thresholds, case_id)
         successes = integer_value(
             case_acceptance["successes"],
             f"report case {case_id} successes",
@@ -2156,14 +2560,46 @@ def _render_report_markdown_v3(payload: dict[str, object]) -> str:
                 f"- Successes: {successes}/{len(seeds)} (required "
                 f"{suite_criteria['min_successes']}, including "
                 f"{suite_criteria['required_success_seeds']}).",
-                "",
-                "| Seed | Outcome | Success | Steps/turns | Depth/level | "
-                "Levels | Down/up | Probes/misses | Other changes | Legs | "
-                "Gold/score/return | Hunger | HP/XL | Death | Integrity |",
-                "| ---: | --- | --- | ---: | --- | ---: | --- | --- | ---: | "
-                "---: | --- | --- | --- | --- | --- |",
             ]
         )
+        if threshold_rows:
+            lines.extend(
+                [
+                    "",
+                    "| Metric | Statistic | Bound | Value | Result |",
+                    "| --- | --- | --- | ---: | --- |",
+                ]
+            )
+            lines.extend(
+                f"| {threshold.metric.value} | {threshold.statistic.value} "
+                f"| {threshold.bound_text} "
+                f"| {'-' if value is None else _compact_number(value)} "
+                f"| {'pass' if passed else 'fail'} |"
+                for threshold, value, passed in threshold_rows
+            )
+        if records_exploration:
+            lines.extend(
+                [
+                    "",
+                    "| Seed | Outcome | Success | Steps/turns | Depth/level | "
+                    "Levels | Down/up | Probes/misses | Other changes | Legs | "
+                    "Gold/score/return | Hunger | Explored | Worst hunger | HP/XL | "
+                    "Death | Integrity |",
+                    "| ---: | --- | --- | ---: | --- | ---: | --- | --- | ---: | "
+                    "---: | --- | --- | ---: | --- | --- | --- | --- |",
+                ]
+            )
+        else:
+            lines.extend(
+                [
+                    "",
+                    "| Seed | Outcome | Success | Steps/turns | Depth/level | "
+                    "Levels | Down/up | Probes/misses | Other changes | Legs | "
+                    "Gold/score/return | Hunger | HP/XL | Death | Integrity |",
+                    "| ---: | --- | --- | ---: | --- | ---: | --- | --- | ---: | "
+                    "---: | --- | --- | --- | --- | --- |",
+                ]
+            )
         for result in results:
             seed = integer_value(result["seed"], "result seed")
             outcome = _optional_text(result["outcome"], "result outcome")
@@ -2195,6 +2631,7 @@ def _render_report_markdown_v3(payload: dict[str, object]) -> str:
                 f"| {metrics.final_gold}/{metrics.final_score}/"
                 f"{metrics.task_return:.3f} "
                 f"| {_md_cell(hunger)} "
+                f"{_exploration_cells(metrics) if records_exploration else ''}"
                 f"| {metrics.final_hit_points}/{metrics.final_experience_level} "
                 f"| {_md_cell(metrics.death_cause)} "
                 f"| {'ok' if integrity else 'FAIL'} |"
@@ -2268,6 +2705,13 @@ def _render_report_markdown_v3(payload: dict[str, object]) -> str:
     return "\n".join(lines) + "\n"
 
 
+# A report suite case: task, seeds, step cap, criteria JSON as the case report
+# must repeat it, and the typed metric thresholds among those criteria.
+type _ReportSuiteCase = tuple[
+    TaskSpec, tuple[int, ...], int, dict[str, object], tuple[MetricThreshold, ...]
+]
+
+
 def _validated_report_suite_v3(
     value: object,
 ) -> tuple[
@@ -2275,7 +2719,7 @@ def _validated_report_suite_v3(
     str,
     str,
     str | None,
-    dict[str, tuple[TaskSpec, tuple[int, ...], int, dict[str, object]]],
+    dict[str, _ReportSuiteCase],
 ]:
     if not isinstance(value, dict):
         raise ContractError("report suite must be an object")
@@ -2293,9 +2737,7 @@ def _validated_report_suite_v3(
         raise ContractError(f"report suite character must be {CHARACTER}")
     _suite_text(suite["seed_selection"], "report suite seed_selection")
     _suite_text(suite["step_cap_rationale"], "report suite step_cap_rationale")
-    suite_cases: dict[
-        str, tuple[TaskSpec, tuple[int, ...], int, dict[str, object]]
-    ] = {}
+    suite_cases: dict[str, _ReportSuiteCase] = {}
     if legacy:
         if (
             string_value(suite["environment"], "report suite environment")
@@ -2352,6 +2794,7 @@ def _validated_report_suite_v3(
                 "min_successes": minimum,
                 "required_success_seeds": required,
             },
+            (),
         )
         return suite, suite_id, SCHEMA_1_POLICY_VERSION, None, suite_cases
 
@@ -2399,11 +2842,19 @@ def _validated_report_suite_v3(
             case["acceptance"],
             f"report suite case {case_id} acceptance",
             _CASE_ACCEPTANCE_FIELDS,
+            optional=_CASE_ACCEPTANCE_OPTIONAL_FIELDS,
+        )
+        thresholds = (
+            _metric_thresholds(
+                criteria["metric_thresholds"], f"report suite case {case_id}"
+            )
+            if "metric_thresholds" in criteria
+            else ()
         )
         minimum = integer_value(
             criteria["min_successes"],
             f"report suite case {case_id} min_successes",
-            minimum=1,
+            minimum=_minimum_successes(thresholds),
             maximum=len(seeds),
         )
         required = _integers(
@@ -2414,15 +2865,15 @@ def _validated_report_suite_v3(
             raise ContractError(
                 f"report suite case {case_id} required seeds must be unique case seeds"
             )
-        suite_cases[case_id] = (
-            task,
-            seeds,
-            cap,
-            {
-                "min_successes": minimum,
-                "required_success_seeds": required,
-            },
-        )
+        suite_criteria: dict[str, object] = {
+            "min_successes": minimum,
+            "required_success_seeds": required,
+        }
+        if thresholds:
+            suite_criteria["metric_thresholds"] = [
+                threshold.to_json() for threshold in thresholds
+            ]
+        suite_cases[case_id] = (task, seeds, cap, suite_criteria, thresholds)
     if not suite_cases:
         raise ContractError("report suite cases must not be empty")
     return suite, suite_id, policy, knowledge_id, suite_cases
@@ -2460,6 +2911,71 @@ def _validated_aggregate(value: object, name: str) -> dict[str, object]:
     _integer_map(aggregate["selection_sources"], f"{name} selection_sources")
     array_value(aggregate["integrity_failures"], f"{name} integrity_failures")
     return aggregate
+
+
+def _results_record_exploration(case_reports: Sequence[object]) -> bool:
+    """Whether the report's results record explored cells and worst hunger.
+
+    Reports written before those metrics existed record them for no result;
+    a report recording them for only some results is malformed.
+    """
+    recorded = {
+        EpisodeMetrics.from_json(
+            object_value(result, "report result", _RESULT_FIELDS_V3)["metrics"]
+        ).explored_cells
+        is not None
+        for case in case_reports
+        for result in array_value(
+            object_value(case, "report case", _CASE_REPORT_FIELDS)["results"],
+            "report case results",
+        )
+    }
+    if len(recorded) > 1:
+        raise ContractError(
+            "report results must all record explored_cells and worst_hunger_state "
+            "or all omit them"
+        )
+    return recorded == {True}
+
+
+def _validated_case_metrics(
+    case_acceptance: dict[str, object],
+    thresholds: tuple[MetricThreshold, ...],
+    case_id: str,
+) -> list[tuple[MetricThreshold, float | None, bool]]:
+    """The case's recorded threshold results, in suite threshold order."""
+    name = f"report case {case_id} acceptance metrics"
+    if "metrics" not in case_acceptance:
+        if thresholds:
+            raise ContractError(f"{name} are missing for the suite thresholds")
+        return []
+    if not thresholds:
+        raise ContractError(f"{name} are recorded without suite thresholds")
+    items = array_value(case_acceptance["metrics"], name)
+    if len(items) != len(thresholds):
+        raise ContractError(f"{name} must match the suite thresholds")
+    rows: list[tuple[MetricThreshold, float | None, bool]] = []
+    for threshold, item in zip(thresholds, items, strict=True):
+        entry = object_value(item, f"{name} entry", _CASE_REPORT_METRIC_FIELDS)
+        recorded = MetricThreshold.from_json(
+            {key: entry[key] for key in ("metric", "statistic", "bound")},
+            f"{name} entry",
+        )
+        if recorded != threshold:
+            raise ContractError(f"{name} must match the suite thresholds")
+        rows.append(
+            (
+                threshold,
+                _optional_number(entry["value"], f"{name} value"),
+                boolean_value(entry["passed"], f"{name} passed"),
+            )
+        )
+    return rows
+
+
+def _exploration_cells(metrics: EpisodeMetrics) -> str:
+    worst = metrics.worst_hunger_state
+    return f"| {metrics.explored_cells} | {'-' if worst is None else worst.value} "
 
 
 def _validated_result_v3(value: object, case_id: str) -> dict[str, object]:

@@ -49,10 +49,10 @@ from nethack_agent.storage import (
 )
 from nethack_agent.tasks import STAIRCASE_TASK, TaskSpec
 
-# Survival policy adds evidence-bounded adjacent defense and known-ration
-# eating to hierarchical-traversal-v1. Traversal suites and reports remain
-# pinned to their original policy.
-POLICY_VERSION: Final = "hierarchical-survival-v1"
+# Task progression adds explore_dungeon objectives, exhaustion markers, and the
+# Scout and Eat tasks to hierarchical-survival-v1. Earlier suites and reports
+# remain pinned to their original policies.
+POLICY_VERSION: Final = "hierarchical-task-progression-v1"
 _ACTIVE_STATES: Final = frozenset({RunState.IDLE, RunState.RUNNING, RunState.PAUSED})
 
 

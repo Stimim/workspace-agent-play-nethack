@@ -9,16 +9,32 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from nle import nethack
 
 from nethack_agent import evaluation, run_manager
 from nethack_agent.contracts import ContractError
-from nethack_agent.decision import DecisionMetrics, RunOutcome, RunState
+from nethack_agent.decision import (
+    ActionSelection,
+    ActionSelectionSource,
+    DecisionMetrics,
+    RunOutcome,
+    RunState,
+    Skill,
+    SkillSelectionSource,
+)
+from nethack_agent.environment import LegalAction
 from nethack_agent.evaluation import (
     SCHEMA_1_POLICY_VERSION,
     DecisionStats,
+    EpisodeMetrics,
     EvaluationError,
     EvaluationOptions,
     EvaluationReport,
+    EvaluationSuite,
+    HungerState,
+    MetricComparison,
+    MetricName,
+    MetricStatistic,
     ReportStatus,
     ReportWriter,
     RunConfiguration,
@@ -32,13 +48,25 @@ from nethack_agent.evaluation import (
     run_evaluation,
     summarize_run,
 )
-from nethack_agent.events import StepPayload
+from nethack_agent.events import EventKind, RunEvent, RunStartedPayload, StepPayload
 from nethack_agent.model import ScriptedDevelopmentModel
+from nethack_agent.observation import (
+    MapView,
+    PlayerStats,
+    ProjectedObservation,
+    PromptState,
+)
 from nethack_agent.ollama import OllamaConfig
 from nethack_agent.run_manager import RunManager
 from nethack_agent.storage import RunRecord, RunStore
-from nethack_agent.tasks import ActionProfile, NleTask, TaskSpec
-from nethack_agent.traversal import EnterDungeonLeg, LevelKey, Objective
+from nethack_agent.tasks import STAIRCASE_TASK, ActionProfile, NleTask, TaskSpec
+from nethack_agent.traversal import (
+    STAND_ON_DOWNSTAIRS,
+    EnterDungeonLeg,
+    ExploreDungeonLeg,
+    LevelKey,
+    Objective,
+)
 
 SUITE_PATH = Path(__file__).resolve().parents[1] / "evaluation" / "staircase-v1.json"
 STAIRCASE_V2_PATH = (
@@ -46,6 +74,12 @@ STAIRCASE_V2_PATH = (
 )
 TRAVERSAL_V1_PATH = (
     Path(__file__).resolve().parents[1] / "evaluation" / "traversal-v1.json"
+)
+STAIRCASE_V3_PATH = (
+    Path(__file__).resolve().parents[1] / "evaluation" / "staircase-v3.json"
+)
+TRAVERSAL_V2_PATH = (
+    Path(__file__).resolve().parents[1] / "evaluation" / "traversal-v2.json"
 )
 REPORT_DIRECTORY = Path(__file__).resolve().parents[1] / "evaluation" / "reports"
 
@@ -174,10 +208,12 @@ def test_committed_traversal_suite_fixes_cases_seeds_and_thresholds() -> None:
 
 
 @pytest.mark.parametrize("suite_path", [STAIRCASE_V2_PATH, TRAVERSAL_V1_PATH])
-def test_committed_traversal_suites_refuse_under_survival_policy_before_any_episode(
+def test_committed_traversal_suites_refuse_under_the_current_policy_before_any_episode(
     tmp_path: Path, suite_path: Path
 ) -> None:
-    assert run_manager.POLICY_VERSION == "hierarchical-survival-v1"
+    # Their policy pin is immutable evidence; later policies use new suite ids.
+    assert load_suite(suite_path).policy_version == "hierarchical-traversal-v1"
+    assert run_manager.POLICY_VERSION != "hierarchical-traversal-v1"
     options = EvaluationOptions(
         suite=load_suite(suite_path),
         data_directory=tmp_path / "data",
@@ -190,6 +226,28 @@ def test_committed_traversal_suites_refuse_under_survival_policy_before_any_epis
 
     assert not (tmp_path / "data").exists()
     assert not (tmp_path / "reports").exists()
+
+
+@pytest.mark.parametrize(
+    ("regression", "original"),
+    [
+        (STAIRCASE_V3_PATH, STAIRCASE_V2_PATH),
+        (TRAVERSAL_V2_PATH, TRAVERSAL_V1_PATH),
+    ],
+)
+def test_regression_suites_reuse_their_predecessors_cases_under_the_current_policy(
+    regression: Path, original: Path
+) -> None:
+    suite = load_suite(regression)
+    previous = load_suite(original)
+
+    assert suite.policy_version == run_manager.POLICY_VERSION
+    assert suite.knowledge_bundle_id == previous.knowledge_bundle_id
+    assert suite.suite_id != previous.suite_id
+    assert [case.to_json() for case in suite.cases] == [
+        case.to_json() for case in previous.cases
+    ]
+    assert suite.global_acceptance == previous.global_acceptance
 
 
 @pytest.mark.parametrize("malformation", ["extra", "duplicate_case", "duplicate_seed"])
@@ -900,3 +958,683 @@ def test_audit_accepts_permitted_traversals_and_flags_unpermitted_ones(
             (json.dumps(payload), rowid),
         )
     assert audit(record).invalid_actions == 1
+
+
+_EAST = LegalAction(0, ord("l"), "CompassDirection.E")
+_DISPLAYED = nethack.GLYPH_CMAP_OFF + 19
+
+
+def synthetic_observation(
+    step_index: int, level: LevelKey | None, displayed: int, hunger: int
+) -> ProjectedObservation:
+    """A 2x5 map showing `displayed` non-blank glyphs.
+
+    `level` None is NLE's terminal observation, whose bottom line is zeroed.
+    """
+    width, height = 5, 2
+    glyphs = [
+        _DISPLAYED if index < displayed else nethack.GLYPH_CMAP_OFF
+        for index in range(width * height)
+    ]
+    dungeon_number, dungeon_level = (
+        (0, 0) if level is None else (level.dungeon_number, level.dungeon_level)
+    )
+    return ProjectedObservation(
+        step_index=step_index,
+        map=MapView(
+            rows=(" " * width,) * height,
+            glyph_rows=tuple(
+                tuple(glyphs[row * width : (row + 1) * width]) for row in range(height)
+            ),
+            color_rows=(bytes(width),) * height,
+            special_rows=(bytes(width),) * height,
+            pet_rows=None,
+        ),
+        changed_cells=(),
+        player=PlayerStats(
+            x=0,
+            y=0,
+            strength_25=16,
+            strength_125=16,
+            dexterity=10,
+            constitution=10,
+            intelligence=10,
+            wisdom=10,
+            charisma=10,
+            score=0,
+            hit_points=0 if level is None else 10,
+            max_hit_points=0 if level is None else 10,
+            depth=dungeon_level,
+            gold=0,
+            energy=0,
+            max_energy=0,
+            armor_class=6,
+            hit_dice=0,
+            experience_level=0 if level is None else 1,
+            experience_points=0,
+            turn=0 if level is None else step_index + 1,
+            hunger=hunger,
+            encumbrance=0,
+            dungeon_number=dungeon_number,
+            dungeon_level=dungeon_level,
+            alignment=0,
+            conditions=(),
+        ),
+        message="",
+        prompt=PromptState(False, False, False),
+        inventory=(),
+    )
+
+
+def synthetic_step(
+    observation: ProjectedObservation, outcome: RunOutcome | None = None
+) -> StepPayload:
+    return StepPayload(
+        selection=ActionSelection(
+            ActionSelectionSource.DETERMINISTIC_SKILL,
+            STAND_ON_DOWNSTAIRS,
+            Skill.EXPLORE_LEVEL,
+            SkillSelectionSource.ARBITER,
+            None,
+            _EAST.index,
+            "Explore toward unexplored space.",
+            None,
+        ),
+        skill_decision=None,
+        skill_metrics=None,
+        action_decision=None,
+        action_metrics=None,
+        action=_EAST,
+        reward=0.0,
+        terminated=outcome is not None,
+        truncated=False,
+        end_status=0 if outcome is None else 1,
+        is_ascended=False,
+        outcome=outcome,
+        observation=observation,
+    )
+
+
+def test_episode_metrics_sum_each_levels_most_explored_cells_and_worst_hunger(
+    tmp_path: Path,
+) -> None:
+    first, second = LevelKey(0, 1), LevelKey(0, 2)
+    observations = [
+        synthetic_observation(0, first, 3, hunger=1),
+        synthetic_observation(1, first, 5, hunger=2),
+        synthetic_observation(2, second, 4, hunger=0),
+        # Fewer displayed cells on a revisit never lower a level's count.
+        synthetic_observation(3, first, 2, hunger=1),
+        # The zeroed terminal observation is no live level or hunger sample.
+        synthetic_observation(4, None, 10, hunger=6),
+    ]
+    events = [
+        RunEvent(
+            0,
+            "2026-09-28T00:00:00+00:00",
+            EventKind.RUN_STARTED,
+            RunStartedPayload(observations[0], (_EAST,), STAND_ON_DOWNSTAIRS, None),
+        ),
+        *(
+            RunEvent(
+                index,
+                "2026-09-28T00:00:00+00:00",
+                EventKind.STEP,
+                synthetic_step(
+                    observation,
+                    RunOutcome.DEATH if index == len(observations) - 1 else None,
+                ),
+            )
+            for index, observation in enumerate(observations[1:], start=1)
+        ),
+    ]
+    record = RunRecord(
+        id="run-1",
+        created_at="2026-09-28T00:00:00+00:00",
+        updated_at="2026-09-28T00:00:00+00:00",
+        state=RunState.TERMINAL,
+        outcome=RunOutcome.DEATH,
+        environment=STAIRCASE_TASK.environment.value,
+        character="val-dwa-law",
+        suite_seed=1,
+        core_seed=1,
+        display_seed=1,
+        level_seed=1,
+        max_episode_steps=1000,
+        model="scripted",
+        policy_version="policy",
+        knowledge_version="knowledge",
+        nle_version="1.3.0",
+        ollama_num_ctx=8192,
+        ollama_version=None,
+        ttyrec_path=None,
+        error=None,
+        task=STAIRCASE_TASK,
+    )
+
+    metrics = summarize_run(
+        record,
+        events,
+        suite=load_suite(SUITE_PATH),
+        seed=1,
+        ended_by="episode_end",
+        wall_seconds=0.0,
+        data_directory=tmp_path,
+    ).metrics
+
+    assert metrics.explored_cells == 5 + 4
+    assert metrics.worst_hunger_state is HungerState.HUNGRY
+    stored = metrics.to_json()
+    assert stored["explored_cells"] == 9
+    assert stored["worst_hunger_state"] == "hungry"
+    assert EpisodeMetrics.from_json(stored) == metrics
+
+
+def test_empty_metrics_record_no_exploration_and_no_hunger_sample() -> None:
+    stored = EpisodeMetrics.empty().to_json()
+
+    assert stored["explored_cells"] == 0
+    assert stored["worst_hunger_state"] is None
+    assert EpisodeMetrics.from_json(stored) == EpisodeMetrics.empty()
+
+
+def committed_schema_3_metrics() -> dict[str, object]:
+    path = REPORT_DIRECTORY / "traversal-v1-20260928T013929Z.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    metrics = payload["case_results"][0]["results"][0]["metrics"]
+    assert isinstance(metrics, dict)
+    return metrics
+
+
+def test_legacy_metrics_without_exploration_round_trip_unchanged() -> None:
+    stored = committed_schema_3_metrics()
+    assert "explored_cells" not in stored
+
+    metrics = EpisodeMetrics.from_json(stored)
+
+    assert metrics.explored_cells is None
+    assert metrics.worst_hunger_state is None
+    assert metrics.to_json() == stored
+
+
+@pytest.mark.parametrize("present", ["explored_cells", "worst_hunger_state"])
+def test_metrics_record_exploration_and_worst_hunger_together(present: str) -> None:
+    stored = committed_schema_3_metrics()
+    stored[present] = 3 if present == "explored_cells" else "hungry"
+
+    with pytest.raises(ContractError, match="recorded together"):
+        EpisodeMetrics.from_json(stored)
+
+
+def metric_threshold(
+    metric: str, statistic: str, comparison: str, value: object
+) -> dict[str, object]:
+    return {
+        "metric": metric,
+        "statistic": statistic,
+        "bound": {"comparison": comparison, "value": value},
+    }
+
+
+def threshold_suite(
+    tmp_path: Path, thresholds: list[dict[str, object]]
+) -> EvaluationSuite:
+    payload = suite_2_payload()
+    cases = payload["cases"]
+    assert isinstance(cases, list)
+    cases[0]["acceptance"]["metric_thresholds"] = thresholds
+    return load_suite(write_suite(tmp_path, payload))
+
+
+def test_suite_metric_thresholds_parse_and_serialize_in_order(tmp_path: Path) -> None:
+    thresholds = [
+        metric_threshold("explored_cells", "median", "at_least", 500),
+        metric_threshold("task_return", "mean", "at_most", 2.5),
+    ]
+
+    suite = threshold_suite(tmp_path, thresholds)
+
+    acceptance = suite.cases[0].acceptance
+    assert [threshold.key for threshold in acceptance.metric_thresholds] == [
+        (
+            MetricName.EXPLORED_CELLS,
+            MetricStatistic.MEDIAN,
+            MetricComparison.AT_LEAST,
+        ),
+        (MetricName.TASK_RETURN, MetricStatistic.MEAN, MetricComparison.AT_MOST),
+    ]
+    assert acceptance.to_json()["metric_thresholds"] == thresholds
+    # Cases without thresholds keep their pre-threshold JSON shape.
+    assert (
+        "metric_thresholds"
+        not in load_suite(STAIRCASE_V2_PATH).to_json()["cases"][0]["acceptance"]
+    )  # type: ignore[index]
+
+
+@pytest.mark.parametrize(
+    "thresholds",
+    [
+        [],
+        [metric_threshold("explored_cells", "mode", "at_least", 500)],
+        [metric_threshold("explored_cells", "median", "exactly", 500)],
+        [metric_threshold("score", "median", "at_least", 500)],
+        [metric_threshold("explored_cells", "median", "at_least", True)],
+        [metric_threshold("explored_cells", "median", "at_least", "500")],
+        [metric_threshold("explored_cells", "median", "at_least", float("inf"))],
+        [
+            metric_threshold("explored_cells", "median", "at_least", 500),
+            metric_threshold("explored_cells", "median", "at_least", 600),
+        ],
+        [{**metric_threshold("death", "sum", "at_most", 0), "extra": 1}],
+    ],
+)
+def test_suite_metric_thresholds_are_strict(
+    tmp_path: Path, thresholds: list[dict[str, object]]
+) -> None:
+    with pytest.raises(SuiteValidationError):
+        threshold_suite(tmp_path, thresholds)
+
+
+def threshold_results(
+    values: list[int | None], **metric_changes: object
+) -> list[SeedResult]:
+    return [
+        result(
+            seed,
+            RunOutcome.TASK_SUCCESS,
+            case_id="staircase",
+            metrics=replace(
+                EpisodeMetrics.empty(),
+                steps=10,
+                explored_cells=value,
+                **metric_changes,
+            ),
+        )
+        for seed, value in enumerate(values, start=1)
+    ]
+
+
+@pytest.mark.parametrize(
+    ("threshold", "values", "reason"),
+    [
+        # Odd count: the middle value.
+        (
+            metric_threshold("explored_cells", "median", "at_least", 500),
+            [100, 900, 500],
+            None,
+        ),
+        # Even count: the mean of the two middle values.
+        (
+            metric_threshold("explored_cells", "median", "at_least", 450),
+            [900, 100, 500, 400],
+            None,
+        ),
+        (
+            metric_threshold("explored_cells", "median", "at_least", 451),
+            [900, 100, 500, 400],
+            "case staircase: explored_cells median 450 is below at_least 451",
+        ),
+        (
+            metric_threshold("explored_cells", "mean", "at_least", 3),
+            [1, 2, 4],
+            "case staircase: explored_cells mean 2.333 is below at_least 3",
+        ),
+        (
+            metric_threshold("explored_cells", "maximum", "at_most", 4),
+            [1, 2, 4],
+            None,
+        ),
+        (
+            metric_threshold("explored_cells", "sum", "at_most", 6),
+            [1, 2, 4],
+            "case staircase: explored_cells sum 7 is above at_most 6",
+        ),
+        (
+            metric_threshold("explored_cells", "minimum", "at_least", 1),
+            [3, None, 4],
+            "case staircase: explored_cells minimum is unavailable; "
+            "at_least 1 required",
+        ),
+        (
+            metric_threshold("explored_cells", "minimum", "at_least", 0),
+            [],
+            "case staircase: explored_cells minimum is unavailable; "
+            "at_least 0 required",
+        ),
+    ],
+)
+def test_acceptance_gates_on_case_metric_statistics(
+    tmp_path: Path,
+    threshold: dict[str, object],
+    values: list[int | None],
+    reason: str | None,
+) -> None:
+    suite = threshold_suite(tmp_path, [threshold])
+
+    acceptance = evaluate_acceptance(
+        suite,
+        threshold_results(values),
+        development_model=False,
+        inputs_unchanged=True,
+    )
+
+    check = (
+        f"staircase:explored_cells:{threshold['statistic']}:"
+        f"{threshold['bound']['comparison']}"  # type: ignore[index]
+    )
+    assert acceptance.checks[check] is (reason is None)
+    threshold_reasons = [
+        item for item in acceptance.reasons if item.startswith("case staircase:")
+    ]
+    assert threshold_reasons == ([] if reason is None else [reason])
+
+
+def test_death_worst_hunger_and_starvation_thresholds_use_episode_values(
+    tmp_path: Path,
+) -> None:
+    suite = threshold_suite(
+        tmp_path,
+        [
+            metric_threshold("death", "sum", "at_most", 1),
+            metric_threshold("starvation_death", "sum", "at_most", 0),
+            metric_threshold("worst_hunger_state", "maximum", "at_most", 2),
+        ],
+    )
+    starved = replace(
+        EpisodeMetrics.empty(),
+        steps=10,
+        death_cause="died of starvation",
+        worst_hunger_state=HungerState.WEAK,
+    )
+    killed = replace(starved, death_cause="killed by a jackal")
+    results = [
+        result(1, RunOutcome.DEATH, metrics=starved),
+        result(2, RunOutcome.DEATH, metrics=killed),
+        # Starvation text without a death outcome is not a starvation death.
+        result(3, RunOutcome.TRUNCATED, metrics=starved),
+    ]
+
+    checks = evaluate_acceptance(
+        suite, results, development_model=False, inputs_unchanged=True
+    ).checks
+
+    assert checks["staircase:death:sum:at_most"] is False
+    assert checks["staircase:starvation_death:sum:at_most"] is False
+    assert checks["staircase:worst_hunger_state:maximum:at_most"] is False
+    assert "case staircase: death sum 2 is above at_most 1" in (
+        evaluate_acceptance(
+            suite, results, development_model=False, inputs_unchanged=True
+        ).reasons
+    )
+
+
+def threshold_report(
+    suite: EvaluationSuite, results: list[SeedResult]
+) -> EvaluationReport:
+    return EvaluationReport(
+        suite=suite,
+        model_mode="ollama",
+        model="gemma4-nethack:latest",
+        policy_version=suite.policy_version,
+        knowledge_version=f"{suite.knowledge_bundle_id}+sha256:" + "0" * 64,
+        ollama_num_ctx=8192,
+        requested_seeds=suite.seeds,
+        data_directory="data",
+        started_at="2026-09-28T00:00:00+00:00",
+        results=results,
+    )
+
+
+def test_case_report_records_threshold_results_and_renders_them(
+    tmp_path: Path,
+) -> None:
+    # No objective success is required, so only the thresholds gate the case.
+    suite = load_suite(
+        write_suite(
+            tmp_path,
+            zero_success_payload(
+                [
+                    metric_threshold("explored_cells", "median", "at_least", 500),
+                    metric_threshold("task_return", "mean", "at_most", 0),
+                ]
+            ),
+        )
+    )
+    results = threshold_results([400, 612, 700], worst_hunger_state=HungerState.HUNGRY)
+
+    payload = threshold_report(suite, results).to_json()
+
+    case = payload["case_results"][0]  # type: ignore[index]
+    assert case["acceptance"]["metrics"] == [
+        {
+            **metric_threshold("explored_cells", "median", "at_least", 500),
+            "value": 612,
+            "passed": True,
+        },
+        {
+            **metric_threshold("task_return", "mean", "at_most", 0),
+            "value": 0,
+            "passed": True,
+        },
+    ]
+    assert case["acceptance"]["passed"]
+    markdown = render_report_markdown(payload)
+    assert (
+        "| Metric | Statistic | Bound | Value | Result |\n"
+        "| --- | --- | --- | ---: | --- |\n"
+        "| explored_cells | median | at_least 500 | 612 | pass |\n"
+        "| task_return | mean | at_most 0 | 0 | pass |\n"
+    ) in markdown
+    assert "| Hunger | Explored | Worst hunger | HP/XL |" in markdown
+    assert "| - | 612 | hungry | 0/0 |" in markdown
+
+    failing = threshold_report(suite, threshold_results([400, 450, 700])).to_json()
+    failing_case = failing["case_results"][0]  # type: ignore[index]
+    assert failing_case["acceptance"]["successes"] == 3
+    assert failing_case["acceptance"]["passed"] is False
+    assert "| explored_cells | median | at_least 500 | 450 | fail |" in (
+        render_report_markdown(failing)
+    )
+
+
+def test_threshold_value_is_null_and_rendered_as_dash_when_unavailable(
+    tmp_path: Path,
+) -> None:
+    suite = threshold_suite(
+        tmp_path, [metric_threshold("explored_cells", "median", "at_least", 500)]
+    )
+
+    payload = threshold_report(suite, []).to_json()
+
+    metrics = payload["case_results"][0]["acceptance"]["metrics"]  # type: ignore[index]
+    assert metrics[0]["value"] is None
+    assert metrics[0]["passed"] is False
+    markdown = render_report_markdown(payload)
+    assert "| explored_cells | median | at_least 500 | - | fail |" in markdown
+    # A report without any result has no evidence of the new metrics.
+    assert "| Explored |" not in markdown
+
+
+@pytest.mark.parametrize("malformation", ["missing", "unrequested", "reordered"])
+def test_report_threshold_results_must_match_suite_thresholds(
+    tmp_path: Path, malformation: str
+) -> None:
+    suite = threshold_suite(
+        tmp_path,
+        [
+            metric_threshold("explored_cells", "median", "at_least", 500),
+            metric_threshold("death", "sum", "at_most", 0),
+        ],
+    )
+    payload = threshold_report(suite, threshold_results([600])).to_json()
+    acceptance = payload["case_results"][0]["acceptance"]  # type: ignore[index]
+    if malformation == "missing":
+        del acceptance["metrics"]
+    elif malformation == "unrequested":
+        plain = threshold_report(
+            load_suite(STAIRCASE_V2_PATH), threshold_results([600])
+        ).to_json()
+        plain["case_results"][0]["acceptance"]["metrics"] = acceptance["metrics"]  # type: ignore[index]
+        payload = plain
+    else:
+        acceptance["metrics"].reverse()
+
+    with pytest.raises(ContractError, match="acceptance metrics"):
+        render_report_markdown(payload)
+
+
+def test_report_suite_thresholds_must_match_case_criteria(tmp_path: Path) -> None:
+    suite = threshold_suite(
+        tmp_path, [metric_threshold("explored_cells", "median", "at_least", 500)]
+    )
+    payload = threshold_report(suite, threshold_results([600])).to_json()
+    criteria = payload["case_results"][0]["acceptance"]["criteria"]  # type: ignore[index]
+    criteria["metric_thresholds"][0]["bound"]["value"] = 400
+
+    with pytest.raises(ContractError, match="acceptance differs from the suite"):
+        render_report_markdown(payload)
+
+
+def test_report_mixing_recorded_and_legacy_exploration_metrics_is_rejected() -> None:
+    payload = make_report([result(1), result(2)]).to_json()
+    results = payload["case_results"][0]["results"]  # type: ignore[index]
+    del results[1]["metrics"]["explored_cells"]
+    del results[1]["metrics"]["worst_hunger_state"]
+
+    with pytest.raises(ContractError, match="all record explored_cells"):
+        render_report_markdown(payload)
+
+    del results[0]["metrics"]["explored_cells"]
+    del results[0]["metrics"]["worst_hunger_state"]
+    assert "| Explored |" not in render_report_markdown(payload)
+
+
+def zero_success_payload(thresholds: list[dict[str, object]]) -> dict[str, object]:
+    payload = suite_2_payload()
+    acceptance = payload["cases"][0]["acceptance"]  # type: ignore[index]
+    acceptance["min_successes"] = 0
+    acceptance["required_success_seeds"] = []
+    if thresholds:
+        acceptance["metric_thresholds"] = thresholds
+    return payload
+
+
+def test_metric_gated_case_may_require_no_objective_success(tmp_path: Path) -> None:
+    suite = load_suite(
+        write_suite(
+            tmp_path,
+            zero_success_payload(
+                [metric_threshold("explored_cells", "median", "at_least", 500)]
+            ),
+        )
+    )
+    assert suite.cases[0].acceptance.min_successes == 0
+
+    payload = threshold_report(suite, threshold_results([600])).to_json()
+    case = payload["case_results"][0]  # type: ignore[index]
+    assert case["acceptance"]["passed"] is True
+    assert "- Successes: 1/10 (required 0, including [])." in render_report_markdown(
+        payload
+    )
+
+
+def test_zero_required_successes_need_a_metric_threshold(tmp_path: Path) -> None:
+    with pytest.raises(SuiteValidationError, match="min_successes must be at least 1"):
+        load_suite(write_suite(tmp_path, zero_success_payload([])))
+
+    payload = threshold_report(
+        load_suite(STAIRCASE_V2_PATH), threshold_results([600])
+    ).to_json()
+    for acceptance in (
+        payload["suite"]["cases"][0]["acceptance"],  # type: ignore[index]
+        payload["case_results"][0]["acceptance"]["criteria"],  # type: ignore[index]
+    ):
+        acceptance["min_successes"] = 0
+    with pytest.raises(ContractError, match="min_successes must be at least 1"):
+        render_report_markdown(payload)
+
+
+def test_explore_objectives_count_only_exhaustion_markers_the_replay_confirms(
+    tmp_path: Path,
+) -> None:
+    data_directory = tmp_path / "data"
+    manager = RunManager(
+        data_directory,
+        OllamaConfig(model="scripted"),
+        model_factory=lambda _client: ScriptedDevelopmentModel(),
+    )
+    task = TaskSpec(
+        NleTask.SCOUT,
+        ActionProfile.NLE_TASK_ACTIONS,
+        Objective((ExploreDungeonLeg(1),)),
+    )
+    try:
+        # Seed 53 exhausts its first level within the Scout's hunger horizon.
+        run_id = manager.create_run(
+            seed=53, max_episode_steps=400, auto_start=True, task=task
+        ).id
+        deadline = time.monotonic() + 120
+        while manager.store.get_run(run_id).state is RunState.RUNNING:
+            assert time.monotonic() < deadline
+            time.sleep(0.05)
+    finally:
+        manager.close()
+    store = RunStore(data_directory / "runs.sqlite3")
+    base_suite = load_suite(SUITE_PATH)
+    case = replace(base_suite.cases[0], task=task, max_episode_steps=400)
+    suite = replace(base_suite, cases=(case,))
+    record = store.get_run(run_id)
+
+    def audit() -> SeedResult:
+        return summarize_run(
+            record,
+            store.events_after(run_id, limit=1000),
+            suite=suite,
+            seed=53,
+            ended_by="terminal",
+            wall_seconds=0.0,
+            data_directory=data_directory,
+            case=case,
+        )
+
+    def rewrite(step_index: int, marker: dict[str, int] | None) -> None:
+        with sqlite3.connect(data_directory / "runs.sqlite3") as connection:
+            rowid, payload = next(
+                (rowid, payload)
+                for rowid, text in connection.execute(
+                    "SELECT rowid, payload_json FROM events ORDER BY sequence"
+                )
+                if isinstance(payload := json.loads(text), dict)
+                and payload.get("observation", {}).get("step_index") == step_index
+                and "selection" in payload
+            )
+            payload["selection"]["exhausted_level"] = marker
+            connection.execute(
+                "UPDATE events SET payload_json = ? WHERE rowid = ?",
+                (json.dumps(payload), rowid),
+            )
+
+    assert record.outcome is RunOutcome.OBJECTIVE_COMPLETE
+    honest = audit()
+    assert honest.integrity_problems == ()
+    assert honest.metrics.objective_legs_completed == 1
+    final_step = honest.steps
+
+    # Without its marker the final step no longer supports the outcome.
+    rewrite(final_step, None)
+    unsupported = audit()
+    assert unsupported.metrics.objective_legs_completed == 0
+    assert unsupported.integrity_problems == (
+        "objective_complete outcome is not supported by the stored observations",
+    )
+
+    # A marker forged where exploration still had work is rejected, and it
+    # cannot complete the objective either.
+    rewrite(final_step, None)
+    rewrite(5, {"dungeon_number": 0, "dungeon_level": 1})
+    forged = audit()
+    assert forged.metrics.objective_legs_completed == 0
+    assert (
+        "step 5 exhausted_level marker is not supported: deterministic exploration "
+        "still had an action"
+    ) in forged.integrity_problems

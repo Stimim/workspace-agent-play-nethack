@@ -576,6 +576,37 @@ schema-2 evaluation evidence. Details that refine the plan above:
   `staircase-v1` remains bound to `hierarchical-explore-v1`, and commit
   `3211405` is the last checkout with that policy.
 
+Milestone B, first wave (policy `hierarchical-task-progression-v1`, bundle
+`staircase-reviewed-v3`; [note 0017](../notes/0017-scout-and-eat-task-suites.md)):
+
+- `explore_dungeon{max_level}` (1-32, Dungeons of Doom only) is valid only as
+  the single leg of `NetHackScout-v0` with `nle-task-actions` or
+  `NetHackEat-v0` with `nle-hunger-actions`; every other task, profile, or leg
+  combination is rejected. Score and Staircase keep their earlier rules.
+- The planner targets the shallowest required level not yet explored:
+  `explore_level{level}` on it (a new goal kind with token
+  `explore_level:<dnum>:<dlevel>` and no staircase target), otherwise main
+  stairs toward it, and a branch dungeon is left by its recorded link. A level
+  counts as explored once exploration found it exhausted; unlike `exhausted`,
+  this sticky flag survives later knowledge growth.
+- The step whose decision first finds a level exhausted records
+  `selection.exhausted_level`. When that completes the current leg, the step is
+  a deterministic `WAIT` confirmation instead of a model consultation, and the
+  run ends `objective_complete` on the next observation. A decision discarded
+  by a pause or failure restores the level's exhaustion marks.
+- The evaluator does not trust markers. `replay.ExplorationReplay` rebuilds the
+  coordinator's dungeon memory from the stored run (each executed action's
+  memory record is re-derived from its selection and intent, and planner and
+  model re-arms are replayed in order) and asks the same exploration skill
+  whether the decided-on observation was exhausted. Only confirmed markers
+  complete an `explore_dungeon` leg; an unsupported marker is an integrity
+  problem. Scout and Eat have no NLE success state, so a case with at least one
+  typed metric threshold may declare `min_successes: 0` and gate on the
+  thresholds as a baseline.
+- The ADR's exhaustion definition is kept: on the Scout and Eat probes its
+  hidden-passage search cost exceeded the hunger horizon, which note 0017
+  records as evidence for a future bounded search-budget skill.
+
 ## Consequences
 
 - Level changes become possible only through one audited path: the planner's

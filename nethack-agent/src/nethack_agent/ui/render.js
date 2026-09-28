@@ -11,7 +11,7 @@ const FIELD_HELP = Object.freeze({
   Outcome: "The terminal task result, when the run has ended.",
   Seed: "The suite seed and configured maximum episode step count.",
   Model: "The local model identity and fixed policy version recorded for this run.",
-  Goal: "The typed goal the objective planner set: its kind (stand on or traverse stairs) and the stair direction and main/branch target, shown as kind:direction:connection[:dungeon].",
+  Goal: "The typed goal the objective planner set, shown as its token. A stair goal (stand on or traverse stairs) names the stair direction and main/branch target as kind:direction:connection[:dungeon]; an explore_level goal names the level to explore until deterministic exploration is exhausted, as explore_level:dungeon:level.",
   Skill: "The typed executing skill from the Skill enum in decision.py.",
   Stream: "The browser's WebSocket connection state, including reconnects and normal closure.",
   "Last error": "The latest coordinator or persisted run error.",
@@ -44,6 +44,7 @@ const FIELD_HELP = Object.freeze({
   Rationale: "The persisted concise rationale. This is an auditable decision trace, not hidden chain-of-thought.",
   Intent: "The typed map intent a deterministic skill recorded with this step: its destination (route goal) and any attack target, in zero-based map coordinates. Prompt answers, model fallbacks, and steps recorded before intents existed have none.",
   Stuck: "The typed reason deterministic exploration could not propose an action.",
+  Exhausted: "The level this step's decision found exhausted: deterministic exploration had nothing left to do there. The evaluator re-derives this marker from the stored run.",
   "Skill choice": "The typed skill returned by the model consultation.",
   "Skill rationale": "The concise rationale returned with the model skill choice.",
   "Model rationale": "The concise rationale returned with a model fallback action.",
@@ -145,6 +146,7 @@ export function setExplainedText(element, value, help = undefined) {
 const GOAL_HELP = Object.freeze({
   stand_on_stairs: "Goal stand_on_stairs: stand on a remembered staircase that matches the target without using it.",
   traverse_stairs: "Goal traverse_stairs: reach a remembered staircase that matches the target and use it to change level.",
+  explore_level: "Goal explore_level: explore this level until deterministic exploration finds no unexplored space, locked door to kick, or search spot left.",
 });
 
 const CONNECTION_HELP = Object.freeze({
@@ -154,8 +156,16 @@ const CONNECTION_HELP = Object.freeze({
 });
 
 // Text and tooltip for a typed goal. The text is the goal's token, the same
-// identifier the model is offered: kind:direction:connection[:dungeon].
+// identifier the model is offered: kind:direction:connection[:dungeon] for a
+// stair goal, explore_level:dungeon:level for a level-exploration goal.
 export function goalFact(goal) {
+  if (goal?.kind === "explore_level" && goal.level) {
+    const { dungeon_number: dungeon, dungeon_level: level } = goal.level;
+    return {
+      text: `${goal.kind}:${dungeon}:${level}`,
+      help: `${GOAL_HELP[goal.kind]} Level: dungeon ${dungeon}, level ${level}.`,
+    };
+  }
   if (!goal?.target) {
     return { text: null, help: undefined };
   }
@@ -553,6 +563,10 @@ export function renderDecision(list, candidateBody, stepEvent, actionNames) {
   pairs.push(["Path", path.text, { valueHelp: path.help }]);
   if (selection.stuck_reason) {
     pairs.push(["Stuck", selection.stuck_reason]);
+  }
+  if (selection.exhausted_level) {
+    const { dungeon_number: dungeon, dungeon_level: level } = selection.exhausted_level;
+    pairs.push(["Exhausted", `level (${dungeon}, ${level})`]);
   }
   if (payload.skill_decision) {
     pairs.push(

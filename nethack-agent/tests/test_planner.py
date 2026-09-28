@@ -24,6 +24,8 @@ from nethack_agent.traversal import (
     STAIRCASE_OBJECTIVE,
     STAND_ON_DOWNSTAIRS,
     EnterDungeonLeg,
+    ExploreDungeonLeg,
+    ExploreLevelGoal,
     LevelKey,
     Objective,
     ReachLevelLeg,
@@ -222,3 +224,56 @@ def test_legs_complete_only_on_their_level_dungeon_or_matching_stair(
     )
     # Completed legs are skipped in order; the first open leg stops advancing.
     assert ObjectivePlanner(objective).advance(0, walk.dungeon) == 2
+
+
+EXPLORE_THREE = Objective((ExploreDungeonLeg(3),))
+
+
+def test_explore_dungeon_explores_each_level_before_descending_the_main_stairs(
+    template: ProjectedObservation,
+) -> None:
+    walk = Walk(template).at(LevelKey(0, 1), "|@.>|")
+    assert plan(EXPLORE_THREE, walk) == PlannedGoal(ExploreLevelGoal(LevelKey(0, 1)))
+
+    walk.exhaust()
+    assert plan(EXPLORE_THREE, walk) == PlannedGoal(main_stairs(DOWN))
+    # Knowledge growth clears `exhausted`, but the level stays explored.
+    walk.at(LevelKey(0, 1), "|.@>|")
+    assert not walk.dungeon.current.exhausted
+    assert plan(EXPLORE_THREE, walk) == PlannedGoal(main_stairs(DOWN))
+
+    walk.use_stairs(LevelKey(0, 2), "|<@.|")
+    assert plan(EXPLORE_THREE, walk) == PlannedGoal(ExploreLevelGoal(LevelKey(0, 2)))
+    assert not leg_complete(EXPLORE_THREE.legs[0], walk.dungeon)
+
+
+def test_explore_dungeon_climbs_back_to_a_skipped_level_and_leaves_branches(
+    template: ProjectedObservation,
+) -> None:
+    # A trap door dropped the hero from an unexplored first level to level 3.
+    walk = Walk(template).at(LevelKey(0, 1), "|@.>|").at(LevelKey(0, 3), "|.@<|")
+    assert plan(EXPLORE_THREE, walk) == PlannedGoal(main_stairs(UP))
+
+    # A probe of a branch staircase is retraced by its recorded link.
+    mines = (
+        Walk(template)
+        .at(LevelKey(0, 2), "|.>@>|")
+        .at(LevelKey(0, 2), "|.>.@|")
+        .use_stairs(LevelKey(2, 1), "|.@.>|")
+    )
+    assert plan(EXPLORE_THREE, mines) == PlannedGoal(branch_stairs(UP, 0))
+
+
+def test_explore_dungeon_completes_when_every_required_level_is_explored(
+    template: ProjectedObservation,
+) -> None:
+    walk = Walk(template).at(LevelKey(0, 1), "|@>|").exhaust()
+    walk.use_stairs(LevelKey(0, 2), "|<@>|").exhaust()
+    leg = ExploreDungeonLeg(2)
+    objective = Objective((leg,))
+
+    assert leg_complete(leg, walk.dungeon)
+    assert not leg_complete(ExploreDungeonLeg(3), walk.dungeon)
+    assert ObjectivePlanner(objective).advance(0, walk.dungeon) == 1
+    with pytest.raises(ObjectivePlanningError, match="explored dungeon leg"):
+        plan(objective, walk)

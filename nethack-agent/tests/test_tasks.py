@@ -17,6 +17,7 @@ from nethack_agent.tasks import (
 from nethack_agent.traversal import (
     STAIRCASE_OBJECTIVE,
     EnterDungeonLeg,
+    ExploreDungeonLeg,
     LevelKey,
     Objective,
     ReachLevelLeg,
@@ -98,9 +99,7 @@ def test_staircase_task_rejects_every_other_objective(objective: Objective) -> N
         TaskSpec(NleTask.STAIRCASE, ActionProfile.NLE_TASK_ACTIONS, objective)
 
 
-@pytest.mark.parametrize(
-    "task", [NleTask.SCOUT, NleTask.GOLD, NleTask.EAT, NleTask.ORACLE]
-)
+@pytest.mark.parametrize("task", [NleTask.GOLD, NleTask.ORACLE])
 def test_tasks_without_defined_objectives_are_rejected(task: NleTask) -> None:
     with pytest.raises(ContractError, match="not supported yet"):
         TaskSpec.from_json(
@@ -109,6 +108,40 @@ def test_tasks_without_defined_objectives_are_rejected(task: NleTask) -> None:
                 objective=Objective((EnterDungeonLeg(2),)).to_json(),
             )
         )
+
+
+EXPLORE_THREE = Objective((ExploreDungeonLeg(3),))
+
+
+@pytest.mark.parametrize(
+    ("task", "profile"),
+    [
+        (NleTask.SCOUT, ActionProfile.NLE_TASK_ACTIONS),
+        (NleTask.EAT, ActionProfile.NLE_HUNGER_ACTIONS),
+    ],
+)
+def test_exploration_tasks_take_one_explore_dungeon_leg_and_their_profile(
+    task: NleTask, profile: ActionProfile
+) -> None:
+    spec = TaskSpec(task, profile, EXPLORE_THREE)
+
+    assert TaskSpec.from_json(json.loads(spec.canonical_json())) == spec
+    other = next(item for item in ActionProfile if item is not profile)
+    with pytest.raises(ContractError, match=f"requires action profile {profile.value}"):
+        TaskSpec(task, other, EXPLORE_THREE)
+    for objective in (
+        ROUND_TRIP,
+        Objective((ExploreDungeonLeg(3), ExploreDungeonLeg(4))),
+        Objective((ExploreDungeonLeg(3), ReachLevelLeg(LevelKey(0, 1)))),
+    ):
+        with pytest.raises(ContractError, match="exactly one explore_dungeon leg"):
+            TaskSpec(task, profile, objective)
+
+
+@pytest.mark.parametrize("task", [NleTask.SCORE, NleTask.STAIRCASE])
+def test_explore_dungeon_legs_are_rejected_on_other_tasks(task: NleTask) -> None:
+    with pytest.raises(ContractError, match="explore_dungeon|allows only"):
+        TaskSpec(task, ActionProfile.NLE_TASK_ACTIONS, EXPLORE_THREE)
 
 
 @pytest.mark.parametrize(

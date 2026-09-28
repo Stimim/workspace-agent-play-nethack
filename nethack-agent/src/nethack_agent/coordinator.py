@@ -25,6 +25,7 @@ from nethack_agent.decision import (
     TraversalPermit,
     hunger_action_error,
     level_change_error,
+    model_selectable_skills,
     prompt_response_error,
 )
 from nethack_agent.environment import LegalAction, NleEnvironment, StepTransition
@@ -33,10 +34,12 @@ from nethack_agent.navigation import (
     ActionKind,
     ActionRecord,
     DungeonMemory,
+    ExhaustionState,
     LevelMemory,
 )
 from nethack_agent.observation import ObservationProjector, ProjectedObservation
-from nethack_agent.planner import ObjectivePlanner
+from nethack_agent.planner import ObjectivePlanner, leg_complete
+from nethack_agent.replay import routine_actions, stair_target
 from nethack_agent.skills import (
     ExploreLevelSkill,
     HungerSkill,
@@ -48,6 +51,7 @@ from nethack_agent.skills import (
 )
 from nethack_agent.tasks import ActionProfile, ActionRole, NleTask
 from nethack_agent.traversal import (
+    STAIR_GOAL_TYPES,
     STAND_ON_DOWNSTAIRS,
     Goal,
     LevelKey,
@@ -110,13 +114,10 @@ class ActionGate:
             if action.name not in LEVEL_CHANGE_ACTIONS
             and role not in {ActionRole.HUNGER, ActionRole.PROMPT_KEY}
         )
-        unrestricted = tuple(
-            action
-            for action in legal_actions
-            if action.name not in LEVEL_CHANGE_ACTIONS
-        )
-        self.actions_by_name = {action.name: action for action in unrestricted}
-        self.actions_by_command = {action.command: action for action in unrestricted}
+        self.actions_by_name = routine_actions(legal_actions)
+        self.actions_by_command = {
+            action.command: action for action in self.actions_by_name.values()
+        }
         self.level_change_actions: dict[StairDirection, LegalAction] = {
             LEVEL_CHANGE_ACTIONS[action.name]: action
             for action in legal_actions
@@ -256,6 +257,9 @@ class AgentCoordinator:
         self._last_error: str | None = None
         self._lifecycle_revision = 0
         self._advance_in_flight = False
+        # The exhaustion an in-flight decision marked, undone unless its step
+        # is committed, so every recorded marker matches memory.
+        self._exhaustion_undo: tuple[LevelMemory, ExhaustionState] | None = None
 
     @property
     def legal_actions(self) -> tuple[LegalAction, ...]:
@@ -420,6 +424,10 @@ class AgentCoordinator:
                     raise
         finally:
             with self._lock:
+                if self._exhaustion_undo is not None:
+                    memory, state = self._exhaustion_undo
+                    memory.restore_exhaustion(state)
+                    self._exhaustion_undo = None
                 self._advance_in_flight = False
 
     def _advance_objective_locked(
@@ -525,7 +533,7 @@ class AgentCoordinator:
                 navigation, goal, arbiter_skill, arbiter, None, skill_model_decision
             )
 
-        explored = self._exploration.select_action(memory, actions, goal.target)
+        explored = self._exploration.select_action(memory, actions, stair_target(goal))
         if explored.action is not None:
             return self._skill_plan(
                 explored.action,
@@ -537,10 +545,15 @@ class AgentCoordinator:
             )
         stuck = explored.stuck
         assert stuck is not None
+        exhausted: LevelKey | None = None
         if stuck is StuckReason.SEARCH_EXHAUSTED and not memory.exhausted:
-            # The level is exhausted: the objective may now want another
-            # staircase or level. The staircase objective keeps its goal.
-            memory.mark_exhausted()
+            # The level is exhausted: the step records the marker, and the
+            # objective may now be complete or want another staircase or
+            # level. The staircase objective keeps its goal.
+            self._exhaustion_undo = (memory, memory.mark_exhausted())
+            exhausted = memory.level
+            if self._leg_complete(leg):
+                return self._confirm_exhaustion(memory, goal, skill_model_decision)
             replanned = self._plan_goal(leg, memory)
             if replanned != goal:
                 goal = replanned
@@ -553,8 +566,11 @@ class AgentCoordinator:
                         arbiter,
                         None,
                         skill_model_decision,
+                        exhausted_level=exhausted,
                     )
-                explored = self._exploration.select_action(memory, actions, goal.target)
+                explored = self._exploration.select_action(
+                    memory, actions, stair_target(goal)
+                )
                 if explored.action is not None:
                     return self._skill_plan(
                         explored.action,
@@ -563,6 +579,7 @@ class AgentCoordinator:
                         arbiter,
                         None,
                         skill_model_decision,
+                        exhausted_level=exhausted,
                     )
                 assert explored.stuck is not None
                 stuck = explored.stuck
@@ -579,7 +596,9 @@ class AgentCoordinator:
                 # The re-arm is kept even if a later pause discards this step;
                 # it only widens the deterministic search budget.
                 memory.rearm()
-                rearmed = self._exploration.select_action(memory, actions, goal.target)
+                rearmed = self._exploration.select_action(
+                    memory, actions, stair_target(goal)
+                )
                 if rearmed.action is not None:
                     return self._skill_plan(
                         rearmed.action,
@@ -589,6 +608,7 @@ class AgentCoordinator:
                         stuck,
                         skill_model_decision,
                         stuck_consulted=True,
+                        exhausted_level=exhausted,
                     )
         return self._fallback_plan(
             before,
@@ -599,6 +619,42 @@ class AgentCoordinator:
             skill_model_decision,
             canceled,
             stuck_consulted=consulted,
+            exhausted_level=exhausted,
+        )
+
+    def _leg_complete(self, leg: int) -> bool:
+        legs = self._planner.legs
+        return leg < len(legs) and leg_complete(legs[leg], self._dungeon)
+
+    def _confirm_exhaustion(
+        self,
+        memory: LevelMemory,
+        goal: Goal,
+        skill_model_decision: ModelSkillDecision | None,
+    ) -> _Plan:
+        """Record the exhaustion that completes the current leg by waiting.
+
+        The leg then completes on the next observation without a model
+        consultation, because nothing is left for exploration to do.
+        """
+        level = memory.level
+        assert level is not None
+        wait = self._gate.actions_by_name["MiscDirection.WAIT"]
+        return self._skill_plan(
+            SkillAction(
+                wait.index,
+                f"Confirm level ({level.dungeon_number}, {level.dungeon_level}) "
+                "exhausted: exploration found no unexplored space, locked door, or "
+                "search spot left, which completes the objective leg.",
+                ActionRecord(ActionKind.OTHER, memory.position),
+                None,
+            ),
+            goal,
+            Skill.EXPLORE_LEVEL,
+            SkillSelectionSource.ARBITER,
+            None,
+            skill_model_decision,
+            exhausted_level=level,
         )
 
     def _plan_goal(self, leg: int, memory: LevelMemory) -> Goal:
@@ -613,6 +669,8 @@ class AgentCoordinator:
         return planned.goal
 
     def _navigate(self, memory: LevelMemory, goal: Goal) -> SkillAction | None:
+        if not isinstance(goal, STAIR_GOAL_TYPES):
+            return None
         level_change = (
             self._gate.level_change_actions.get(goal.target.direction)
             if isinstance(goal, TraverseStairsGoal)
@@ -716,10 +774,7 @@ class AgentCoordinator:
         self, before: ProjectedObservation, stuck: StuckReason | None, goal: Goal
     ) -> ModelSkillDecision:
         decision = self._model.select_skill(
-            before,
-            (goal,),
-            (Skill.STAIRCASE_NAVIGATION, Skill.EXPLORE_LEVEL),
-            stuck,
+            before, (goal,), model_selectable_skills(goal), stuck
         )
         if decision.decision.goal != goal:
             raise CoordinatorInvariantError(
@@ -738,6 +793,7 @@ class AgentCoordinator:
         *,
         source: ActionSelectionSource = ActionSelectionSource.DETERMINISTIC_SKILL,
         stuck_consulted: bool = False,
+        exhausted_level: LevelKey | None = None,
     ) -> _Plan:
         return _Plan(
             selection=ActionSelection(
@@ -753,6 +809,7 @@ class AgentCoordinator:
                     if proposal.intent is None
                     else replace(proposal.intent, level=self._dungeon.current.level)
                 ),
+                exhausted_level=exhausted_level,
             ),
             skill_model_decision=skill_model_decision,
             action_model_decision=None,
@@ -771,6 +828,7 @@ class AgentCoordinator:
         canceled: Callable[[], bool],
         *,
         stuck_consulted: bool = False,
+        exhausted_level: LevelKey | None = None,
     ) -> _Plan | None:
         action_model_decision = self._model.select_action(
             before, self.allowed_actions, goal, skill
@@ -788,6 +846,7 @@ class AgentCoordinator:
                 action_index=decision.action_index,
                 rationale=decision.rationale,
                 intent=None,
+                exhausted_level=exhausted_level,
             ),
             skill_model_decision=skill_model_decision,
             action_model_decision=action_model_decision,
@@ -810,6 +869,8 @@ class AgentCoordinator:
         ):
             memory.stuck_consult_step = None
         memory.record(plan.record)
+        # The committed step records this decision's exhaustion marker.
+        self._exhaustion_undo = None
 
     def stop(self) -> None:
         with self._lock:

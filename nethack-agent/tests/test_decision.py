@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from nethack_agent.contracts import ContractError
 from nethack_agent.coordinator import ActionGate
 from nethack_agent.decision import (
     MAX_CANDIDATE_REASON_LENGTH,
@@ -19,6 +20,7 @@ from nethack_agent.decision import (
     StuckReason,
     hunger_action_error,
     level_change_error,
+    model_selectable_skills,
     parse_action_decision,
     parse_skill_decision,
     prompt_response_error,
@@ -33,6 +35,7 @@ from nethack_agent.traversal import (
     MAX_DUNGEON_NUMBER,
     STAND_ON_DOWNSTAIRS,
     UNKNOWN_STAIR,
+    ExploreLevelGoal,
     Goal,
     IdentityEvidence,
     LevelKey,
@@ -601,3 +604,62 @@ def test_stuck_prompt_describes_every_offered_goal_and_its_staircase(
     assert "- stand_on_stairs:down:any: stand on a downstairs tile" in prompt
     assert "without descending" in prompt
     assert "no upstairs or downstairs matching the goal" in prompt
+
+
+def test_exhaustion_markers_are_strict_optional_level_evidence() -> None:
+    marked = descend(exhausted_level=LevelKey(0, 2))
+
+    assert ActionSelection.from_json(marked.to_json()) == marked
+    assert marked.to_json()["exhausted_level"] == {
+        "dungeon_number": 0,
+        "dungeon_level": 2,
+    }
+    # New selections always write the key; legacy selections without it read
+    # as not recorded.
+    assert descend().to_json()["exhausted_level"] is None
+    legacy = descend().to_json()
+    del legacy["exhausted_level"]
+    assert ActionSelection.from_json(legacy).exhausted_level is None
+    with pytest.raises(ContractError, match="dungeon_level"):
+        ActionSelection.from_json(
+            {**marked.to_json(), "exhausted_level": {"dungeon_number": 0}}
+        )
+    with pytest.raises(ContractError, match="intent's level"):
+        descend(exhausted_level=LevelKey(0, 3))
+    with pytest.raises(ContractError, match="prompt answer"):
+        descend(
+            source=ActionSelectionSource.DETERMINISTIC_PROMPT,
+            intent=None,
+            exhausted_level=LevelKey(0, 2),
+        )
+
+
+def test_explore_goals_offer_only_exploration_and_describe_the_level(
+    tmp_path: Path,
+) -> None:
+    goal = ExploreLevelGoal(LevelKey(0, 2))
+    assert model_selectable_skills(goal) == (Skill.EXPLORE_LEVEL,)
+    assert model_selectable_skills(STAND_ON_DOWNSTAIRS) == (
+        Skill.STAIRCASE_NAVIGATION,
+        Skill.EXPLORE_LEVEL,
+    )
+    response = json.loads(valid_skill_decision())
+    response["goal"] = goal.token
+    response["skill"] = "staircase_navigation"
+    client = RecordingClient([json.dumps(response), json.dumps(response)])
+    environment, observation = projected_state(tmp_path)
+    try:
+        with pytest.raises(DecisionFailure):
+            model(client).select_skill(
+                observation,
+                (goal,),
+                model_selectable_skills(goal),
+                StuckReason.SEARCH_EXHAUSTED,
+            )
+    finally:
+        environment.close()
+
+    prompt = client.prompts[0]
+    assert "- explore_level:0:2: explore level 2 of dungeon 0 until" in prompt
+    assert 'Available skills: ["explore_level"]' in prompt
+    assert "staircase_navigation cannot act now" not in prompt

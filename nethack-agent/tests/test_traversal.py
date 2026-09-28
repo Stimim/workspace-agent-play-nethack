@@ -7,6 +7,8 @@ from nethack_agent.traversal import (
     STAND_ON_DOWNSTAIRS,
     UNKNOWN_STAIR,
     EnterDungeonLeg,
+    ExploreDungeonLeg,
+    ExploreLevelGoal,
     IdentityEvidence,
     LevelKey,
     Objective,
@@ -46,6 +48,7 @@ def test_legacy_goal_string_reads_as_standing_on_any_downstairs() -> None:
         TraverseStairsGoal(MAIN_DOWN),
         TraverseStairsGoal(StairTarget(StairDirection.UP, StairConnection.MAIN, None)),
         TraverseStairsGoal(MINES_DOWN),
+        ExploreLevelGoal(LevelKey(0, 2)),
     ],
 )
 def test_goals_round_trip_and_have_distinct_tokens(goal: object) -> None:
@@ -56,6 +59,11 @@ def test_goals_round_trip_and_have_distinct_tokens(goal: object) -> None:
 def test_goal_tokens_name_direction_connection_and_branch() -> None:
     assert STAND_ON_DOWNSTAIRS.token == "stand_on_stairs:down:any"
     assert TraverseStairsGoal(MINES_DOWN).token == "traverse_stairs:down:branch:2"
+    assert ExploreLevelGoal(LevelKey(2, 3)).token == "explore_level:2:3"
+    assert ExploreLevelGoal(LevelKey(0, 2)).to_json() == {
+        "kind": "explore_level",
+        "level": {"dungeon_number": 0, "dungeon_level": 2},
+    }
 
 
 @pytest.mark.parametrize(
@@ -96,6 +104,29 @@ def test_goal_tokens_name_direction_connection_and_branch() -> None:
             "only a branch",
         ),
         ({"kind": "walk", "target": {}}, "kind must be one of"),
+        (
+            {
+                "kind": "explore_level",
+                "target": {
+                    "direction": "down",
+                    "connection": "any",
+                    "dungeon_number": None,
+                },
+            },
+            "missing",
+        ),
+        (
+            {
+                "kind": "explore_level",
+                "level": {"dungeon_number": 0, "dungeon_level": 1},
+                "target": None,
+            },
+            "unexpected",
+        ),
+        (
+            {"kind": "explore_level", "level": {"dungeon_number": 0}},
+            "missing",
+        ),
         (
             {
                 "kind": "stand_on_stairs",
@@ -163,6 +194,34 @@ def test_objectives_name_only_dungeons_reachable_by_staircase(leg: object) -> No
         Objective.from_json({"legs": [leg]})
     assert Objective((EnterDungeonLeg(2),)).legs == (EnterDungeonLeg(2),)
     assert Objective((ReachLevelLeg(LevelKey(4, 1)),)).changes_level
+
+
+def test_explore_dungeon_legs_name_the_doom_levels_they_require() -> None:
+    leg = ExploreDungeonLeg(3)
+
+    assert leg.to_json() == {"kind": "explore_dungeon", "max_level": 3}
+    assert Objective.from_json({"legs": [leg.to_json()]}).legs == (leg,)
+    assert leg.levels == (LevelKey(0, 1), LevelKey(0, 2), LevelKey(0, 3))
+    assert Objective((leg,)).changes_level
+    assert ExploreDungeonLeg(32).levels[-1] == LevelKey(0, 32)
+
+
+@pytest.mark.parametrize(
+    ("leg", "match"),
+    [
+        ({"kind": "explore_dungeon", "max_level": 0}, "at least 1"),
+        ({"kind": "explore_dungeon", "max_level": 33}, "at most 32"),
+        ({"kind": "explore_dungeon", "max_level": True}, "must be an integer"),
+        ({"kind": "explore_dungeon"}, "missing"),
+        (
+            {"kind": "explore_dungeon", "max_level": 3, "dungeon_number": 0},
+            "unexpected",
+        ),
+    ],
+)
+def test_explore_dungeon_legs_are_strict(leg: object, match: str) -> None:
+    with pytest.raises(ContractError, match=match):
+        Objective.from_json({"legs": [leg]})
 
 
 @pytest.mark.parametrize(

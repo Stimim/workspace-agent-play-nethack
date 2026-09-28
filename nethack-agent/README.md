@@ -77,10 +77,16 @@ fails if any connection target is not loopback.
 
 The committed `staircase-v2` and `traversal-v1` suites and their reports are
 immutable evidence for policy `hierarchical-traversal-v1`. The current policy
-is `hierarchical-survival-v1`, so this checkout intentionally refuses both
-suites before creating a run store or episode. Reproduce them only from their
-recorded traversal-policy commit and never relabel their reports. A future
-survival suite must use a new suite id and pin.
+is `hierarchical-task-progression-v1`, so this checkout intentionally refuses
+both suites before creating a run store or episode. Reproduce them only from
+their recorded traversal-policy commit and never relabel their reports.
+`staircase-v3` and `traversal-v2` repeat their cases, seeds, caps, and
+thresholds under the current policy:
+
+```bash
+uv run nethack-agent eval run --suite evaluation/staircase-v3.json \
+  --data-dir data/evaluations/staircase-v3 --report-dir evaluation/reports
+```
 
 `--development-scripted-model` exercises scenario and harness mechanics without
 Ollama; such runs are never milestone evidence. `eval abort --report <json>

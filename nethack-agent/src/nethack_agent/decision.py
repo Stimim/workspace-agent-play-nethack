@@ -20,6 +20,7 @@ from nethack_agent.tasks import PROMPT_KEY_ACTION_NAMES
 from nethack_agent.traversal import (
     DUNGEON_EXIT_LEVEL,
     GOAL_TYPES,
+    ExploreLevelGoal,
     Goal,
     LevelKey,
     StairDirection,
@@ -46,6 +47,17 @@ class Skill(Enum):
     STAIRCASE_NAVIGATION = "staircase_navigation"
     EXPLORE_LEVEL = "explore_level"
     HUNGER = "hunger"
+
+
+def model_selectable_skills(goal: Goal) -> tuple[Skill, ...]:
+    """The skills the model may choose for `goal`.
+
+    Staircase navigation serves only stair goals. Deterministic specialists
+    such as hunger are never offered.
+    """
+    if isinstance(goal, ExploreLevelGoal):
+        return (Skill.EXPLORE_LEVEL,)
+    return (Skill.STAIRCASE_NAVIGATION, Skill.EXPLORE_LEVEL)
 
 
 class SkillSelectionSource(Enum):
@@ -646,6 +658,11 @@ class ActionSelection:
     # None for prompt answers, model fallbacks, skill actions without a map
     # target, and steps recorded before intents existed (unknown).
     intent: ActionIntent | None
+    # The level this step's decision found exhausted: deterministic
+    # exploration had nothing left to do there on the decided-on observation.
+    # None when the step marked no exhaustion, and for steps recorded before
+    # the marker existed (not recorded). The evaluator re-derives every marker.
+    exhausted_level: LevelKey | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.source, ActionSelectionSource):
@@ -680,6 +697,19 @@ class ActionSelection:
             raise ContractError(
                 "the model selects the step skill only after exploration is stuck"
             )
+        if self.exhausted_level is not None:
+            if not isinstance(self.exhausted_level, LevelKey):
+                raise TypeError("exhausted_level must be a LevelKey or None")
+            if self.source is ActionSelectionSource.DETERMINISTIC_PROMPT:
+                raise ContractError("a prompt answer cannot mark a level exhausted")
+            if (
+                self.intent is not None
+                and self.intent.level is not None
+                and self.intent.level != self.exhausted_level
+            ):
+                raise ContractError(
+                    "an exhausted-level marker must name the intent's level"
+                )
 
     def to_json(self) -> dict[str, object]:
         return {
@@ -691,12 +721,16 @@ class ActionSelection:
             "action_index": self.action_index,
             "rationale": self.rationale,
             "intent": self.intent.to_json() if self.intent else None,
+            "exhausted_level": (
+                self.exhausted_level.to_json() if self.exhausted_level else None
+            ),
         }
 
     @classmethod
     def from_json(cls, value: object) -> Self:
-        # `intent` is absent from steps persisted before intents existed;
-        # absent and null both mean no recorded intent.
+        # `intent` is absent from steps persisted before intents existed and
+        # `exhausted_level` from steps persisted before exhaustion markers;
+        # absent and null both mean not recorded.
         payload = object_value(
             value,
             "action selection",
@@ -709,9 +743,10 @@ class ActionSelection:
                 "action_index",
                 "rationale",
             },
-            optional={"intent"},
+            optional={"intent", "exhausted_level"},
         )
         intent = payload.get("intent")
+        exhausted_level = payload.get("exhausted_level")
         return cls(
             source=enum_value(
                 payload["source"], "action selection source", ActionSelectionSource
@@ -737,6 +772,11 @@ class ActionSelection:
                 strip=True,
             ),
             intent=None if intent is None else ActionIntent.from_json(intent),
+            exhausted_level=(
+                None
+                if exhausted_level is None
+                else LevelKey.from_json(exhausted_level, "selection exhausted_level")
+            ),
         )
 
 

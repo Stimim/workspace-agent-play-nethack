@@ -12,6 +12,8 @@ from nethack_agent.ollama import OllamaConfig
 from nethack_agent.run_manager import RunManager
 from nethack_agent.traversal import (
     STAND_ON_DOWNSTAIRS,
+    ExploreLevelGoal,
+    LevelKey,
     StairConnection,
     StairDirection,
     StairTarget,
@@ -740,3 +742,143 @@ def test_goal_text_is_the_token_the_model_is_offered() -> None:
     assert "upstairs (<)" in facts[1]["help"]  # type: ignore[index]
     assert "(dungeon 2)" in facts[2]["help"]  # type: ignore[index]
     assert result["missing"] == {"text": None}
+
+
+@pytest.mark.skipif(NODE is None, reason="Node.js is unavailable")
+def test_explore_level_goal_text_is_its_token_and_names_the_level() -> None:
+    goal = ExploreLevelGoal(LevelKey(0, 2))
+    stair_goals = [
+        STAND_ON_DOWNSTAIRS,
+        TraverseStairsGoal(StairTarget(StairDirection.DOWN, StairConnection.BRANCH, 2)),
+    ]
+    result = _run_renderer_module(
+        f"""
+        const {{ goalFact }} = await import("./render.js");
+        console.log(JSON.stringify({{
+          explore: goalFact({json.dumps(goal.to_json())}),
+          stairs: {json.dumps([g.to_json() for g in stair_goals])}.map(goalFact),
+        }}));
+        """
+    )
+
+    assert result["explore"] == {
+        "text": "explore_level:0:2",
+        "help": (
+            "Goal explore_level: explore this level until deterministic exploration "
+            "finds no unexplored space, locked door to kick, or search spot left. "
+            "Level: dungeon 0, level 2."
+        ),
+    }
+    assert result["explore"]["text"] == goal.token  # type: ignore[index]
+    # Stair goals keep their exact text and tooltip.
+    assert result["stairs"] == [
+        {
+            "text": "stand_on_stairs:down:any",
+            "help": (
+                "Goal stand_on_stairs: stand on a remembered staircase that matches "
+                "the target without using it. Target: downstairs (>), any staircase "
+                "of that direction."
+            ),
+        },
+        {
+            "text": "traverse_stairs:down:branch:2",
+            "help": (
+                "Goal traverse_stairs: reach a remembered staircase that matches the "
+                "target and use it to change level. Target: downstairs (>), the "
+                "staircase into another dungeon (dungeon 2)."
+            ),
+        },
+    ]
+
+
+@pytest.mark.skipif(NODE is None, reason="Node.js is unavailable")
+def test_step_decision_shows_exhausted_level_only_when_recorded() -> None:
+    result = _run_renderer_module(
+        """
+        class Node {
+          constructor(tag = "") {
+            this.tag = tag; this.children = []; this.className = "";
+            this.textContent = ""; this.attributes = {};
+          }
+          append(...nodes) { this.children.push(...nodes); }
+          replaceChildren(...nodes) {
+            this.children = nodes.flatMap(
+              (node) => node.fragment ? node.children : [node],
+            );
+          }
+          querySelectorAll() { return []; }
+          setAttribute(name, value) { this.attributes[name] = value; }
+        }
+        globalThis.document = {
+          activeElement: null,
+          createDocumentFragment: () => Object.assign(new Node(), { fragment: true }),
+          createElement: (tag) => new Node(tag),
+        };
+        const { renderDecision } = await import("./render.js");
+        const selection = {
+          source: "deterministic_skill",
+          goal: {
+            kind: "explore_level",
+            level: { dungeon_number: 0, dungeon_level: 2 },
+          },
+          skill: "explore_level",
+          skill_selection: "arbiter",
+          rationale: "explore",
+          intent: null,
+          stuck_reason: null,
+        };
+        const facts = (extra) => {
+          const list = new Node("dl");
+          renderDecision(list, new Node("tbody"), {
+            kind: "step",
+            payload: {
+              selection: { ...selection, ...extra },
+              action: { name: "search", index: 3, command: 115 },
+              reward: 0, terminated: false, truncated: false, outcome: null,
+              observation: { step_index: 7 },
+            },
+          }, {});
+          const pairs = [];
+          for (let i = 0; i < list.children.length; i += 2) {
+            const [term, description] = [list.children[i], list.children[i + 1]];
+            const wrapper = term.children[0];
+            pairs.push({
+              label: wrapper?.children[0]?.textContent ?? term.textContent,
+              help: wrapper?.children[1]?.textContent ?? null,
+              value: description.children[0]?.children[0]?.textContent
+                ?? description.textContent,
+            });
+          }
+          return pairs;
+        };
+        console.log(JSON.stringify({
+          exhausted: facts({
+            exhausted_level: { dungeon_number: 0, dungeon_level: 2 },
+          }),
+          nullMarker: facts({ exhausted_level: null }),
+          legacy: facts({}),
+        }));
+        """
+    )
+
+    exhausted = [fact for fact in result["exhausted"] if fact["label"] == "Exhausted"]  # type: ignore[union-attr,index]
+    assert exhausted == [
+        {
+            "label": "Exhausted",
+            "help": (
+                "The level this step's decision found exhausted: deterministic "
+                "exploration had nothing left to do there. The evaluator re-derives "
+                "this marker from the stored run."
+            ),
+            "value": "level (0, 2)",
+        }
+    ]
+    goal = next(fact for fact in result["exhausted"] if fact["label"] == "Goal")  # type: ignore[union-attr,index]
+    assert goal["value"] == "explore_level:0:2"
+    # A null marker and a legacy event without the field render identically,
+    # with no Exhausted row.
+    assert result["nullMarker"] == result["legacy"]
+    assert all(fact["label"] != "Exhausted" for fact in result["legacy"])  # type: ignore[union-attr,index]
+    assert [fact for fact in result["exhausted"] if fact["label"] != "Exhausted"] == (
+        result["legacy"]
+    )

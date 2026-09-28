@@ -30,16 +30,21 @@ from nethack_agent.decision import (
     TraversalPermit,
 )
 from nethack_agent.environment import LegalAction, NleEnvironment, ScenarioConfig
+from nethack_agent.events import StepPayload
 from nethack_agent.model import (
     DecisionFailure,
     HierarchicalDecisionModel,
     ScriptedDevelopmentModel,
 )
+from nethack_agent.navigation import ActionRecord, LevelMemory
 from nethack_agent.observation import ObservationProjector
+from nethack_agent.replay import ExplorationReplay
 from nethack_agent.tasks import STAIRCASE_TASK, ActionProfile, NleTask, TaskSpec
 from nethack_agent.traversal import (
     STAND_ON_DOWNSTAIRS,
     EnterDungeonLeg,
+    ExploreDungeonLeg,
+    ExploreLevelGoal,
     Goal,
     LevelKey,
     Objective,
@@ -376,7 +381,10 @@ def test_stuck_exploration_consults_model_and_rearms_search(tmp_path: Path) -> N
     assert stuck.selection.skill is Skill.EXPLORE_LEVEL
     assert stuck.selection.skill_selection is SkillSelectionSource.MODEL
     assert stuck.selection.stuck_reason is StuckReason.SEARCH_EXHAUSTED
+    # The step whose decision found the level exhausted records the marker.
+    assert stuck.selection.exhausted_level == LevelKey(0, 1)
     assert following is not None
+    assert following.selection.exhausted_level is None
     assert following.selection.skill_selection is SkillSelectionSource.ARBITER
     assert following.selection.stuck_reason is None
     agent.stop()
@@ -586,3 +594,119 @@ def test_terminal_steps_keep_the_last_live_level(tmp_path: Path) -> None:
     assert death[-1].after.player.dungeon_level == 0
     assert score.snapshot().level == LevelKey(0, 5)
     assert score.snapshot().state is RunState.TERMINAL
+
+
+class FailOnceWhenStuckModel(ConsultingModel):
+    """Fail the first stuck consultation, as a malformed model reply would."""
+
+    def __init__(self) -> None:
+        super().__init__(Skill.EXPLORE_LEVEL)
+        self.failed = False
+
+    def select_skill(
+        self,
+        observation: object,
+        goals: tuple[Goal, ...],
+        skills: tuple[Skill, ...],
+        stuck: StuckReason | None,
+    ) -> ModelSkillDecision:
+        if stuck is not None and not self.failed:
+            self.failed = True
+            raise DecisionFailure("malformed after repair")
+        return super().select_skill(observation, goals, skills, stuck)
+
+
+def test_a_discarded_decision_does_not_keep_its_exhaustion_mark(
+    tmp_path: Path,
+) -> None:
+    # Seed 16 exhausts its first search round; the stuck consultation that
+    # follows the new exhaustion mark fails and pauses the run unrecorded.
+    model = FailOnceWhenStuckModel()
+    agent = coordinator(tmp_path, model, seed=16, max_steps=600)
+    agent.start()
+    agent.resume()
+    with pytest.raises(DecisionFailure):
+        for _ in range(590):
+            record = agent.advance()
+            assert record is not None and record.selection.exhausted_level is None
+
+    assert agent.snapshot().state is RunState.PAUSED
+    agent.resume()
+    retried = agent.advance()
+
+    # The retried decision marks the level again, so the recorded step carries
+    # the marker that memory now reflects.
+    assert retried is not None
+    assert retried.selection.exhausted_level == LevelKey(0, 1)
+    assert retried.selection.stuck_reason is StuckReason.SEARCH_EXHAUSTED
+    assert model.consultations == [None, StuckReason.SEARCH_EXHAUSTED]
+    agent.stop()
+
+
+def step_payload(record: StepRecord) -> StepPayload:
+    skill = record.skill_model_decision
+    action = record.action_model_decision
+    return StepPayload(
+        selection=record.selection,
+        skill_decision=skill.decision if skill else None,
+        skill_metrics=skill.metrics if skill else None,
+        action_decision=action.decision if action else None,
+        action_metrics=action.metrics if action else None,
+        action=record.action,
+        reward=record.transition.reward,
+        terminated=record.transition.terminated,
+        truncated=record.transition.truncated,
+        end_status=record.transition.end_status,
+        is_ascended=record.transition.is_ascended,
+        outcome=record.outcome,
+        observation=record.after,
+    )
+
+
+def test_exploring_the_last_required_level_ends_without_a_model_consultation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    committed: list[ActionRecord] = []
+    record_action = LevelMemory.record
+
+    def capture(memory: LevelMemory, action: ActionRecord) -> None:
+        committed.append(action)
+        record_action(memory, action)
+
+    monkeypatch.setattr(LevelMemory, "record", capture)
+    task = TaskSpec(
+        NleTask.SCOUT,
+        ActionProfile.NLE_TASK_ACTIONS,
+        Objective((ExploreDungeonLeg(1),)),
+    )
+    # Seed 53 exhausts its first level quickly enough for the starving Scout.
+    agent, records = run_to_end(tmp_path, 53, task, 400)
+
+    final = records[-1]
+    assert final.outcome is RunOutcome.OBJECTIVE_COMPLETE
+    assert final.action.name == "MiscDirection.WAIT"
+    assert final.selection.source is ActionSelectionSource.DETERMINISTIC_SKILL
+    assert final.selection.skill is Skill.EXPLORE_LEVEL
+    assert final.selection.stuck_reason is None
+    assert [
+        (index, record.selection.exhausted_level)
+        for index, record in enumerate(records)
+        if record.selection.exhausted_level is not None
+    ] == [(len(records) - 1, LevelKey(0, 1))]
+    assert {record.goal for record in records} == {ExploreLevelGoal(LevelKey(0, 1))}
+    # Only the start of the episode consulted the model.
+    assert [
+        index for index, record in enumerate(records) if record.skill_model_decision
+    ] == [0]
+    assert not any(record.action_model_decision for record in records)
+    assert agent.snapshot().objective_leg == 1
+
+    # Replaying the persisted steps re-derives every memory record the
+    # coordinator committed and confirms the marker.
+    replay_committed = len(committed)
+    replay = ExplorationReplay(task, agent.legal_actions, records[0].before)
+    assert [replay.step(step_payload(record)) for record in records] == [None] * len(
+        records
+    )
+    assert committed[replay_committed:] == committed[:replay_committed]
+    assert replay.explored == {LevelKey(0, 1)}

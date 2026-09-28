@@ -97,8 +97,12 @@ immutably pinned to policy `hierarchical-traversal-v1`.
 The evidence-gated combat and hunger changes in
 [note 0016](docs/notes/0016-evidence-gated-survival-skills.md) are policy
 `hierarchical-survival-v1`, retaining `staircase-reviewed-v3`. The current
-checkout refuses all older policy-pinned suites before creating an episode;
-they must not be relabeled or rerun as survival evidence.
+policy, `hierarchical-task-progression-v1` (same bundle), adds the
+`explore_dungeon` objective for `NetHackScout-v0` and `NetHackEat-v0`,
+evaluator-replayed exhaustion markers, and typed metric thresholds, with the
+`staircase-v3` and `traversal-v2` regression suites. The checkout refuses all
+older policy-pinned suites before creating an episode; they must not be
+relabeled or rerun as later-policy evidence.
 
 ## Documentation
 
