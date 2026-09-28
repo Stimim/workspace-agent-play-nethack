@@ -7,9 +7,10 @@ from pathlib import Path
 from typing import Final
 
 from nethack_agent.decision import (
-    FORBIDDEN_ACTION_NAMES,
+    LEVEL_CHANGE_ACTIONS,
     ActionSelection,
     ActionSelectionSource,
+    MapCell,
     ModelActionDecision,
     ModelSkillDecision,
     RunOutcome,
@@ -18,6 +19,8 @@ from nethack_agent.decision import (
     SkillDecision,
     SkillSelectionSource,
     StuckReason,
+    TraversalPermit,
+    level_change_error,
 )
 from nethack_agent.environment import LegalAction, NleEnvironment, StepTransition
 from nethack_agent.model import DecisionFailure, HierarchicalDecisionModel
@@ -29,7 +32,7 @@ from nethack_agent.skills import (
     SkillAction,
     StaircaseNavigationSkill,
 )
-from nethack_agent.traversal import STAND_ON_DOWNSTAIRS, Goal
+from nethack_agent.traversal import STAND_ON_DOWNSTAIRS, Goal, StairDirection
 
 # While exploration stays stuck after a stuck consultation, the model chooses
 # fallback actions and is asked to reselect a skill at most this often.
@@ -57,7 +60,7 @@ class CoordinatorInvariantError(CoordinatorError):
 
 
 class ActionGate:
-    """Resolve only episode actions allowed by the fixed staircase policy."""
+    """Resolve only legal actions; a level change also needs a traversal permit."""
 
     def __init__(self, legal_actions: tuple[LegalAction, ...]) -> None:
         indices = tuple(action.index for action in legal_actions)
@@ -69,27 +72,38 @@ class ActionGate:
         self._allowed_actions = tuple(
             action
             for action in legal_actions
-            if action.name not in FORBIDDEN_ACTION_NAMES
+            if action.name not in LEVEL_CHANGE_ACTIONS
         )
         self.actions_by_name = {action.name: action for action in self._allowed_actions}
         self.actions_by_command = {
             action.command: action for action in self._allowed_actions
         }
+        self.level_change_actions: dict[StairDirection, LegalAction] = {
+            LEVEL_CHANGE_ACTIONS[action.name]: action
+            for action in legal_actions
+            if action.name in LEVEL_CHANGE_ACTIONS
+        }
 
     @property
     def allowed_actions(self) -> tuple[LegalAction, ...]:
+        """Actions any layer may propose without a permit; the model's choices."""
         return self._allowed_actions
 
-    def resolve(self, action_index: int) -> LegalAction:
+    def resolve(
+        self, action_index: int, permit: TraversalPermit | None = None
+    ) -> LegalAction:
         if isinstance(action_index, bool) or not isinstance(action_index, int):
             raise ActionGateError("action index must be an integer")
         if not 0 <= action_index < len(self._legal_actions):
             raise ActionGateError(f"action index {action_index} is not legal")
         action = self._legal_actions[action_index]
-        if action.name in FORBIDDEN_ACTION_NAMES:
+        direction = LEVEL_CHANGE_ACTIONS.get(action.name)
+        if direction is not None and (
+            permit is None or permit.direction is not direction
+        ):
             raise ActionGateError(
-                f"{action.name} is forbidden: changing dungeon level is never part "
-                "of the staircase task, which ends when standing on '>'"
+                f"{action.name} is forbidden: changing dungeon level requires a "
+                "coordinator traversal permit in that direction"
             )
         return action
 
@@ -150,6 +164,8 @@ class AgentCoordinator:
         self._projector = projector
         self._model = model
         self._gate = ActionGate(environment.legal_actions)
+        # Only an objective with a leg beyond standing on stairs may change level.
+        self._level_changes_allowed = environment.task.objective.changes_level
         self._navigation = StaircaseNavigationSkill()
         self._exploration = ExploreLevelSkill()
         self._prompt_handler = SafePromptHandler()
@@ -273,7 +289,8 @@ class AgentCoordinator:
                 if self._advance_was_canceled_locked(revision, started_state):
                     return None
                 try:
-                    action = self._gate.resolve(selection.action_index)
+                    permit = self._traversal_permit(selection, before)
+                    action = self._gate.resolve(selection.action_index, permit)
                 except ActionGateError as error:
                     self._state = RunState.PAUSED
                     self._last_error = str(error)
@@ -418,6 +435,48 @@ class AgentCoordinator:
             canceled,
             stuck_consulted=consulted,
         )
+
+    def _traversal_permit(
+        self, selection: ActionSelection, before: ProjectedObservation
+    ) -> TraversalPermit | None:
+        """Authorize a proposed level change, or raise why it is refused.
+
+        The shared `level_change_error` predicate judges the recorded
+        selection; the level memory must also hold a staircase of that
+        direction under the hero with the identity the intent recorded.
+        Actions that do not change level need no permit.
+        """
+        legal = self._environment.legal_actions
+        index = selection.action_index
+        if not 0 <= index < len(legal):
+            return None
+        name = legal[index].name
+        direction = LEVEL_CHANGE_ACTIONS.get(name)
+        if direction is None:
+            return None
+        memory = self._dungeon.current
+        level = memory.level
+        assert level is not None
+        position = memory.position
+        error = level_change_error(
+            name,
+            selection,
+            level_changes_allowed=self._level_changes_allowed,
+            level=level,
+            position=position,
+            prompt_active=before.prompt.active,
+            pair_known=memory.pair_known(direction),
+        )
+        if error is None:
+            intent = selection.intent
+            assert intent is not None and intent.destination is not None
+            if memory.stair_direction(position) is not direction:
+                error = f"no remembered {direction.value} staircase under the hero"
+            elif intent.destination.stair != memory.identity(position):
+                error = "the intent's stair identity is not the remembered one"
+        if error is not None:
+            raise ActionGateError(error)
+        return TraversalPermit(direction, level, MapCell(*position))
 
     def _select_skill(
         self, before: ProjectedObservation, stuck: StuckReason | None

@@ -183,11 +183,21 @@ suspect edges and abandoned goals); choosing `staircase_navigation`, or a
 re-armed exploration that still cannot act, yields a model fallback action.
 
 Every proposal passes through `ActionGate`. It verifies the finite action index
-table and rejects `MiscDirection.UP` and `MiscDirection.DOWN`
-(`decision.FORBIDDEN_ACTION_NAMES`), even when proposed by the model, before
-NLE can receive them: the task never changes level. `<` on dungeon level 1 asks
-to leave the dungeon; NLE's default prompt handling declines that question
-(see ADR 0004), and the gate still forbids the action. A step records its typed
+table and passes a level change (`MiscDirection.UP` or `MiscDirection.DOWN`,
+`decision.LEVEL_CHANGE_ACTIONS`) only with a coordinator `TraversalPermit` in
+the same direction; the model is never offered those actions. The coordinator
+issues a permit only when the shared `decision.level_change_error` predicate
+passes: the task's objective has a leg beyond standing on stairs, the goal is
+`traverse_stairs` in that direction, deterministic `staircase_navigation`
+proposed it with an in-place intent on the hero's cell recording the stair
+identity and level, no prompt is active, the identity is compatible with the
+goal's target, and the action is not `<` on (0, 1). Level memory must also
+hold a staircase of that direction under the hero with the recorded
+identity. Otherwise the refusal pauses the run like any gate rejection. `<` on
+dungeon level 1 asks to leave the dungeon; NLE's default prompt handling
+declines that question (see ADR 0004), and the predicate still refuses it. A
+recorded level-change step must satisfy the selection part of the same
+predicate to be read at all. A step records its typed
 goal and executed skill, the action source (`deterministic_skill`,
 `deterministic_prompt`, or `model_fallback`), who selected the skill (`arbiter`
 or, after a stuck report, `model`), the stuck reason if any, the skill's map
@@ -570,8 +580,12 @@ After each seed the evaluator reads the complete event log back from SQLite. It
 audits contiguous sequences starting with `run_started`, contiguous step
 indices, a final event that matches the final state, nothing after the terminal
 step, the suite seed and step cap, an existing nonempty ttyrec, and every
-stepped action against the recorded legal-action table and the gate's
-forbidden `MiscDirection.UP`/`MiscDirection.DOWN` actions. It
+stepped action against the recorded legal-action table and, for a level
+change, the same `level_change_error` predicate judged on the observation the
+step was decided on (events do not record whether a level had two known
+staircases of a direction, so an unknown branch probe is accepted). Runs
+stored before task specs are audited as the staircase task, which never
+changes level. It
 reports outcome, steps, wall time, model decisions (including failed and
 repaired decisions), nearest-rank p50/p95/max decision latency, token totals,
 selection-source counts, gate rejections, and invalid actions. Gate rejections

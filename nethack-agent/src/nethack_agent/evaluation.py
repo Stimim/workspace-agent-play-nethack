@@ -28,11 +28,12 @@ from nethack_agent.contracts import (
     string_value,
 )
 from nethack_agent.decision import (
-    FORBIDDEN_ACTION_NAMES,
+    LEVEL_CHANGE_ACTIONS,
     ActionSelectionSource,
     DecisionMetrics,
     RunOutcome,
     RunState,
+    level_change_error,
 )
 from nethack_agent.environment import STAIRCASE_CHARACTER
 from nethack_agent.events import (
@@ -44,10 +45,12 @@ from nethack_agent.events import (
 )
 from nethack_agent.knowledge import load_default_knowledge_bundle
 from nethack_agent.model import ScriptedDevelopmentModel
+from nethack_agent.observation import ProjectedObservation
 from nethack_agent.ollama import OllamaClient, OllamaConfig, OllamaError
 from nethack_agent.run_manager import POLICY_VERSION, ModelFactory, RunManager
 from nethack_agent.storage import MAX_EVENT_PAGE_LIMIT, RunRecord, RunStore
 from nethack_agent.tasks import STAIRCASE_TASK
+from nethack_agent.traversal import LevelKey
 
 SUITE_SCHEMA_VERSION: Final = 1
 REPORT_SCHEMA_VERSION: Final = 2
@@ -445,6 +448,11 @@ def summarize_run(
     decision_failures = 0
     invalid_actions = 0
     legal_actions = None
+    # Runs stored before task specs existed executed the staircase task.
+    level_changes_allowed = (
+        record.task is not None and record.task.objective.changes_level
+    )
+    decided_on: ProjectedObservation | None = None
 
     sequences = [event.sequence for event in events]
     if sequences != list(range(len(events))):
@@ -456,6 +464,7 @@ def summarize_run(
         problems.append(f"expected one run_started event, found {len(started)}")
     elif isinstance(started[0].payload, RunStartedPayload):
         legal_actions = started[0].payload.legal_actions
+        decided_on = started[0].payload.observation
 
     terminal_step_index: int | None = None
     for position, event in enumerate(events):
@@ -467,8 +476,11 @@ def summarize_run(
                 successful.append(payload.skill_metrics)
             if payload.action_metrics is not None:
                 successful.append(payload.action_metrics)
-            if not _action_is_valid(payload, legal_actions):
+            if not _action_is_valid(
+                payload, legal_actions, decided_on, level_changes_allowed
+            ):
                 invalid_actions += 1
+            decided_on = payload.observation
             if payload.observation.step_index != len(step_payloads):
                 problems.append(
                     f"step event {event.sequence} has step_index "
@@ -545,15 +557,54 @@ def summarize_run(
     )
 
 
-def _action_is_valid(payload: StepPayload, legal_actions: object) -> bool:
+def _action_is_valid(
+    payload: StepPayload,
+    legal_actions: object,
+    decided_on: ProjectedObservation | None,
+    level_changes_allowed: bool,
+) -> bool:
     if not isinstance(legal_actions, tuple):
         return False
     action = payload.action
-    return (
+    if not (
         0 <= action.index < len(legal_actions)
         and legal_actions[action.index] == action
-        and action.name not in FORBIDDEN_ACTION_NAMES
         and payload.selection.action_index == action.index
+    ):
+        return False
+    if action.name not in LEVEL_CHANGE_ACTIONS:
+        return True
+    return decided_on is not None and _level_change_allowed(
+        payload, decided_on, level_changes_allowed
+    )
+
+
+def _level_change_allowed(
+    payload: StepPayload,
+    decided_on: ProjectedObservation,
+    level_changes_allowed: bool,
+) -> bool:
+    """Audit a level change with the coordinator's permit predicate.
+
+    It is judged against the observation the step was decided on. Events do
+    not record whether that level had two known staircases of the direction,
+    so an unknown identity is accepted for a branch target (a probe) that the
+    coordinator allows only on such a level.
+    """
+    player = decided_on.player
+    if player.dungeon_level < 1:
+        return False
+    return (
+        level_change_error(
+            payload.action.name,
+            payload.selection,
+            level_changes_allowed=level_changes_allowed,
+            level=LevelKey(player.dungeon_number, player.dungeon_level),
+            position=(player.x, player.y),
+            prompt_active=decided_on.prompt.active,
+            pair_known=True,
+        )
+        is None
     )
 
 

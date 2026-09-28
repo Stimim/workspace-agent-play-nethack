@@ -16,6 +16,7 @@ from nethack_agent.contracts import (
     string_value,
 )
 from nethack_agent.decision import (
+    LEVEL_CHANGE_ACTIONS,
     ActionDecision,
     ActionSelection,
     ActionSelectionSource,
@@ -25,6 +26,7 @@ from nethack_agent.decision import (
     Skill,
     SkillDecision,
     SkillSelectionSource,
+    level_change_selection_error,
 )
 from nethack_agent.environment import LegalAction
 from nethack_agent.model import DecisionAttemptDiagnostic, DecisionFailure
@@ -238,6 +240,11 @@ class StepPayload:
                 cell.y >= len(rows) or cell.x >= len(rows[0]) for cell in intent.cells()
             ):
                 raise ContractError("step intent cell is outside the observation map")
+        direction = LEVEL_CHANGE_ACTIONS.get(self.action.name)
+        if direction is not None:
+            error = level_change_selection_error(direction, self.selection)
+            if error is not None:
+                raise ContractError(f"step level change is invalid: {error}")
         reward = number_value(self.reward, "step reward")
         object.__setattr__(self, "reward", reward)
         boolean_value(self.terminated, "step terminated")

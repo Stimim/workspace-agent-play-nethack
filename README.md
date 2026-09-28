@@ -50,7 +50,8 @@ doors, fights adjacent hostiles, and searches for hidden passages. A
 deterministic arbiter switches between them; the local model is consulted at
 the start, when exploration is stuck, and for unhandled prompts. Every action
 passes through a gate that rejects invalid indices and any level change
-(`<` and `>`). Runs expose current goal and skill and stream discriminated typed
+(`<` and `>`) without a coordinator traversal permit, which only a typed
+traversal goal on a level-changing task can earn (ADR 0004). Runs expose current goal and skill and stream discriminated typed
 events through the loopback HTTP/WebSocket service and CLI client. The
 `scenario run` command owns a child service for one bounded run, and
 `verify network` records and enforces its runtime socket boundary.

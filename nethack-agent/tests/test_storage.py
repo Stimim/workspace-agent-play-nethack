@@ -20,7 +20,12 @@ from nethack_agent.decision import (
     SkillDecision,
     SkillSelectionSource,
 )
-from nethack_agent.environment import NleEnvironment, ScenarioConfig, SeedSet
+from nethack_agent.environment import (
+    LegalAction,
+    NleEnvironment,
+    ScenarioConfig,
+    SeedSet,
+)
 from nethack_agent.events import (
     AgentErrorPayload,
     DecisionFailureTrace,
@@ -42,12 +47,17 @@ from nethack_agent.storage import (
 from nethack_agent.tasks import STAIRCASE_TASK, ActionProfile, NleTask, TaskSpec
 from nethack_agent.traversal import (
     STAND_ON_DOWNSTAIRS,
+    UNKNOWN_STAIR,
     IdentityEvidence,
     LevelKey,
     Objective,
     ReachLevelLeg,
+    StairConnection,
+    StairDirection,
     StairIdentity,
     StairIdentityKind,
+    StairTarget,
+    TraverseStairsGoal,
 )
 
 
@@ -212,6 +222,49 @@ def test_typed_event_payload_rejects_semantically_inconsistent_data(
     unexplained["selection"]["skill_selection"] = "model"  # type: ignore[index]
     with pytest.raises(ContractError, match="only after exploration is stuck"):
         StepPayload.from_json(unexplained)
+
+
+def test_a_recorded_level_change_must_be_a_staircase_traversal(
+    tmp_path: Path,
+) -> None:
+    step = event_fixtures(tmp_path)[3]
+    assert isinstance(step, StepPayload)
+    down = LegalAction(18, ord(">"), "MiscDirection.DOWN")
+    main_down = TraverseStairsGoal(
+        StairTarget(StairDirection.DOWN, StairConnection.MAIN, None)
+    )
+    intent = ActionIntent(
+        IntentDestination(DestinationKind.DOWNSTAIRS, 7, 4, UNKNOWN_STAIR),
+        None,
+        None,
+        LevelKey(0, 1),
+    )
+    selection = replace(
+        step.selection,
+        action_index=18,
+        goal=main_down,
+        skill=Skill.STAIRCASE_NAVIGATION,
+        intent=intent,
+    )
+    traversal = replace(
+        step, selection=selection, action=down, skill_decision=None, skill_metrics=None
+    )
+    assert StepPayload.from_json(traversal.to_json()) == traversal
+
+    # The legacy staircase goal never changes level.
+    standing = traversal.to_json()
+    standing["selection"]["goal"] = "stand_on_downstairs"  # type: ignore[index]
+    with pytest.raises(ContractError, match="step level change is invalid"):
+        StepPayload.from_json(standing)
+    # Nor does a routed step or a step without the staircase's identity.
+    routed = traversal.to_json()
+    routed["selection"]["intent"]["path"] = [{"x": 7, "y": 4}]  # type: ignore[index]
+    with pytest.raises(ContractError, match="in-place intent"):
+        StepPayload.from_json(routed)
+    unidentified = traversal.to_json()
+    del unidentified["selection"]["intent"]["destination"]["stair"]  # type: ignore[index]
+    with pytest.raises(ContractError, match="in-place intent"):
+        StepPayload.from_json(unidentified)
 
 
 def test_step_intent_and_path_are_optional_for_legacy_steps(tmp_path: Path) -> None:

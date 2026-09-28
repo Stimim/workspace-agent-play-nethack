@@ -6,9 +6,17 @@ import pytest
 from nethack_agent.decision import (
     MAX_CANDIDATE_REASON_LENGTH,
     MAX_FALLBACK_CANDIDATES,
+    ActionIntent,
+    ActionSelection,
+    ActionSelectionSource,
     DecisionError,
+    DestinationKind,
+    IntentDestination,
+    MapCell,
     Skill,
+    SkillSelectionSource,
     StuckReason,
+    level_change_error,
     parse_action_decision,
     parse_skill_decision,
     skill_decision_schema,
@@ -20,8 +28,13 @@ from nethack_agent.observation import ObservationProjector
 from nethack_agent.ollama import Generation, OllamaError
 from nethack_agent.traversal import (
     STAND_ON_DOWNSTAIRS,
+    UNKNOWN_STAIR,
+    IdentityEvidence,
+    LevelKey,
     StairConnection,
     StairDirection,
+    StairIdentity,
+    StairIdentityKind,
     StairTarget,
     TraverseStairsGoal,
 )
@@ -283,3 +296,122 @@ def test_transport_failure_uses_wall_clock_duration(
     assert failure.metrics.latency_ms == 12.0
     assert [attempt.elapsed_ms for attempt in failure.attempts] == [5.0, 7.0]
     assert all(attempt.returned_duration_ms is None for attempt in failure.attempts)
+
+
+_MINES_DOWN = TraverseStairsGoal(
+    StairTarget(StairDirection.DOWN, StairConnection.BRANCH, 2)
+)
+_MAIN_DOWN = TraverseStairsGoal(
+    StairTarget(StairDirection.DOWN, StairConnection.MAIN, None)
+)
+_LEVEL_TWO = LevelKey(0, 2)
+
+
+def descend(
+    goal: object = _MAIN_DOWN,
+    stair: StairIdentity = UNKNOWN_STAIR,
+    **changes: object,
+) -> ActionSelection:
+    """A staircase-navigation selection to use the `>` at (5, 3) on (0, 2)."""
+    fields: dict[str, object] = {
+        "source": ActionSelectionSource.DETERMINISTIC_SKILL,
+        "goal": goal,
+        "skill": Skill.STAIRCASE_NAVIGATION,
+        "skill_selection": SkillSelectionSource.ARBITER,
+        "stuck_reason": None,
+        "action_index": 18,
+        "rationale": "Use the staircase.",
+        "intent": ActionIntent(
+            IntentDestination(DestinationKind.DOWNSTAIRS, 5, 3, stair),
+            None,
+            None,
+            LevelKey(0, 2),
+        ),
+    }
+    fields.update(changes)
+    return ActionSelection(**fields)  # type: ignore[arg-type]
+
+
+def refusal(
+    selection: ActionSelection,
+    *,
+    action: str = "MiscDirection.DOWN",
+    allowed: bool = True,
+    level: LevelKey = _LEVEL_TWO,
+    position: tuple[int, int] = (5, 3),
+    prompt: bool = False,
+    pair_known: bool = False,
+) -> str | None:
+    return level_change_error(
+        action,
+        selection,
+        level_changes_allowed=allowed,
+        level=level,
+        position=position,
+        prompt_active=prompt,
+        pair_known=pair_known,
+    )
+
+
+def test_level_change_needs_a_matching_traversal_goal_skill_and_stair() -> None:
+    assert refusal(descend()) is None
+    # Actions that do not change level always pass.
+    assert (
+        refusal(descend(goal=STAND_ON_DOWNSTAIRS), action="MiscDirection.WAIT") is None
+    )
+
+    assert "never changes level" in refusal(descend(), allowed=False)  # type: ignore[operator]
+    # Standing on `>` is not using it.
+    assert "traverse_stairs goal" in refusal(descend(goal=STAND_ON_DOWNSTAIRS))  # type: ignore[operator]
+    assert "traverse_stairs goal" in refusal(descend(), action="MiscDirection.UP")  # type: ignore[operator]
+    assert "staircase navigation" in refusal(  # type: ignore[operator]
+        descend(skill=Skill.EXPLORE_LEVEL)
+    )
+    assert "staircase navigation" in refusal(  # type: ignore[operator]
+        descend(source=ActionSelectionSource.MODEL_FALLBACK, intent=None)
+    )
+    assert "in-place intent" in refusal(  # type: ignore[operator]
+        descend(
+            intent=ActionIntent(
+                IntentDestination(DestinationKind.DOWNSTAIRS, 5, 3, UNKNOWN_STAIR),
+                None,
+                (MapCell(5, 3),),
+                LevelKey(0, 2),
+            )
+        )
+    )
+    assert "active prompt" in refusal(descend(), prompt=True)  # type: ignore[operator]
+    assert "not standing" in refusal(descend(), position=(4, 3))  # type: ignore[operator]
+    assert "not standing" in refusal(descend(), level=LevelKey(0, 3))  # type: ignore[operator]
+
+
+def test_level_change_needs_a_compatible_stair_identity() -> None:
+    main = StairIdentity(StairIdentityKind.MAIN, 0, IdentityEvidence.TRAVERSED)
+    mines = StairIdentity(StairIdentityKind.BRANCH, 2, IdentityEvidence.ELIMINATION)
+
+    assert refusal(descend(stair=main)) is None
+    assert "identity does not match" in refusal(descend(stair=mines))  # type: ignore[operator]
+    assert refusal(descend(goal=_MINES_DOWN, stair=mines)) is None
+    assert "identity does not match" in refusal(descend(goal=_MINES_DOWN, stair=main))  # type: ignore[operator]
+    # An unknown `>` is a branch probe only on a level with two of them.
+    assert "identity does not match" in refusal(descend(goal=_MINES_DOWN))  # type: ignore[operator]
+    assert refusal(descend(goal=_MINES_DOWN), pair_known=True) is None
+
+
+def test_climbing_out_of_the_dungeon_is_always_refused() -> None:
+    climb = TraverseStairsGoal(
+        StairTarget(StairDirection.UP, StairConnection.MAIN, None)
+    )
+    selection = descend(
+        goal=climb,
+        action_index=17,
+        intent=ActionIntent(
+            IntentDestination(DestinationKind.UPSTAIRS, 5, 3, UNKNOWN_STAIR),
+            None,
+            None,
+            LevelKey(0, 1),
+        ),
+    )
+    assert "leaves the dungeon" in refusal(  # type: ignore[operator]
+        selection, action="MiscDirection.UP", level=LevelKey(0, 1)
+    )

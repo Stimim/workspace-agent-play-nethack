@@ -6,7 +6,7 @@ from nle import nethack
 
 from nethack_agent.coordinator import AgentCoordinator
 from nethack_agent.decision import (
-    FORBIDDEN_ACTION_NAMES,
+    LEVEL_CHANGE_ACTIONS,
     ActionIntent,
     ActionSelectionSource,
     DestinationKind,
@@ -105,7 +105,7 @@ def actions(tmp_path: Path) -> dict[str, LegalAction]:
         return {
             action.name: action
             for action in environment.legal_actions
-            if action.name not in FORBIDDEN_ACTION_NAMES
+            if action.name not in LEVEL_CHANGE_ACTIONS
         }
     finally:
         environment.close()
@@ -819,7 +819,7 @@ def test_development_policy_explores_real_levels_to_the_downstairs(
     assert len(records) > 20
     assert all(
         record.selection.source is not ActionSelectionSource.MODEL_FALLBACK
-        and record.action.name not in FORBIDDEN_ACTION_NAMES
+        and record.action.name not in LEVEL_CHANGE_ACTIONS
         for record in records
     )
     assert {record.selection.skill for record in records} == set(Skill)

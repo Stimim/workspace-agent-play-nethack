@@ -15,6 +15,7 @@ from nethack_agent.decision import (
     ActionDecision,
     ActionSelectionSource,
     DecisionMetrics,
+    MapCell,
     ModelActionDecision,
     ModelSkillDecision,
     RunOutcome,
@@ -23,11 +24,12 @@ from nethack_agent.decision import (
     SkillDecision,
     SkillSelectionSource,
     StuckReason,
+    TraversalPermit,
 )
 from nethack_agent.environment import LegalAction, NleEnvironment, ScenarioConfig
 from nethack_agent.model import DecisionFailure, HierarchicalDecisionModel
 from nethack_agent.observation import ObservationProjector
-from nethack_agent.traversal import STAND_ON_DOWNSTAIRS, Goal
+from nethack_agent.traversal import STAND_ON_DOWNSTAIRS, Goal, LevelKey, StairDirection
 
 _METRICS = DecisionMetrics(1, 1, 1.0, False)
 
@@ -244,9 +246,15 @@ def test_concurrent_advance_is_rejected_while_pause_remains_responsive(
     agent.stop()
 
 
-@pytest.mark.parametrize("name", ["MiscDirection.DOWN", "MiscDirection.UP"])
-def test_action_gate_forbids_level_changes_without_advancing_nle(
-    tmp_path: Path, name: str
+@pytest.mark.parametrize(
+    ("name", "direction"),
+    [
+        ("MiscDirection.DOWN", StairDirection.DOWN),
+        ("MiscDirection.UP", StairDirection.UP),
+    ],
+)
+def test_action_gate_passes_level_changes_only_with_a_matching_permit(
+    tmp_path: Path, name: str, direction: StairDirection
 ) -> None:
     environment = NleEnvironment(
         ScenarioConfig(seed=6, artifact_directory=tmp_path, max_episode_steps=20)
@@ -254,15 +262,21 @@ def test_action_gate_forbids_level_changes_without_advancing_nle(
     try:
         environment.reset()
         gate = ActionGate(environment.legal_actions)
-        forbidden = next(
+        level_change = next(
             action for action in environment.legal_actions if action.name == name
         )
+        wrong = TraversalPermit(direction.opposite, LevelKey(0, 2), MapCell(3, 4))
 
-        with pytest.raises(ActionGateError, match=f"{name} is forbidden"):
-            gate.resolve(forbidden.index)
+        for permit in (None, wrong):
+            with pytest.raises(ActionGateError, match=f"{name} is forbidden"):
+                gate.resolve(level_change.index, permit)
 
+        permit = TraversalPermit(direction, LevelKey(0, 2), MapCell(3, 4))
+        assert gate.resolve(level_change.index, permit) == level_change
+        assert gate.level_change_actions[direction] == level_change
+        # Resolving never steps NLE, and the model is never offered the action.
         assert environment.step_index == 0
-        assert forbidden not in gate.allowed_actions
+        assert level_change not in gate.allowed_actions
         assert name not in gate.actions_by_name
     finally:
         environment.close()

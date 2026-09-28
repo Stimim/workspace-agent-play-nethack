@@ -17,17 +17,25 @@ from nethack_agent.contracts import (
     string_value,
 )
 from nethack_agent.traversal import (
+    DUNGEON_EXIT_LEVEL,
     GOAL_TYPES,
     Goal,
     LevelKey,
     StairDirection,
     StairIdentity,
+    TraverseStairsGoal,
+    candidate_tier,
     goal_from_json,
 )
 
-# Level changes are never part of the staircase task. `<` on dungeon level 1
-# leaves the dungeon and ends the game; `>` descends instead of standing on `>`.
-FORBIDDEN_ACTION_NAMES: Final = frozenset({"MiscDirection.UP", "MiscDirection.DOWN"})
+# The actions that change dungeon level. The gate passes one only with a
+# coordinator TraversalPermit (ADR 0004); the model is never offered them.
+# `<` on the first level asks to leave the dungeon, and `>` descends rather
+# than standing on `>`.
+LEVEL_CHANGE_ACTIONS: Final[dict[str, StairDirection]] = {
+    "MiscDirection.UP": StairDirection.UP,
+    "MiscDirection.DOWN": StairDirection.DOWN,
+}
 
 
 class Skill(Enum):
@@ -703,6 +711,102 @@ class ActionSelection:
             ),
             intent=None if intent is None else ActionIntent.from_json(intent),
         )
+
+
+@dataclass(frozen=True, slots=True)
+class TraversalPermit:
+    """The coordinator's authorization for one level change from one staircase."""
+
+    direction: StairDirection
+    level: LevelKey
+    cell: MapCell
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.direction, StairDirection):
+            raise TypeError("permit direction must be a StairDirection")
+        if not isinstance(self.level, LevelKey):
+            raise TypeError("permit level must be a LevelKey")
+        if not isinstance(self.cell, MapCell):
+            raise TypeError("permit cell must be a MapCell")
+
+
+def level_change_selection_error(
+    direction: StairDirection, selection: ActionSelection
+) -> str | None:
+    """Why a selection may not change level, from its own recorded fields.
+
+    A level change needs a traverse_stairs goal in its direction, chosen by
+    deterministic staircase navigation, with an in-place intent on a staircase
+    of that direction that records the staircase's identity and level.
+    """
+    goal = selection.goal
+    if not isinstance(goal, TraverseStairsGoal) or goal.target.direction is not (
+        direction
+    ):
+        return (
+            f"changing level {direction.value} requires a traverse_stairs goal "
+            "in that direction"
+        )
+    if (
+        selection.source is not ActionSelectionSource.DETERMINISTIC_SKILL
+        or selection.skill is not Skill.STAIRCASE_NAVIGATION
+    ):
+        return "only deterministic staircase navigation may change level"
+    intent = selection.intent
+    destination = None if intent is None else intent.destination
+    if (
+        intent is None
+        or destination is None
+        or destination.kind is not STAIR_DESTINATIONS[direction]
+        or destination.stair is None
+        or intent.path is not None
+        or intent.level is None
+    ):
+        return (
+            "a level change requires an in-place intent on a staircase of its "
+            "direction that records the staircase identity and level"
+        )
+    return None
+
+
+def level_change_error(
+    action_name: str,
+    selection: ActionSelection,
+    *,
+    level_changes_allowed: bool,
+    level: LevelKey,
+    position: tuple[int, int],
+    prompt_active: bool,
+    pair_known: bool,
+) -> str | None:
+    """Why `action_name` may not change level here; None when it may.
+
+    The coordinator applies it before issuing a TraversalPermit, and the
+    evaluator audits every recorded step with it against the observation the
+    step was decided on. Actions that do not change level always pass.
+    """
+    direction = LEVEL_CHANGE_ACTIONS.get(action_name)
+    if direction is None:
+        return None
+    if not level_changes_allowed:
+        return f"{action_name} is forbidden: this task never changes level"
+    if direction is StairDirection.UP and level == DUNGEON_EXIT_LEVEL:
+        return f"{action_name} is forbidden on {level}: it leaves the dungeon"
+    error = level_change_selection_error(direction, selection)
+    if error is not None:
+        return error
+    if prompt_active:
+        return "a level change cannot answer an active prompt"
+    intent = selection.intent
+    assert intent is not None and intent.destination is not None
+    destination = intent.destination
+    if intent.level != level or (destination.x, destination.y) != position:
+        return "the hero is not standing on the intent's staircase"
+    goal = selection.goal
+    assert isinstance(goal, TraverseStairsGoal) and destination.stair is not None
+    if candidate_tier(goal.target, destination.stair, pair_known=pair_known) is None:
+        return "the staircase's identity does not match the goal's target"
+    return None
 
 
 def parse_skill_decision(
