@@ -10,11 +10,13 @@ import tempfile
 import time
 from collections import Counter
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 from typing import Final, TextIO
+
+from nle import nethack
 
 from nethack_agent.contracts import (
     ContractError,
@@ -49,15 +51,25 @@ from nethack_agent.observation import ProjectedObservation
 from nethack_agent.ollama import OllamaClient, OllamaConfig, OllamaError
 from nethack_agent.run_manager import POLICY_VERSION, ModelFactory, RunManager
 from nethack_agent.storage import MAX_EVENT_PAGE_LIMIT, RunRecord, RunStore
-from nethack_agent.tasks import STAIRCASE_TASK
-from nethack_agent.traversal import LevelKey
+from nethack_agent.tasks import STAIRCASE_TASK, NleTask, TaskSpec
+from nethack_agent.traversal import (
+    EnterDungeonLeg,
+    LevelKey,
+    ReachLevelLeg,
+    StairConnection,
+    StairDirection,
+    StairIdentityKind,
+    StandOnStairsLeg,
+)
 
-SUITE_SCHEMA_VERSION: Final = 1
+SUITE_SCHEMA_VERSION: Final = 2
+LEGACY_SUITE_SCHEMA_VERSION: Final = 1
 # Schema-1 suites (staircase-v1) were fixed for this policy. Later policies
 # change prompts and the model output contract (ADR 0004), so only a checkout
 # with this policy can reproduce them; others are refused before any episode.
 SCHEMA_1_POLICY_VERSION: Final = "hierarchical-explore-v1"
-REPORT_SCHEMA_VERSION: Final = 2
+REPORT_SCHEMA_VERSION: Final = 3
+LEGACY_REPORT_SCHEMA_VERSION: Final = 2
 SUITE_SEED_COUNT: Final = 10
 MILESTONE_REFERENCE_SEED: Final = 6
 MAX_STATUS_REASON_LENGTH: Final = 500
@@ -89,6 +101,14 @@ class SuiteValidationError(EvaluationError):
 
 @dataclass(frozen=True, slots=True)
 class AcceptanceCriteria:
+    """One case's success gate plus the suite-wide integrity gate.
+
+    Schema 1 stored all five values in one object. Schema 2 splits the first
+    two into each case and the last three into the suite. Keeping this typed
+    value as the common view avoids a parallel acceptance implementation for
+    legacy reports.
+    """
+
     min_task_successes: int
     required_success_seeds: tuple[int, ...]
     max_invalid_actions: int
@@ -106,30 +126,125 @@ class AcceptanceCriteria:
 
 
 @dataclass(frozen=True, slots=True)
-class EvaluationSuite:
-    suite_id: str
-    environment: str
-    character: str
-    seeds: tuple[int, ...]
-    seed_selection: str
-    max_episode_steps: int
-    step_cap_rationale: str
-    acceptance: AcceptanceCriteria
-    path: Path
-    sha256: str
+class CaseAcceptance:
+    min_successes: int
+    required_success_seeds: tuple[int, ...]
 
     def to_json(self) -> dict[str, object]:
         return {
+            "min_successes": self.min_successes,
+            "required_success_seeds": list(self.required_success_seeds),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class GlobalAcceptance:
+    max_invalid_actions: int
+    max_gate_rejections: int
+    require_complete_records: bool
+
+    def to_json(self) -> dict[str, object]:
+        return {
+            "max_invalid_actions": self.max_invalid_actions,
+            "max_gate_rejections": self.max_gate_rejections,
+            "require_complete_records": self.require_complete_records,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class EvaluationCase:
+    case_id: str
+    task: TaskSpec
+    seeds: tuple[int, ...]
+    max_episode_steps: int
+    acceptance: CaseAcceptance
+
+    def to_json(self) -> dict[str, object]:
+        return {
+            "case_id": self.case_id,
+            "task": self.task.to_json(),
+            "seeds": list(self.seeds),
+            "max_episode_steps": self.max_episode_steps,
+            "acceptance": self.acceptance.to_json(),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class EvaluationSuite:
+    schema_version: int
+    suite_id: str
+    character: str
+    policy_version: str
+    knowledge_bundle_id: str | None
+    seed_selection: str
+    step_cap_rationale: str
+    cases: tuple[EvaluationCase, ...]
+    global_acceptance: GlobalAcceptance
+    path: Path
+    sha256: str
+
+    @property
+    def legacy(self) -> bool:
+        return self.schema_version == LEGACY_SUITE_SCHEMA_VERSION
+
+    @property
+    def seeds(self) -> tuple[int, ...]:
+        """Distinct seed values in first-declared order, for CLI filtering."""
+        return tuple(dict.fromkeys(seed for case in self.cases for seed in case.seeds))
+
+    @property
+    def environment(self) -> str:
+        """The sole environment of a schema-1 suite."""
+        return self.cases[0].task.environment.value
+
+    @property
+    def max_episode_steps(self) -> int:
+        """The sole step cap of a schema-1 suite."""
+        return self.cases[0].max_episode_steps
+
+    @property
+    def acceptance(self) -> AcceptanceCriteria:
+        """The combined schema-1 acceptance view used by old callers."""
+        case = self.cases[0]
+        return AcceptanceCriteria(
+            min_task_successes=case.acceptance.min_successes,
+            required_success_seeds=case.acceptance.required_success_seeds,
+            max_invalid_actions=self.global_acceptance.max_invalid_actions,
+            max_gate_rejections=self.global_acceptance.max_gate_rejections,
+            require_complete_records=self.global_acceptance.require_complete_records,
+        )
+
+    def case(self, case_id: str) -> EvaluationCase:
+        return next(case for case in self.cases if case.case_id == case_id)
+
+    def to_json(self) -> dict[str, object]:
+        if self.legacy:
+            case = self.cases[0]
+            return {
+                "suite_id": self.suite_id,
+                "path": str(self.path),
+                "sha256": self.sha256,
+                "environment": case.task.environment.value,
+                "character": self.character,
+                "seeds": list(case.seeds),
+                "seed_selection": self.seed_selection,
+                "max_episode_steps": case.max_episode_steps,
+                "step_cap_rationale": self.step_cap_rationale,
+                "acceptance": self.acceptance.to_json(),
+            }
+        assert self.knowledge_bundle_id is not None
+        return {
+            "schema_version": self.schema_version,
             "suite_id": self.suite_id,
             "path": str(self.path),
             "sha256": self.sha256,
-            "environment": self.environment,
             "character": self.character,
-            "seeds": list(self.seeds),
+            "policy_version": self.policy_version,
+            "knowledge_bundle_id": self.knowledge_bundle_id,
             "seed_selection": self.seed_selection,
-            "max_episode_steps": self.max_episode_steps,
             "step_cap_rationale": self.step_cap_rationale,
-            "acceptance": self.acceptance.to_json(),
+            "cases": [case.to_json() for case in self.cases],
+            "acceptance": self.global_acceptance.to_json(),
         }
 
 
@@ -141,38 +256,56 @@ def load_suite(path: Path) -> EvaluationSuite:
             f"evaluation suite cannot be read: {error}"
         ) from error
     try:
-        text = content.decode("utf-8")
-        payload = object_value(
-            load_json_object(text, "evaluation suite"),
-            "evaluation suite",
-            {
-                "schema_version",
-                "suite_id",
-                "environment",
-                "character",
-                "seeds",
-                "seed_selection",
-                "max_episode_steps",
-                "step_cap_rationale",
-                "acceptance",
-            },
+        payload = load_json_object(content.decode("utf-8"), "evaluation suite")
+        schema_version = integer_value(
+            payload.get("schema_version"), "suite schema_version"
         )
-        return _parse_suite(payload, path, hashlib.sha256(content).hexdigest())
+        digest = hashlib.sha256(content).hexdigest()
+        if schema_version == LEGACY_SUITE_SCHEMA_VERSION:
+            return _parse_schema_1_suite(payload, path, digest)
+        if schema_version == SUITE_SCHEMA_VERSION:
+            if "environment" in payload or "seeds" in payload:
+                raise ContractError(
+                    "suite schema_version 2 requires cases rather than "
+                    "schema-1 environment and seeds"
+                )
+            return _parse_schema_2_suite(payload, path, digest)
+        raise ContractError(
+            "suite schema_version must be "
+            f"{LEGACY_SUITE_SCHEMA_VERSION} or {SUITE_SCHEMA_VERSION}"
+        )
     except (ContractError, UnicodeDecodeError) as error:
         raise SuiteValidationError(
             f"invalid evaluation suite {path}: {error}"
         ) from error
 
 
-def _parse_suite(
-    payload: dict[str, object], path: Path, digest: str
-) -> EvaluationSuite:
-    schema_version = integer_value(payload["schema_version"], "suite schema_version")
-    if schema_version != SUITE_SCHEMA_VERSION:
-        raise ContractError(f"suite schema_version must be {SUITE_SCHEMA_VERSION}")
-    suite_id = string_value(payload["suite_id"], "suite_id", minimum=1, maximum=80)
-    if not _IDENTIFIER.fullmatch(suite_id):
-        raise ContractError("suite_id must be a lowercase hyphenated identifier")
+def _suite_identifier(value: object, name: str) -> str:
+    identifier = string_value(value, name, minimum=1, maximum=80)
+    if not _IDENTIFIER.fullmatch(identifier):
+        raise ContractError(f"{name} must be a lowercase hyphenated identifier")
+    return identifier
+
+
+def _parse_schema_1_suite(value: object, path: Path, digest: str) -> EvaluationSuite:
+    payload = object_value(
+        value,
+        "evaluation suite",
+        {
+            "schema_version",
+            "suite_id",
+            "environment",
+            "character",
+            "seeds",
+            "seed_selection",
+            "max_episode_steps",
+            "step_cap_rationale",
+            "acceptance",
+        },
+    )
+    if integer_value(payload["schema_version"], "suite schema_version") != 1:
+        raise ContractError("suite schema_version must be 1")
+    suite_id = _suite_identifier(payload["suite_id"], "suite_id")
     environment = string_value(payload["environment"], "suite environment")
     if environment != STAIRCASE_TASK.environment.value:
         raise ContractError(
@@ -181,31 +314,10 @@ def _parse_suite(
     character = string_value(payload["character"], "suite character")
     if character != CHARACTER:
         raise ContractError(f"suite character must be {CHARACTER}")
-    seeds = tuple(
-        integer_value(seed, "suite seed", minimum=1, maximum=sys.maxsize)
-        for seed in array_value(payload["seeds"], "suite seeds")
-    )
-    if len(seeds) != SUITE_SEED_COUNT:
-        raise ContractError(f"suite must contain exactly {SUITE_SEED_COUNT} seeds")
-    if len(set(seeds)) != len(seeds):
-        raise ContractError("suite seeds must be unique")
+    seeds = _suite_seeds(payload["seeds"], "suite", exact_count=SUITE_SEED_COUNT)
     if MILESTONE_REFERENCE_SEED not in seeds:
         raise ContractError(f"suite seeds must include seed {MILESTONE_REFERENCE_SEED}")
-    seed_selection = string_value(
-        payload["seed_selection"], "suite seed_selection", minimum=1, maximum=1000
-    )
-    max_episode_steps = integer_value(
-        payload["max_episode_steps"],
-        "suite max_episode_steps",
-        minimum=1,
-        maximum=100_000,
-    )
-    step_cap_rationale = string_value(
-        payload["step_cap_rationale"],
-        "suite step_cap_rationale",
-        minimum=1,
-        maximum=1000,
-    )
+    max_steps = _step_cap(payload["max_episode_steps"], "suite")
     acceptance_payload = object_value(
         payload["acceptance"],
         "suite acceptance",
@@ -217,51 +329,179 @@ def _parse_suite(
             "require_complete_records",
         },
     )
+    case_acceptance = _case_acceptance(
+        {
+            "min_successes": acceptance_payload["min_task_successes"],
+            "required_success_seeds": acceptance_payload["required_success_seeds"],
+        },
+        seeds,
+        "suite acceptance",
+    )
+    global_acceptance = _global_acceptance(
+        {
+            "max_invalid_actions": acceptance_payload["max_invalid_actions"],
+            "max_gate_rejections": acceptance_payload["max_gate_rejections"],
+            "require_complete_records": acceptance_payload["require_complete_records"],
+        },
+        "suite acceptance",
+    )
+    case = EvaluationCase(
+        case_id="staircase",
+        task=STAIRCASE_TASK,
+        seeds=seeds,
+        max_episode_steps=max_steps,
+        acceptance=case_acceptance,
+    )
+    return EvaluationSuite(
+        schema_version=LEGACY_SUITE_SCHEMA_VERSION,
+        suite_id=suite_id,
+        character=character,
+        policy_version=SCHEMA_1_POLICY_VERSION,
+        knowledge_bundle_id=None,
+        seed_selection=_suite_text(payload["seed_selection"], "suite seed_selection"),
+        step_cap_rationale=_suite_text(
+            payload["step_cap_rationale"], "suite step_cap_rationale"
+        ),
+        cases=(case,),
+        global_acceptance=global_acceptance,
+        path=path,
+        sha256=digest,
+    )
+
+
+def _parse_schema_2_suite(value: object, path: Path, digest: str) -> EvaluationSuite:
+    payload = object_value(
+        value,
+        "evaluation suite",
+        {
+            "schema_version",
+            "suite_id",
+            "character",
+            "policy_version",
+            "knowledge_bundle_id",
+            "seed_selection",
+            "step_cap_rationale",
+            "cases",
+            "acceptance",
+        },
+    )
+    cases_payload = array_value(payload["cases"], "suite cases")
+    if not cases_payload:
+        raise ContractError("suite cases must not be empty")
+    cases = tuple(_parse_case(item, index) for index, item in enumerate(cases_payload))
+    case_ids = [case.case_id for case in cases]
+    if len(case_ids) != len(set(case_ids)):
+        raise ContractError("suite case_id values must be unique")
+    character = string_value(payload["character"], "suite character")
+    if character != CHARACTER:
+        raise ContractError(f"suite character must be {CHARACTER}")
+    return EvaluationSuite(
+        schema_version=SUITE_SCHEMA_VERSION,
+        suite_id=_suite_identifier(payload["suite_id"], "suite_id"),
+        character=character,
+        policy_version=_suite_identifier(
+            payload["policy_version"], "suite policy_version"
+        ),
+        knowledge_bundle_id=_suite_identifier(
+            payload["knowledge_bundle_id"], "suite knowledge_bundle_id"
+        ),
+        seed_selection=_suite_text(payload["seed_selection"], "suite seed_selection"),
+        step_cap_rationale=_suite_text(
+            payload["step_cap_rationale"], "suite step_cap_rationale"
+        ),
+        cases=cases,
+        global_acceptance=_global_acceptance(payload["acceptance"], "suite acceptance"),
+        path=path,
+        sha256=digest,
+    )
+
+
+def _parse_case(value: object, index: int) -> EvaluationCase:
+    name = f"suite case {index}"
+    payload = object_value(
+        value,
+        name,
+        {"case_id", "task", "seeds", "max_episode_steps", "acceptance"},
+    )
+    seeds = _suite_seeds(payload["seeds"], name)
+    return EvaluationCase(
+        case_id=_suite_identifier(payload["case_id"], f"{name} case_id"),
+        task=TaskSpec.from_json(payload["task"], f"{name} task"),
+        seeds=seeds,
+        max_episode_steps=_step_cap(payload["max_episode_steps"], name),
+        acceptance=_case_acceptance(payload["acceptance"], seeds, f"{name} acceptance"),
+    )
+
+
+def _suite_seeds(
+    value: object, name: str, *, exact_count: int | None = None
+) -> tuple[int, ...]:
+    seeds = tuple(
+        integer_value(seed, f"{name} seed", minimum=1, maximum=sys.maxsize)
+        for seed in array_value(value, f"{name} seeds")
+    )
+    if exact_count is not None and len(seeds) != exact_count:
+        raise ContractError(f"{name} must contain exactly {exact_count} seeds")
+    if not seeds:
+        raise ContractError(f"{name} seeds must not be empty")
+    if len(seeds) != len(set(seeds)):
+        raise ContractError(f"{name} seeds must be unique")
+    return seeds
+
+
+def _step_cap(value: object, name: str) -> int:
+    return integer_value(value, f"{name} max_episode_steps", minimum=1, maximum=100_000)
+
+
+def _suite_text(value: object, name: str) -> str:
+    return string_value(value, name, minimum=1, maximum=2000, strip=True)
+
+
+def _case_acceptance(
+    value: object, seeds: tuple[int, ...], name: str
+) -> CaseAcceptance:
+    payload = object_value(value, name, {"min_successes", "required_success_seeds"})
     required = tuple(
-        integer_value(seed, "required success seed", minimum=1)
+        integer_value(seed, f"{name} required success seed", minimum=1)
         for seed in array_value(
-            acceptance_payload["required_success_seeds"],
-            "acceptance required_success_seeds",
+            payload["required_success_seeds"], f"{name} required_success_seeds"
         )
     )
-    if len(set(required)) != len(required) or not set(required) <= set(seeds):
-        raise ContractError(
-            "acceptance required_success_seeds must be unique suite seeds"
-        )
-    acceptance = AcceptanceCriteria(
-        min_task_successes=integer_value(
-            acceptance_payload["min_task_successes"],
-            "acceptance min_task_successes",
+    if len(required) != len(set(required)) or not set(required) <= set(seeds):
+        raise ContractError(f"{name} required_success_seeds must be unique case seeds")
+    return CaseAcceptance(
+        min_successes=integer_value(
+            payload["min_successes"],
+            f"{name} min_successes",
             minimum=1,
             maximum=len(seeds),
         ),
         required_success_seeds=required,
+    )
+
+
+def _global_acceptance(value: object, name: str) -> GlobalAcceptance:
+    payload = object_value(
+        value,
+        name,
+        {
+            "max_invalid_actions",
+            "max_gate_rejections",
+            "require_complete_records",
+        },
+    )
+    return GlobalAcceptance(
         max_invalid_actions=integer_value(
-            acceptance_payload["max_invalid_actions"],
-            "acceptance max_invalid_actions",
-            minimum=0,
+            payload["max_invalid_actions"], f"{name} max_invalid_actions", minimum=0
         ),
         max_gate_rejections=integer_value(
-            acceptance_payload["max_gate_rejections"],
-            "acceptance max_gate_rejections",
+            payload["max_gate_rejections"],
+            f"{name} max_gate_rejections",
             minimum=0,
         ),
         require_complete_records=boolean_value(
-            acceptance_payload["require_complete_records"],
-            "acceptance require_complete_records",
+            payload["require_complete_records"], f"{name} require_complete_records"
         ),
-    )
-    return EvaluationSuite(
-        suite_id=suite_id,
-        environment=environment,
-        character=character,
-        seeds=seeds,
-        seed_selection=seed_selection,
-        max_episode_steps=max_episode_steps,
-        step_cap_rationale=step_cap_rationale,
-        acceptance=acceptance,
-        path=path,
-        sha256=digest,
     )
 
 
@@ -375,6 +615,249 @@ class RunConfiguration:
             "ollama_num_ctx": self.ollama_num_ctx,
         }
 
+    @property
+    def shared(self) -> tuple[object, ...]:
+        """Configuration that schema-2 requires to stay fixed across cases."""
+        return (
+            self.model,
+            self.policy_version,
+            self.knowledge_version,
+            self.nle_version,
+            self.character,
+            self.ollama_num_ctx,
+        )
+
+
+class HungerState(Enum):
+    SATIATED = "satiated"
+    NOT_HUNGRY = "not_hungry"
+    HUNGRY = "hungry"
+    WEAK = "weak"
+    FAINTING = "fainting"
+    FAINTED = "fainted"
+    STARVED = "starved"
+
+
+_HUNGER_STATES: Final = tuple(HungerState)
+
+
+@dataclass(frozen=True, slots=True)
+class EpisodeMetrics:
+    steps: int
+    game_turns: int
+    max_depth: int
+    deepest_level: LevelKey | None
+    levels_visited: tuple[LevelKey, ...]
+    up_stair_traversals: int
+    down_stair_traversals: int
+    unknown_stair_probes: int
+    probe_misses: int
+    level_changes_without_stair_action: int
+    objective_legs_completed: int
+    final_gold: int
+    final_score: int
+    task_return: float
+    hunger_states: tuple[HungerState, ...]
+    final_hit_points: int
+    final_experience_level: int
+    death_cause: str
+
+    def __post_init__(self) -> None:
+        for name in (
+            "steps",
+            "game_turns",
+            "max_depth",
+            "up_stair_traversals",
+            "down_stair_traversals",
+            "unknown_stair_probes",
+            "probe_misses",
+            "level_changes_without_stair_action",
+            "objective_legs_completed",
+            "final_gold",
+            "final_score",
+            "final_hit_points",
+            "final_experience_level",
+        ):
+            integer_value(getattr(self, name), f"episode metrics {name}", minimum=0)
+        if self.deepest_level is not None and not isinstance(
+            self.deepest_level, LevelKey
+        ):
+            raise TypeError("episode metrics deepest_level must be a LevelKey or None")
+        if not all(isinstance(level, LevelKey) for level in self.levels_visited):
+            raise TypeError(
+                "episode metrics levels_visited must contain LevelKey values"
+            )
+        if len(self.levels_visited) != len(set(self.levels_visited)):
+            raise ContractError("episode metrics levels_visited must be unique")
+        if not all(isinstance(state, HungerState) for state in self.hunger_states):
+            raise TypeError(
+                "episode metrics hunger_states must contain HungerState values"
+            )
+        if len(self.hunger_states) != len(set(self.hunger_states)):
+            raise ContractError("episode metrics hunger_states must be unique")
+        object.__setattr__(
+            self, "task_return", number_value(self.task_return, "episode task_return")
+        )
+        string_value(
+            self.death_cause,
+            "episode metrics death_cause",
+            minimum=1,
+            maximum=1000,
+        )
+
+    @classmethod
+    def empty(cls) -> EpisodeMetrics:
+        return cls(
+            steps=0,
+            game_turns=0,
+            max_depth=0,
+            deepest_level=None,
+            levels_visited=(),
+            up_stair_traversals=0,
+            down_stair_traversals=0,
+            unknown_stair_probes=0,
+            probe_misses=0,
+            level_changes_without_stair_action=0,
+            objective_legs_completed=0,
+            final_gold=0,
+            final_score=0,
+            task_return=0.0,
+            hunger_states=(),
+            final_hit_points=0,
+            final_experience_level=0,
+            death_cause="unknown",
+        )
+
+    def to_json(self) -> dict[str, object]:
+        return {
+            "steps": self.steps,
+            "game_turns": self.game_turns,
+            "max_depth": self.max_depth,
+            "deepest_level": (
+                None if self.deepest_level is None else self.deepest_level.to_json()
+            ),
+            "levels_visited": [level.to_json() for level in self.levels_visited],
+            "up_stair_traversals": self.up_stair_traversals,
+            "down_stair_traversals": self.down_stair_traversals,
+            "unknown_stair_probes": self.unknown_stair_probes,
+            "probe_misses": self.probe_misses,
+            "level_changes_without_stair_action": (
+                self.level_changes_without_stair_action
+            ),
+            "objective_legs_completed": self.objective_legs_completed,
+            "final_gold": self.final_gold,
+            "final_score": self.final_score,
+            "task_return": round(self.task_return, 6),
+            "hunger_states": [state.value for state in self.hunger_states],
+            "final_hit_points": self.final_hit_points,
+            "final_experience_level": self.final_experience_level,
+            "death_cause": self.death_cause,
+        }
+
+    @classmethod
+    def from_json(cls, value: object) -> EpisodeMetrics:
+        fields = {
+            "steps",
+            "game_turns",
+            "max_depth",
+            "deepest_level",
+            "levels_visited",
+            "up_stair_traversals",
+            "down_stair_traversals",
+            "unknown_stair_probes",
+            "probe_misses",
+            "level_changes_without_stair_action",
+            "objective_legs_completed",
+            "final_gold",
+            "final_score",
+            "task_return",
+            "hunger_states",
+            "final_hit_points",
+            "final_experience_level",
+            "death_cause",
+        }
+        payload = object_value(value, "episode metrics", fields)
+        deepest = payload["deepest_level"]
+        return cls(
+            steps=integer_value(payload["steps"], "episode metrics steps", minimum=0),
+            game_turns=integer_value(
+                payload["game_turns"], "episode metrics game_turns", minimum=0
+            ),
+            max_depth=integer_value(
+                payload["max_depth"], "episode metrics max_depth", minimum=0
+            ),
+            deepest_level=(
+                None
+                if deepest is None
+                else LevelKey.from_json(deepest, "episode metrics deepest_level")
+            ),
+            levels_visited=tuple(
+                LevelKey.from_json(item, "episode metrics visited level")
+                for item in array_value(
+                    payload["levels_visited"], "episode metrics levels_visited"
+                )
+            ),
+            up_stair_traversals=integer_value(
+                payload["up_stair_traversals"],
+                "episode metrics up_stair_traversals",
+                minimum=0,
+            ),
+            down_stair_traversals=integer_value(
+                payload["down_stair_traversals"],
+                "episode metrics down_stair_traversals",
+                minimum=0,
+            ),
+            unknown_stair_probes=integer_value(
+                payload["unknown_stair_probes"],
+                "episode metrics unknown_stair_probes",
+                minimum=0,
+            ),
+            probe_misses=integer_value(
+                payload["probe_misses"], "episode metrics probe_misses", minimum=0
+            ),
+            level_changes_without_stair_action=integer_value(
+                payload["level_changes_without_stair_action"],
+                "episode metrics level_changes_without_stair_action",
+                minimum=0,
+            ),
+            objective_legs_completed=integer_value(
+                payload["objective_legs_completed"],
+                "episode metrics objective_legs_completed",
+                minimum=0,
+            ),
+            final_gold=integer_value(
+                payload["final_gold"], "episode metrics final_gold", minimum=0
+            ),
+            final_score=integer_value(
+                payload["final_score"], "episode metrics final_score", minimum=0
+            ),
+            task_return=number_value(
+                payload["task_return"], "episode metrics task_return"
+            ),
+            hunger_states=tuple(
+                enum_value(item, "episode metrics hunger state", HungerState)
+                for item in array_value(
+                    payload["hunger_states"], "episode metrics hunger_states"
+                )
+            ),
+            final_hit_points=integer_value(
+                payload["final_hit_points"],
+                "episode metrics final_hit_points",
+                minimum=0,
+            ),
+            final_experience_level=integer_value(
+                payload["final_experience_level"],
+                "episode metrics final_experience_level",
+                minimum=0,
+            ),
+            death_cause=string_value(
+                payload["death_cause"],
+                "episode metrics death_cause",
+                minimum=1,
+                maximum=1000,
+            ),
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class SeedResult:
@@ -397,6 +880,8 @@ class SeedResult:
     integrity_problems: tuple[str, ...]
     configuration: RunConfiguration | None
     ollama_version: str | None
+    case_id: str = "staircase"
+    metrics: EpisodeMetrics = field(default_factory=EpisodeMetrics.empty)
 
     @property
     def integrity_ok(self) -> bool:
@@ -406,14 +891,26 @@ class SeedResult:
     def task_success(self) -> bool:
         return self.outcome is RunOutcome.TASK_SUCCESS
 
+    def successful_for(self, case: EvaluationCase) -> bool:
+        if case.task.environment is NleTask.STAIRCASE:
+            return self.task_success
+        return self.metrics.objective_legs_completed == len(case.task.objective.legs)
+
     def to_json(self) -> dict[str, object]:
+        metrics = self.metrics
+        if metrics.steps == 0 and self.steps:
+            # Source-compatible construction for callers that predate schema 3;
+            # evaluator-created results always supply complete metrics.
+            metrics = replace(metrics, steps=self.steps)
         return {
+            "case_id": self.case_id,
             "seed": self.seed,
             "run_id": self.run_id,
             "outcome": self.outcome.value if self.outcome else None,
             "final_state": self.final_state.value if self.final_state else None,
             "ended_by": self.ended_by,
             "steps": self.steps,
+            "metrics": metrics.to_json(),
             "wall_seconds": round(self.wall_seconds, 3),
             "decisions": self.decision_stats.to_json(),
             "selection_sources": dict(self.selection_sources),
@@ -442,7 +939,9 @@ def summarize_run(
     ended_by: str,
     wall_seconds: float,
     data_directory: Path,
+    case: EvaluationCase | None = None,
 ) -> SeedResult:
+    case = case or suite.cases[0]
     problems: list[str] = []
     step_payloads: list[StepPayload] = []
     successful: list[DecisionMetrics] = []
@@ -452,11 +951,10 @@ def summarize_run(
     decision_failures = 0
     invalid_actions = 0
     legal_actions = None
-    # Runs stored before task specs existed executed the staircase task.
-    level_changes_allowed = (
-        record.task is not None and record.task.objective.changes_level
-    )
+    task = record.task or STAIRCASE_TASK
+    level_changes_allowed = task.objective.changes_level
     decided_on: ProjectedObservation | None = None
+    initial_observation: ProjectedObservation | None = None
 
     sequences = [event.sequence for event in events]
     if sequences != list(range(len(events))):
@@ -469,6 +967,7 @@ def summarize_run(
     elif isinstance(started[0].payload, RunStartedPayload):
         legal_actions = started[0].payload.legal_actions
         decided_on = started[0].payload.observation
+        initial_observation = decided_on
 
     terminal_step_index: int | None = None
     for position, event in enumerate(events):
@@ -525,18 +1024,50 @@ def summarize_run(
         problems.append("run record has no outcome")
     if record.suite_seed != seed:
         problems.append("run record seed does not match the suite seed")
-    if record.environment != suite.environment or record.character != suite.character:
-        problems.append("run record environment or character differs from the suite")
-    if record.max_episode_steps != suite.max_episode_steps:
-        problems.append("run record step cap differs from the suite")
-    if len(step_payloads) > suite.max_episode_steps:
-        problems.append("run exceeded the suite step cap")
+    if (
+        record.environment != case.task.environment.value
+        or record.character != suite.character
+        or task != case.task
+    ):
+        problems.append("run record task or character differs from the suite case")
+    if record.max_episode_steps != case.max_episode_steps:
+        problems.append("run record step cap differs from the suite case")
+    if len(step_payloads) > case.max_episode_steps:
+        problems.append("run exceeded the suite case step cap")
 
     ttyrec_path, ttyrec_exists = _ttyrec(record.ttyrec_path, data_directory)
     if record.ttyrec_path is None:
         problems.append("run record has no ttyrec reference")
     elif not ttyrec_exists:
         problems.append("referenced ttyrec is missing or empty")
+
+    metrics = _episode_metrics(
+        initial_observation,
+        step_payloads,
+        case.task,
+        record.outcome,
+        record.ttyrec_path,
+    )
+    if metrics.steps != len(step_payloads):
+        problems.append("episode metrics step count differs from the event log")
+    completed = metrics.objective_legs_completed
+    objective_size = len(case.task.objective.legs)
+    if (
+        case.task.environment is not NleTask.STAIRCASE
+        and record.outcome is RunOutcome.OBJECTIVE_COMPLETE
+        and completed != objective_size
+    ):
+        problems.append(
+            "objective_complete outcome is not supported by the stored observations"
+        )
+    if (
+        case.task.environment is not NleTask.STAIRCASE
+        and completed == objective_size
+        and record.outcome is not RunOutcome.OBJECTIVE_COMPLETE
+    ):
+        problems.append(
+            "stored observations complete the objective without objective_complete"
+        )
 
     return SeedResult(
         seed=seed,
@@ -558,7 +1089,183 @@ def summarize_run(
         integrity_problems=tuple(problems),
         configuration=RunConfiguration.from_record(record),
         ollama_version=record.ollama_version,
+        case_id=case.case_id,
+        metrics=metrics,
     )
+
+
+def _episode_metrics(
+    initial: ProjectedObservation | None,
+    steps: Sequence[StepPayload],
+    task: TaskSpec,
+    outcome: RunOutcome | None,
+    ttyrec_path: str | None,
+) -> EpisodeMetrics:
+    """Derive episode facts only from persisted public evidence.
+
+    NLE zeroes bottom-line statistics in a terminal observation. Such an
+    observation still proves that a step happened, but it is not a live level,
+    turn, HP, hunger, or objective sample. The preceding live observation stays
+    authoritative for those metrics.
+    """
+    live: list[ProjectedObservation] = []
+    if initial is not None and _observation_is_live(initial):
+        live.append(initial)
+    previous = live[-1] if live else None
+    up = 0
+    down = 0
+    probes = 0
+    misses = 0
+    changes_without_stairs = 0
+    for payload in steps:
+        direction = LEVEL_CHANGE_ACTIONS.get(payload.action.name)
+        intent = payload.selection.intent
+        destination = None if intent is None else intent.destination
+        unknown_probe = (
+            direction is not None
+            and destination is not None
+            and destination.stair is not None
+            and destination.stair.kind is StairIdentityKind.UNKNOWN
+        )
+        if unknown_probe:
+            probes += 1
+        after = payload.observation
+        if not _observation_is_live(after):
+            continue
+        live.append(after)
+        if previous is not None:
+            changed = _observation_level(previous) != _observation_level(after)
+            if changed and direction is StairDirection.UP:
+                up += 1
+            elif changed and direction is StairDirection.DOWN:
+                down += 1
+            elif changed:
+                changes_without_stairs += 1
+            elif unknown_probe:
+                misses += 1
+        previous = after
+
+    levels = tuple(
+        dict.fromkeys(_observation_level(observation) for observation in live)
+    )
+    max_depth = max((observation.player.depth for observation in live), default=0)
+    deepest_level = next(
+        (
+            _observation_level(observation)
+            for observation in live
+            if observation.player.depth == max_depth
+        ),
+        None,
+    )
+    final = live[-1].player if live else None
+    hunger = tuple(
+        dict.fromkeys(
+            _HUNGER_STATES[observation.player.hunger]
+            for observation in live
+            if 0 <= observation.player.hunger < len(_HUNGER_STATES)
+        )
+    )
+    legs_completed = _objective_legs_completed(task, live)
+    # Staircase's successful end state is NLE-owned and its terminal observation
+    # has no live player cell. That task result is the direct evidence for its
+    # equivalent single stand-on-downstairs objective.
+    if task.environment is NleTask.STAIRCASE and outcome is RunOutcome.TASK_SUCCESS:
+        legs_completed = len(task.objective.legs)
+    return EpisodeMetrics(
+        steps=len(steps),
+        game_turns=max((observation.player.turn for observation in live), default=0),
+        max_depth=max_depth,
+        deepest_level=deepest_level,
+        levels_visited=levels,
+        up_stair_traversals=up,
+        down_stair_traversals=down,
+        unknown_stair_probes=probes,
+        probe_misses=misses,
+        level_changes_without_stair_action=changes_without_stairs,
+        objective_legs_completed=legs_completed,
+        final_gold=0 if final is None else final.gold,
+        final_score=0 if final is None else final.score,
+        task_return=sum(payload.reward for payload in steps),
+        hunger_states=hunger,
+        final_hit_points=0 if final is None else final.hit_points,
+        final_experience_level=0 if final is None else final.experience_level,
+        death_cause=_death_cause(outcome, ttyrec_path),
+    )
+
+
+def _observation_is_live(observation: ProjectedObservation) -> bool:
+    return observation.player.dungeon_level >= 1
+
+
+def _observation_level(observation: ProjectedObservation) -> LevelKey:
+    player = observation.player
+    return LevelKey(player.dungeon_number, player.dungeon_level)
+
+
+def _objective_legs_completed(
+    task: TaskSpec, observations: Sequence[ProjectedObservation]
+) -> int:
+    index = 0
+    legs = task.objective.legs
+    for observation in observations:
+        while index < len(legs) and _observation_completes_leg(
+            observation, legs[index]
+        ):
+            index += 1
+    return index
+
+
+def _observation_completes_leg(
+    observation: ProjectedObservation,
+    leg: StandOnStairsLeg | ReachLevelLeg | EnterDungeonLeg,
+) -> bool:
+    level = _observation_level(observation)
+    if isinstance(leg, ReachLevelLeg):
+        return level == leg.level
+    if isinstance(leg, EnterDungeonLeg):
+        return level.dungeon_number == leg.dungeon_number
+    player = observation.player
+    glyph = observation.map.glyph_rows[player.y][player.x]
+    cmap = nethack.glyph_to_cmap(glyph) if nethack.glyph_is_cmap(glyph) else None
+    message = observation.message.lower()
+    direction = (
+        StairDirection.UP
+        if cmap == 23 or "staircase up here" in message
+        else StairDirection.DOWN
+        if cmap == 24 or "staircase down here" in message
+        else None
+    )
+    # Public observations prove direction but not a main/branch identity while
+    # the hero covers a staircase. Current committed stand goals use `any`.
+    return (
+        direction is leg.target.direction
+        and leg.target.connection is StairConnection.ANY
+    )
+
+
+def _death_cause(outcome: RunOutcome | None, ttyrec_path: str | None) -> str:
+    if outcome is not RunOutcome.DEATH or ttyrec_path is None:
+        return "unknown"
+    ttyrec = Path(ttyrec_path)
+    try:
+        xlogs = sorted(ttyrec.parent.glob("*.xlogfile"))
+    except OSError:
+        return "unknown"
+    for path in xlogs:
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeDecodeError):
+            continue
+        for line in lines:
+            fields = {}
+            for item in line.split("\t"):
+                key, separator, value = item.partition("=")
+                if separator:
+                    fields[key] = value
+            if fields.get("ttyrecname") == ttyrec.name:
+                cause = fields.get("death", "").strip()
+                return cause[:1000] if cause else "unknown"
+    return "unknown"
 
 
 def _action_is_valid(
@@ -590,10 +1297,10 @@ def _level_change_allowed(
 ) -> bool:
     """Audit a level change with the coordinator's permit predicate.
 
-    It is judged against the observation the step was decided on. Events do
-    not record whether that level had two known staircases of the direction,
-    so an unknown identity is accepted for a branch target (a probe) that the
-    coordinator allows only on such a level.
+    The previous live observation is the state on which the action was
+    selected. An unknown branch staircase is permitted only when the recorded
+    intent explicitly preserves the coordinator's two-stair evidence; absence
+    in a legacy event is unknown, never permission.
     """
     player = decided_on.player
     if player.dungeon_level < 1:
@@ -606,7 +1313,12 @@ def _level_change_allowed(
             level=LevelKey(player.dungeon_number, player.dungeon_level),
             position=(player.x, player.y),
             prompt_active=decided_on.prompt.active,
-            pair_known=True,
+            pair_known=(
+                payload.selection.intent is not None
+                and payload.selection.intent.destination is not None
+                and getattr(payload.selection.intent.destination, "pair_known", None)
+                is True
+            ),
         )
         is None
     )
@@ -655,58 +1367,119 @@ def evaluate_acceptance(
     development_model: bool,
     inputs_unchanged: bool,
 ) -> AcceptanceResult:
-    criteria = suite.acceptance
     reasons: list[str] = []
-    evaluated = [result.seed for result in results]
-    all_evaluated = sorted(evaluated) == sorted(suite.seeds) and not any(
-        result.ended_by == "interrupted" for result in results
+    expected = {(case.case_id, seed) for case in suite.cases for seed in case.seeds}
+    evaluated = [(result.case_id, result.seed) for result in results]
+    all_evaluated = (
+        len(evaluated) == len(set(evaluated))
+        and set(evaluated) == expected
+        and not any(result.ended_by == "interrupted" for result in results)
     )
     if not all_evaluated:
-        missing = sorted(set(suite.seeds) - set(evaluated))
-        reasons.append(f"suite incomplete; missing or interrupted seeds {missing}")
-    successes = sum(result.task_success for result in results)
-    if successes < criteria.min_task_successes:
-        reasons.append(
-            f"{successes} task successes; at least {criteria.min_task_successes} "
-            "required"
-        )
-    succeeded = {result.seed for result in results if result.task_success}
-    missing_required = [
-        seed for seed in criteria.required_success_seeds if seed not in succeeded
-    ]
-    if missing_required:
-        reasons.append(f"required seeds did not succeed: {missing_required}")
+        missing = sorted(expected - set(evaluated))
+        if suite.legacy:
+            reasons.append(
+                "suite incomplete; missing or interrupted seeds "
+                f"{[seed for _, seed in missing]}"
+            )
+        else:
+            reasons.append(
+                f"suite incomplete; missing or interrupted case/seeds {missing}"
+            )
+
+    checks: dict[str, bool] = {"all_seeds_evaluated": all_evaluated}
+    for case in suite.cases:
+        case_results = [result for result in results if result.case_id == case.case_id]
+        succeeded = {
+            result.seed for result in case_results if result.successful_for(case)
+        }
+        successes = len(succeeded)
+        enough = successes >= case.acceptance.min_successes
+        missing_required = [
+            seed
+            for seed in case.acceptance.required_success_seeds
+            if seed not in succeeded
+        ]
+        if suite.legacy:
+            checks["min_task_successes"] = enough
+            checks["required_success_seeds"] = not missing_required
+            if not enough:
+                reasons.append(
+                    f"{successes} task successes; at least "
+                    f"{case.acceptance.min_successes} required"
+                )
+            if missing_required:
+                reasons.append(f"required seeds did not succeed: {missing_required}")
+        else:
+            checks[f"{case.case_id}:min_successes"] = enough
+            checks[f"{case.case_id}:required_success_seeds"] = not missing_required
+            if not enough:
+                reasons.append(
+                    f"case {case.case_id} has {successes} successes; at least "
+                    f"{case.acceptance.min_successes} required"
+                )
+            if missing_required:
+                reasons.append(
+                    f"case {case.case_id} required seeds did not succeed: "
+                    f"{missing_required}"
+                )
+
+    criteria = suite.global_acceptance
     invalid = sum(result.invalid_actions for result in results)
     if invalid > criteria.max_invalid_actions:
         reasons.append(f"{invalid} invalid NLE actions recorded")
     rejections = sum(result.gate_rejections for result in results)
     if rejections > criteria.max_gate_rejections:
         reasons.append(f"{rejections} action-gate rejections recorded")
-    incomplete = [result.seed for result in results if not result.integrity_ok]
+    incomplete = [
+        (result.case_id, result.seed) for result in results if not result.integrity_ok
+    ]
     records_complete = not criteria.require_complete_records or not incomplete
     if not records_complete:
-        reasons.append(f"incomplete SQLite or ttyrec records for seeds {incomplete}")
-    configurations = {result.configuration for result in results}
-    fixed = len(configurations) == 1 and None not in configurations
+        if suite.legacy:
+            reasons.append(
+                "incomplete SQLite or ttyrec records for seeds "
+                f"{[seed for _, seed in incomplete]}"
+            )
+        else:
+            reasons.append(
+                f"incomplete SQLite or ttyrec records for case/seeds {incomplete}"
+            )
+    configurations = [result.configuration for result in results]
+    fixed = (
+        bool(configurations)
+        and all(configuration is not None for configuration in configurations)
+        and len(
+            {
+                configuration.shared
+                for configuration in configurations
+                if configuration is not None
+            }
+        )
+        == 1
+    )
     if not fixed:
-        reasons.append("run configuration was not identical across evaluated seeds")
+        reasons.append(
+            "run configuration was not identical across evaluated episodes "
+            "apart from suite case task and cap"
+        )
     if not inputs_unchanged:
         reasons.append("suite or knowledge files changed during evaluation")
     if development_model:
         reasons.append(
             "development scripted model runs are never valid milestone evidence"
         )
-    return AcceptanceResult(
-        checks={
-            "all_seeds_evaluated": all_evaluated,
-            "min_task_successes": successes >= criteria.min_task_successes,
-            "required_success_seeds": not missing_required,
+    checks.update(
+        {
             "invalid_actions": invalid <= criteria.max_invalid_actions,
             "gate_rejections": rejections <= criteria.max_gate_rejections,
             "complete_records": records_complete,
             "fixed_configuration": fixed,
             "inputs_unchanged": inputs_unchanged,
-        },
+        }
+    )
+    return AcceptanceResult(
+        checks=checks,
         reasons=tuple(reasons),
         development_model=development_model,
     )
@@ -741,32 +1514,71 @@ class EvaluationReport:
             inputs_unchanged=self.inputs_unchanged,
         )
 
-    def aggregate_json(self) -> dict[str, object]:
+    def _case_results(self, case: EvaluationCase) -> list[SeedResult]:
+        return [result for result in self.results if result.case_id == case.case_id]
+
+    def _requested_for_case(self, case: EvaluationCase) -> tuple[int, ...]:
+        return tuple(seed for seed in self.requested_seeds if seed in case.seeds)
+
+    def aggregate_json(
+        self, results: Sequence[SeedResult] | None = None
+    ) -> dict[str, object]:
+        selected = list(self.results if results is None else results)
         outcomes = Counter(
-            result.outcome.value if result.outcome else "none"
-            for result in self.results
+            result.outcome.value if result.outcome else "none" for result in selected
         )
         sources = Counter({source.value: 0 for source in ActionSelectionSource})
-        for result in self.results:
+        for result in selected:
             sources.update(result.selection_sources)
         return {
-            "evaluated_seeds": len(self.results),
-            "task_successes": sum(result.task_success for result in self.results),
+            "evaluated_seeds": len(selected),
+            "task_successes": sum(
+                result.successful_for(self.suite.case(result.case_id))
+                for result in selected
+            ),
             "outcomes": dict(sorted(outcomes.items())),
-            "steps": sum(result.steps for result in self.results),
+            "steps": sum(result.steps for result in selected),
             "total_wall_seconds": round(
-                sum(result.wall_seconds for result in self.results), 3
+                sum(result.wall_seconds for result in selected), 3
             ),
             "decisions": DecisionStats.combine(
-                [result.decision_stats for result in self.results]
+                [result.decision_stats for result in selected]
             ).to_json(),
             "selection_sources": dict(sources),
-            "gate_rejections": sum(r.gate_rejections for r in self.results),
-            "decision_failures": sum(r.decision_failures for r in self.results),
-            "invalid_actions": sum(r.invalid_actions for r in self.results),
+            "gate_rejections": sum(r.gate_rejections for r in selected),
+            "decision_failures": sum(r.decision_failures for r in selected),
+            "invalid_actions": sum(r.invalid_actions for r in selected),
             "integrity_failures": [
-                result.seed for result in self.results if not result.integrity_ok
+                (
+                    result.seed
+                    if self.suite.legacy
+                    else f"{result.case_id}/{result.seed}"
+                )
+                for result in selected
+                if not result.integrity_ok
             ],
+        }
+
+    def _case_report_json(self, case: EvaluationCase) -> dict[str, object]:
+        results = self._case_results(case)
+        successes = sum(result.successful_for(case) for result in results)
+        succeeded = {result.seed for result in results if result.successful_for(case)}
+        required = case.acceptance.required_success_seeds
+        return {
+            "case_id": case.case_id,
+            "task": case.task.to_json(),
+            "max_episode_steps": case.max_episode_steps,
+            "requested_seeds": list(self._requested_for_case(case)),
+            "results": [result.to_json() for result in results],
+            "aggregate": self.aggregate_json(results),
+            "acceptance": {
+                "criteria": case.acceptance.to_json(),
+                "successes": successes,
+                "passed": (
+                    successes >= case.acceptance.min_successes
+                    and all(seed in succeeded for seed in required)
+                ),
+            },
         }
 
     def to_json(self) -> dict[str, object]:
@@ -785,8 +1597,14 @@ class EvaluationReport:
                 "ollama_num_ctx": self.ollama_num_ctx,
                 "data_directory": self.data_directory,
             },
-            "requested_seeds": list(self.requested_seeds),
-            "results": [result.to_json() for result in self.results],
+            "requested_cases": [
+                {
+                    "case_id": case.case_id,
+                    "seeds": list(self._requested_for_case(case)),
+                }
+                for case in self.suite.cases
+            ],
+            "case_results": [self._case_report_json(case) for case in self.suite.cases],
             "aggregate": self.aggregate_json(),
             "acceptance": self.acceptance().to_json(),
         }
@@ -808,7 +1626,7 @@ _DECISION_FIELDS: Final = frozenset(
         "output_tokens",
     }
 )
-_RESULT_FIELDS: Final = frozenset(
+_RESULT_FIELDS_V2: Final = frozenset(
     {
         "seed",
         "run_id",
@@ -859,7 +1677,7 @@ _ACCEPTANCE_CRITERIA_FIELDS: Final = frozenset(
         "require_complete_records",
     }
 )
-_SUITE_FIELDS: Final = frozenset(
+_SUITE_FIELDS_V2: Final = frozenset(
     {
         "suite_id",
         "path",
@@ -897,25 +1715,100 @@ _REPORT_FIELDS_V1: Final = frozenset(
         "acceptance",
     }
 )
-_REPORT_FIELDS: Final = _REPORT_FIELDS_V1 | {"status_reason"}
+_REPORT_FIELDS_V2: Final = _REPORT_FIELDS_V1 | {"status_reason"}
+_RESULT_FIELDS_V3: Final = _RESULT_FIELDS_V2 | {"case_id", "metrics"}
+_SUITE_FIELDS_V3: Final = frozenset(
+    {
+        "schema_version",
+        "suite_id",
+        "path",
+        "sha256",
+        "character",
+        "policy_version",
+        "knowledge_bundle_id",
+        "seed_selection",
+        "step_cap_rationale",
+        "cases",
+        "acceptance",
+    }
+)
+_SUITE_CASE_FIELDS: Final = frozenset(
+    {"case_id", "task", "seeds", "max_episode_steps", "acceptance"}
+)
+_CASE_ACCEPTANCE_FIELDS: Final = frozenset({"min_successes", "required_success_seeds"})
+_GLOBAL_ACCEPTANCE_FIELDS: Final = frozenset(
+    {"max_invalid_actions", "max_gate_rejections", "require_complete_records"}
+)
+_CASE_REPORT_FIELDS: Final = frozenset(
+    {
+        "case_id",
+        "task",
+        "max_episode_steps",
+        "requested_seeds",
+        "results",
+        "aggregate",
+        "acceptance",
+    }
+)
+_CASE_REPORT_ACCEPTANCE_FIELDS: Final = frozenset({"criteria", "successes", "passed"})
+_REQUESTED_CASE_FIELDS: Final = frozenset({"case_id", "seeds"})
+_REPORT_FIELDS_V3: Final = frozenset(
+    {
+        "report_schema_version",
+        "status",
+        "status_reason",
+        "started_at",
+        "finished_at",
+        "suite",
+        "configuration",
+        "requested_cases",
+        "case_results",
+        "aggregate",
+        "acceptance",
+    }
+)
+_RUN_CONFIGURATION_FIELDS: Final = frozenset(
+    {
+        "model",
+        "policy_version",
+        "knowledge_version",
+        "nle_version",
+        "environment",
+        "character",
+        "max_episode_steps",
+        "ollama_num_ctx",
+    }
+)
 
 
 def render_report_markdown(payload: dict[str, object]) -> str:
-    """Render a current-schema report JSON payload, the single source of truth.
+    """Strictly render report schema 2 or 3 from its JSON source of truth."""
+    version = integer_value(
+        payload.get("report_schema_version"), "report_schema_version"
+    )
+    if version == LEGACY_REPORT_SCHEMA_VERSION:
+        return _render_report_markdown_v2(payload)
+    if version == REPORT_SCHEMA_VERSION:
+        return _render_report_markdown_v3(payload)
+    raise ContractError(
+        "report_schema_version must be "
+        f"{LEGACY_REPORT_SCHEMA_VERSION} or {REPORT_SCHEMA_VERSION}"
+    )
 
-    Reads the payload strictly, so a persisted report can be re-rendered without
-    the raw latency samples that only exist in memory during a run. An aborted
-    report is never shown as accepted, whatever its recorded acceptance says.
-    """
-    report = object_value(payload, "evaluation report", _REPORT_FIELDS)
+
+def _render_report_markdown_v2(payload: dict[str, object]) -> str:
+    """Render schema 2 exactly as before report schema 3 was introduced."""
+    report = object_value(payload, "evaluation report", _REPORT_FIELDS_V2)
     version = integer_value(report["report_schema_version"], "report_schema_version")
-    if version != REPORT_SCHEMA_VERSION:
-        raise ContractError(f"report_schema_version must be {REPORT_SCHEMA_VERSION}")
+    if version != LEGACY_REPORT_SCHEMA_VERSION:
+        raise ContractError(
+            f"report_schema_version must be {LEGACY_REPORT_SCHEMA_VERSION}"
+        )
     status = enum_value(report["status"], "report status", ReportStatus)
     reason = _optional_text(report["status_reason"], "report status_reason")
     if status is ReportStatus.ABORTED and reason is None:
         raise ContractError("an aborted report requires a status_reason")
-    suite = object_value(report["suite"], "report suite", _SUITE_FIELDS)
+    suite = object_value(report["suite"], "report suite", _SUITE_FIELDS_V2)
     criteria = object_value(
         suite["acceptance"], "suite acceptance", _ACCEPTANCE_CRITERIA_FIELDS
     )
@@ -1008,7 +1901,7 @@ def render_report_markdown(payload: dict[str, object]) -> str:
     problems: list[tuple[int, str]] = []
     errors: list[tuple[int, str]] = []
     for item in array_value(report["results"], "report results"):
-        result = object_value(item, "report result", _RESULT_FIELDS)
+        result = object_value(item, "report result", _RESULT_FIELDS_V2)
         seed = integer_value(result["seed"], "result seed")
         stats = object_value(result["decisions"], "result decisions", _DECISION_FIELDS)
         sources = _integer_map(result["selection_sources"], "result selection_sources")
@@ -1074,6 +1967,545 @@ def render_report_markdown(payload: dict[str, object]) -> str:
         lines.extend(f"- Seed {seed}: {problem}" for seed, problem in problems)
         lines.extend(f"- Seed {seed} error: {error}" for seed, error in errors)
     return "\n".join(lines) + "\n"
+
+
+def _render_report_markdown_v3(payload: dict[str, object]) -> str:
+    report = object_value(payload, "evaluation report", _REPORT_FIELDS_V3)
+    if (
+        integer_value(report["report_schema_version"], "report_schema_version")
+        != REPORT_SCHEMA_VERSION
+    ):
+        raise ContractError(f"report_schema_version must be {REPORT_SCHEMA_VERSION}")
+    status = enum_value(report["status"], "report status", ReportStatus)
+    reason = _optional_text(report["status_reason"], "report status_reason")
+    if status is ReportStatus.ABORTED and reason is None:
+        raise ContractError("an aborted report requires a status_reason")
+    suite, suite_id, policy, knowledge_id, suite_cases = _validated_report_suite_v3(
+        report["suite"]
+    )
+
+    configuration = object_value(
+        report["configuration"], "report configuration", _REPORT_CONFIGURATION_FIELDS
+    )
+    model_mode = string_value(configuration["model_mode"], "model_mode")
+    model = string_value(configuration["model"], "model")
+    configured_policy = string_value(configuration["policy_version"], "policy_version")
+    knowledge = string_value(configuration["knowledge_version"], "knowledge")
+    num_ctx = integer_value(
+        configuration["ollama_num_ctx"], "ollama_num_ctx", minimum=1
+    )
+    string_value(configuration["data_directory"], "data_directory", minimum=1)
+    if configured_policy != policy:
+        raise ContractError("report policy does not match its suite pin")
+    if knowledge_id is not None and knowledge.split("+sha256:", 1)[0] != knowledge_id:
+        raise ContractError("report knowledge does not match its suite pin")
+
+    requested: dict[str, list[int]] = {}
+    for item in array_value(report["requested_cases"], "report requested_cases"):
+        request = object_value(item, "report requested case", _REQUESTED_CASE_FIELDS)
+        case_id = string_value(request["case_id"], "requested case_id")
+        if case_id not in suite_cases or case_id in requested:
+            raise ContractError("requested case ids must name each suite case once")
+        seeds = _integers(request["seeds"], f"requested case {case_id} seeds")
+        if not seeds or len(seeds) != len(set(seeds)):
+            raise ContractError("requested case seeds must be unique and nonempty")
+        if not set(seeds) <= set(suite_cases[case_id][1]):
+            raise ContractError("requested case seeds must belong to the suite case")
+        requested[case_id] = seeds
+    if set(requested) != set(suite_cases):
+        raise ContractError("requested_cases must contain every suite case")
+
+    acceptance = object_value(
+        report["acceptance"], "report acceptance", _ACCEPTANCE_FIELDS
+    )
+    checks = _boolean_map(acceptance["checks"], "acceptance checks")
+    reasons = [
+        string_value(item, "acceptance reason")
+        for item in array_value(acceptance["reasons"], "acceptance reasons")
+    ]
+    boolean_value(acceptance["development_model"], "acceptance development_model")
+    aborted = status is ReportStatus.ABORTED
+    passed = boolean_value(acceptance["passed"], "acceptance passed") and not aborted
+    accepted = (
+        boolean_value(acceptance["milestone_accepted"], "milestone_accepted")
+        and not aborted
+    )
+    if aborted:
+        reasons.insert(
+            0, f"report aborted ({reason}); aborted reports are never accepted"
+        )
+    aggregate = _validated_aggregate(report["aggregate"], "report aggregate")
+    finished_at = _optional_text(report["finished_at"], "report finished_at")
+    lines = [
+        f"# Evaluation report: {suite_id}",
+        "",
+        f"- Status: {status.value}",
+    ]
+    if reason is not None:
+        lines.append(f"- Status reason: {reason}")
+    lines.extend(
+        [
+            f"- Started: {string_value(report['started_at'], 'report started_at')}",
+            f"- Finished: {finished_at or 'not finished'}",
+            f"- Suite: `{string_value(suite['path'], 'suite path')}` "
+            f"(sha256 `{string_value(suite['sha256'], 'suite sha256')}`)",
+            f"- Model mode: {model_mode}; model `{model}`",
+            f"- Policy pin: `{policy}`",
+            "- Knowledge pin: "
+            f"`{knowledge_id or knowledge.split('+sha256:', 1)[0]}`; "
+            f"loaded `{knowledge}`",
+            f"- Ollama num_ctx: {num_ctx}",
+            "",
+            f"## Acceptance: {'PASS' if passed else 'FAIL'}",
+            "",
+            f"Milestone accepted: {'yes' if accepted else 'no'}.",
+            "",
+            "| Check | Result |",
+            "| --- | --- |",
+        ]
+    )
+    lines.extend(
+        f"| {_md_cell(name)} | {'pass' if value else 'fail'} |"
+        for name, value in sorted(checks.items())
+    )
+    if reasons:
+        lines.extend(["", *[f"- {_md_cell(item)}" for item in reasons]])
+
+    seen_case_reports: set[str] = set()
+    all_problems: list[tuple[str, int, str]] = []
+    all_errors: list[tuple[str, int, str]] = []
+    for item in array_value(report["case_results"], "report case_results"):
+        case_report = object_value(item, "report case", _CASE_REPORT_FIELDS)
+        case_id = string_value(case_report["case_id"], "report case_id")
+        if case_id not in suite_cases or case_id in seen_case_reports:
+            raise ContractError("case_results must name every suite case once")
+        seen_case_reports.add(case_id)
+        task, seeds, cap, suite_criteria = suite_cases[case_id]
+        if (
+            TaskSpec.from_json(case_report["task"], f"report case {case_id} task")
+            != task
+        ):
+            raise ContractError(f"report case {case_id} task differs from the suite")
+        if (
+            integer_value(
+                case_report["max_episode_steps"],
+                f"report case {case_id} max_episode_steps",
+            )
+            != cap
+        ):
+            raise ContractError(
+                f"report case {case_id} step cap differs from the suite"
+            )
+        requested_seeds = _integers(
+            case_report["requested_seeds"],
+            f"report case {case_id} requested_seeds",
+        )
+        if requested_seeds != requested[case_id]:
+            raise ContractError(
+                f"report case {case_id} requested seeds differ from requested_cases"
+            )
+        case_acceptance = object_value(
+            case_report["acceptance"],
+            f"report case {case_id} acceptance",
+            _CASE_REPORT_ACCEPTANCE_FIELDS,
+        )
+        criteria = object_value(
+            case_acceptance["criteria"],
+            f"report case {case_id} acceptance criteria",
+            _CASE_ACCEPTANCE_FIELDS,
+        )
+        if criteria != suite_criteria:
+            raise ContractError(
+                f"report case {case_id} acceptance differs from the suite"
+            )
+        successes = integer_value(
+            case_acceptance["successes"],
+            f"report case {case_id} successes",
+            minimum=0,
+        )
+        case_passed = boolean_value(
+            case_acceptance["passed"], f"report case {case_id} passed"
+        )
+        case_aggregate = _validated_aggregate(
+            case_report["aggregate"], f"report case {case_id} aggregate"
+        )
+        results = [
+            _validated_result_v3(result, case_id)
+            for result in array_value(
+                case_report["results"], f"report case {case_id} results"
+            )
+        ]
+        result_seeds = [
+            integer_value(result["seed"], "result seed") for result in results
+        ]
+        if len(result_seeds) != len(set(result_seeds)) or not set(result_seeds) <= set(
+            seeds
+        ):
+            raise ContractError(
+                f"report case {case_id} result seeds must be unique suite seeds"
+            )
+        task_json = json.dumps(task.to_json(), sort_keys=True, separators=(",", ":"))
+        lines.extend(
+            [
+                "",
+                f"## Case `{case_id}`: {'PASS' if case_passed else 'FAIL'}",
+                "",
+                f"- Task: `{task_json}`",
+                f"- Step cap: {cap}",
+                f"- Requested seed order: {requested_seeds}",
+                f"- Successes: {successes}/{len(seeds)} (required "
+                f"{suite_criteria['min_successes']}, including "
+                f"{suite_criteria['required_success_seeds']}).",
+                "",
+                "| Seed | Outcome | Success | Steps/turns | Depth/level | "
+                "Levels | Down/up | Probes/misses | Other changes | Legs | "
+                "Gold/score/return | Hunger | HP/XL | Death | Integrity |",
+                "| ---: | --- | --- | ---: | --- | ---: | --- | --- | ---: | "
+                "---: | --- | --- | --- | --- | --- |",
+            ]
+        )
+        for result in results:
+            seed = integer_value(result["seed"], "result seed")
+            outcome = _optional_text(result["outcome"], "result outcome")
+            metrics = EpisodeMetrics.from_json(result["metrics"])
+            success = (
+                outcome == RunOutcome.TASK_SUCCESS.value
+                if task.environment is NleTask.STAIRCASE
+                else metrics.objective_legs_completed == len(task.objective.legs)
+            )
+            deepest = (
+                "-"
+                if metrics.deepest_level is None
+                else (
+                    f"{metrics.deepest_level.dungeon_number}/"
+                    f"{metrics.deepest_level.dungeon_level}"
+                )
+            )
+            hunger = ",".join(state.value for state in metrics.hunger_states) or "-"
+            integrity = boolean_value(result["integrity_ok"], "integrity_ok")
+            lines.append(
+                f"| {seed} | {outcome or '-'} | {'yes' if success else 'no'} "
+                f"| {metrics.steps}/{metrics.game_turns} "
+                f"| {metrics.max_depth}/{deepest} "
+                f"| {len(metrics.levels_visited)} "
+                f"| {metrics.down_stair_traversals}/{metrics.up_stair_traversals} "
+                f"| {metrics.unknown_stair_probes}/{metrics.probe_misses} "
+                f"| {metrics.level_changes_without_stair_action} "
+                f"| {metrics.objective_legs_completed}/{len(task.objective.legs)} "
+                f"| {metrics.final_gold}/{metrics.final_score}/"
+                f"{metrics.task_return:.3f} "
+                f"| {_md_cell(hunger)} "
+                f"| {metrics.final_hit_points}/{metrics.final_experience_level} "
+                f"| {_md_cell(metrics.death_cause)} "
+                f"| {'ok' if integrity else 'FAIL'} |"
+            )
+            all_problems.extend(
+                (case_id, seed, string_value(problem, "integrity problem"))
+                for problem in array_value(
+                    result["integrity_problems"], "result integrity_problems"
+                )
+            )
+            error = _optional_text(result["error"], "result error")
+            if error is not None:
+                all_errors.append((case_id, seed, error))
+        case_wall = number_value(case_aggregate["total_wall_seconds"], "case wall time")
+        lines.extend(
+            [
+                "",
+                f"- Case steps: {integer_value(case_aggregate['steps'], 'case steps')}",
+                f"- Case wall time: {case_wall} s",
+            ]
+        )
+    if seen_case_reports != set(suite_cases):
+        raise ContractError("case_results must contain every suite case")
+
+    decisions = object_value(
+        aggregate["decisions"], "aggregate decisions", _DECISION_FIELDS
+    )
+    evaluated_episodes = integer_value(
+        aggregate["evaluated_seeds"], "evaluated episodes"
+    )
+    successful_episodes = integer_value(
+        aggregate["task_successes"], "successful episodes"
+    )
+    failed_decisions = integer_value(decisions["failed_decisions"], "failed decisions")
+    repaired_decisions = integer_value(
+        decisions["repaired_decisions"], "repaired decisions"
+    )
+    lines.extend(
+        [
+            "",
+            "## Aggregate",
+            "",
+            f"- Evaluated episodes: {evaluated_episodes}",
+            f"- Successful episodes: {successful_episodes}",
+            f"- Total steps: {integer_value(aggregate['steps'], 'aggregate steps')}",
+            "- Total wall time: "
+            f"{number_value(aggregate['total_wall_seconds'], 'aggregate wall time')} s",
+            "- Model decisions: "
+            f"{integer_value(decisions['model_decisions'], 'model decisions')} "
+            f"(failed {failed_decisions}, "
+            f"repaired {repaired_decisions})",
+            "- Decision latency p50/p95/max: "
+            f"{_optional_number(decisions['latency_p50_ms'], 'p50')}/"
+            f"{_optional_number(decisions['latency_p95_ms'], 'p95')}/"
+            f"{_optional_number(decisions['latency_max_ms'], 'max')} ms",
+            "- Tokens prompt/output: "
+            f"{integer_value(decisions['prompt_tokens'], 'prompt tokens')}/"
+            f"{integer_value(decisions['output_tokens'], 'output tokens')}",
+        ]
+    )
+    if all_problems or all_errors:
+        lines.extend(["", "## Problems", ""])
+        lines.extend(
+            f"- {case_id} seed {seed}: {_md_cell(problem)}"
+            for case_id, seed, problem in all_problems
+        )
+        lines.extend(
+            f"- {case_id} seed {seed} error: {_md_cell(error)}"
+            for case_id, seed, error in all_errors
+        )
+    return "\n".join(lines) + "\n"
+
+
+def _validated_report_suite_v3(
+    value: object,
+) -> tuple[
+    dict[str, object],
+    str,
+    str,
+    str | None,
+    dict[str, tuple[TaskSpec, tuple[int, ...], int, dict[str, object]]],
+]:
+    if not isinstance(value, dict):
+        raise ContractError("report suite must be an object")
+    legacy = "schema_version" not in value
+    suite = object_value(
+        value,
+        "report suite",
+        _SUITE_FIELDS_V2 if legacy else _SUITE_FIELDS_V3,
+    )
+    suite_id = _suite_identifier(suite["suite_id"], "report suite_id")
+    string_value(suite["path"], "report suite path", minimum=1)
+    string_value(suite["sha256"], "report suite sha256", minimum=64, maximum=64)
+    character = string_value(suite["character"], "report suite character")
+    if character != CHARACTER:
+        raise ContractError(f"report suite character must be {CHARACTER}")
+    _suite_text(suite["seed_selection"], "report suite seed_selection")
+    _suite_text(suite["step_cap_rationale"], "report suite step_cap_rationale")
+    suite_cases: dict[
+        str, tuple[TaskSpec, tuple[int, ...], int, dict[str, object]]
+    ] = {}
+    if legacy:
+        if (
+            string_value(suite["environment"], "report suite environment")
+            != STAIRCASE_TASK.environment.value
+        ):
+            raise ContractError("legacy report suite must use NetHackStaircase-v0")
+        seeds = tuple(_integers(suite["seeds"], "report suite seeds"))
+        if not seeds or len(seeds) != len(set(seeds)):
+            raise ContractError("report suite seeds must be unique and nonempty")
+        cap = integer_value(
+            suite["max_episode_steps"],
+            "report suite max_episode_steps",
+            minimum=1,
+            maximum=100_000,
+        )
+        old = object_value(
+            suite["acceptance"],
+            "report suite acceptance",
+            _ACCEPTANCE_CRITERIA_FIELDS,
+        )
+        minimum = integer_value(
+            old["min_task_successes"],
+            "report suite min_task_successes",
+            minimum=1,
+            maximum=len(seeds),
+        )
+        required = _integers(
+            old["required_success_seeds"],
+            "report suite required_success_seeds",
+        )
+        if len(required) != len(set(required)) or not set(required) <= set(seeds):
+            raise ContractError(
+                "report suite required seeds must be unique suite seeds"
+            )
+        integer_value(
+            old["max_invalid_actions"],
+            "report suite max_invalid_actions",
+            minimum=0,
+        )
+        integer_value(
+            old["max_gate_rejections"],
+            "report suite max_gate_rejections",
+            minimum=0,
+        )
+        boolean_value(
+            old["require_complete_records"],
+            "report suite require_complete_records",
+        )
+        suite_cases["staircase"] = (
+            STAIRCASE_TASK,
+            seeds,
+            cap,
+            {
+                "min_successes": minimum,
+                "required_success_seeds": required,
+            },
+        )
+        return suite, suite_id, SCHEMA_1_POLICY_VERSION, None, suite_cases
+
+    if integer_value(suite["schema_version"], "suite schema_version") != 2:
+        raise ContractError("schema-3 reports require suite schema version 2")
+    policy = _suite_identifier(suite["policy_version"], "report suite policy_version")
+    knowledge_id = _suite_identifier(
+        suite["knowledge_bundle_id"], "report suite knowledge_bundle_id"
+    )
+    global_criteria = object_value(
+        suite["acceptance"], "report suite acceptance", _GLOBAL_ACCEPTANCE_FIELDS
+    )
+    integer_value(
+        global_criteria["max_invalid_actions"],
+        "report suite max_invalid_actions",
+        minimum=0,
+    )
+    integer_value(
+        global_criteria["max_gate_rejections"],
+        "report suite max_gate_rejections",
+        minimum=0,
+    )
+    boolean_value(
+        global_criteria["require_complete_records"],
+        "report suite require_complete_records",
+    )
+    for index, item in enumerate(array_value(suite["cases"], "report suite cases")):
+        case = object_value(item, f"report suite case {index}", _SUITE_CASE_FIELDS)
+        case_id = _suite_identifier(case["case_id"], f"report suite case {index} id")
+        if case_id in suite_cases:
+            raise ContractError("report suite case_id values must be unique")
+        task = TaskSpec.from_json(case["task"], f"report suite case {case_id} task")
+        seeds = tuple(_integers(case["seeds"], f"report suite case {case_id} seeds"))
+        if not seeds or len(seeds) != len(set(seeds)):
+            raise ContractError(
+                f"report suite case {case_id} seeds must be unique and nonempty"
+            )
+        cap = integer_value(
+            case["max_episode_steps"],
+            f"report suite case {case_id} max_episode_steps",
+            minimum=1,
+            maximum=100_000,
+        )
+        criteria = object_value(
+            case["acceptance"],
+            f"report suite case {case_id} acceptance",
+            _CASE_ACCEPTANCE_FIELDS,
+        )
+        minimum = integer_value(
+            criteria["min_successes"],
+            f"report suite case {case_id} min_successes",
+            minimum=1,
+            maximum=len(seeds),
+        )
+        required = _integers(
+            criteria["required_success_seeds"],
+            f"report suite case {case_id} required_success_seeds",
+        )
+        if len(required) != len(set(required)) or not set(required) <= set(seeds):
+            raise ContractError(
+                f"report suite case {case_id} required seeds must be unique case seeds"
+            )
+        suite_cases[case_id] = (
+            task,
+            seeds,
+            cap,
+            {
+                "min_successes": minimum,
+                "required_success_seeds": required,
+            },
+        )
+    if not suite_cases:
+        raise ContractError("report suite cases must not be empty")
+    return suite, suite_id, policy, knowledge_id, suite_cases
+
+
+def _validated_aggregate(value: object, name: str) -> dict[str, object]:
+    aggregate = object_value(value, name, _AGGREGATE_FIELDS)
+    for field_name in (
+        "evaluated_seeds",
+        "task_successes",
+        "steps",
+        "gate_rejections",
+        "decision_failures",
+        "invalid_actions",
+    ):
+        integer_value(aggregate[field_name], f"{name} {field_name}", minimum=0)
+    number_value(aggregate["total_wall_seconds"], f"{name} total_wall_seconds")
+    decisions = object_value(
+        aggregate["decisions"], f"{name} decisions", _DECISION_FIELDS
+    )
+    for field_name in (
+        "model_decisions",
+        "failed_decisions",
+        "repaired_decisions",
+        "latency_samples",
+        "prompt_tokens",
+        "output_tokens",
+    ):
+        integer_value(
+            decisions[field_name], f"{name} decisions {field_name}", minimum=0
+        )
+    for field_name in ("latency_p50_ms", "latency_p95_ms", "latency_max_ms"):
+        _optional_number(decisions[field_name], f"{name} decisions {field_name}")
+    _integer_map(aggregate["outcomes"], f"{name} outcomes")
+    _integer_map(aggregate["selection_sources"], f"{name} selection_sources")
+    array_value(aggregate["integrity_failures"], f"{name} integrity_failures")
+    return aggregate
+
+
+def _validated_result_v3(value: object, case_id: str) -> dict[str, object]:
+    result = object_value(value, "report result", _RESULT_FIELDS_V3)
+    if string_value(result["case_id"], "result case_id") != case_id:
+        raise ContractError("report result case_id differs from its case")
+    integer_value(result["seed"], "result seed", minimum=1)
+    _optional_text(result["run_id"], "result run_id")
+    if result["outcome"] is not None:
+        enum_value(result["outcome"], "result outcome", RunOutcome)
+    if result["final_state"] is not None:
+        enum_value(result["final_state"], "result final_state", RunState)
+    string_value(result["ended_by"], "result ended_by", minimum=1)
+    steps = integer_value(result["steps"], "result steps", minimum=0)
+    metrics = EpisodeMetrics.from_json(result["metrics"])
+    if steps != metrics.steps:
+        raise ContractError("result steps must equal episode metrics steps")
+    number_value(result["wall_seconds"], "result wall_seconds")
+    object_value(result["decisions"], "result decisions", _DECISION_FIELDS)
+    _integer_map(result["selection_sources"], "result selection_sources")
+    for field_name in (
+        "gate_rejections",
+        "decision_failures",
+        "invalid_actions",
+        "event_count",
+    ):
+        integer_value(result[field_name], f"result {field_name}", minimum=0)
+    _optional_text(result["error"], "result error")
+    _optional_text(result["ttyrec_path"], "result ttyrec_path")
+    boolean_value(result["ttyrec_exists"], "result ttyrec_exists")
+    boolean_value(result["integrity_ok"], "result integrity_ok")
+    [
+        string_value(item, "result integrity problem")
+        for item in array_value(
+            result["integrity_problems"], "result integrity_problems"
+        )
+    ]
+    configuration = result["configuration"]
+    if configuration is not None:
+        object_value(configuration, "result configuration", _RUN_CONFIGURATION_FIELDS)
+    _optional_text(result["ollama_version"], "result ollama_version")
+    return result
+
+
+def _md_cell(value: str) -> str:
+    return value.replace("|", "\\|").replace("\n", " ")
 
 
 def _optional_text(value: object, name: str) -> str | None:
@@ -1162,9 +2594,9 @@ def finalize_aborted_report(json_path: Path, reason: str) -> ReportPaths:
     """Mark an existing unfinished report pair operator-aborted in place.
 
     Every recorded value (results, aggregate, acceptance, configuration and
-    timestamps) is kept verbatim; results are never re-audited. Only the status,
-    the status reason and the schema version change, and both the JSON and its
-    sibling Markdown are rewritten atomically. No file is created or deleted.
+    timestamps) is kept verbatim; results are never re-audited. Only the status
+    and status reason change (schema 1 gains schema 2's reason field), and both
+    the JSON and its sibling Markdown are rewritten atomically.
     """
     status_reason = reason.strip()
     if not 1 <= len(status_reason) <= MAX_STATUS_REASON_LENGTH:
@@ -1188,15 +2620,19 @@ def finalize_aborted_report(json_path: Path, reason: str) -> ReportPaths:
         version = integer_value(
             payload.get("report_schema_version"), "report_schema_version"
         )
-        if version not in (1, REPORT_SCHEMA_VERSION):
+        if version not in (1, LEGACY_REPORT_SCHEMA_VERSION, REPORT_SCHEMA_VERSION):
             raise ContractError(
-                f"report_schema_version must be 1 or {REPORT_SCHEMA_VERSION}"
+                "report_schema_version must be 1, "
+                f"{LEGACY_REPORT_SCHEMA_VERSION}, or {REPORT_SCHEMA_VERSION}"
             )
-        object_value(
-            payload,
-            "evaluation report",
-            _REPORT_FIELDS_V1 if version == 1 else _REPORT_FIELDS,
+        fields = (
+            _REPORT_FIELDS_V1
+            if version == 1
+            else _REPORT_FIELDS_V2
+            if version == LEGACY_REPORT_SCHEMA_VERSION
+            else _REPORT_FIELDS_V3
         )
+        object_value(payload, "evaluation report", fields)
         status = enum_value(payload["status"], "report status", ReportStatus)
         if status not in _ABORTABLE_STATUSES:
             raise EvaluationError(
@@ -1205,7 +2641,9 @@ def finalize_aborted_report(json_path: Path, reason: str) -> ReportPaths:
             )
         finalized = {
             **payload,
-            "report_schema_version": REPORT_SCHEMA_VERSION,
+            "report_schema_version": (
+                LEGACY_REPORT_SCHEMA_VERSION if version == 1 else version
+            ),
             "status": ReportStatus.ABORTED.value,
             "status_reason": status_reason,
         }
@@ -1257,12 +2695,29 @@ def _development_model(_client: OllamaClient) -> ScriptedDevelopmentModel:
 
 def require_suite_policy(suite: EvaluationSuite, policy_version: str) -> None:
     """Refuse to evaluate a suite under a policy it was not fixed for."""
-    if policy_version != SCHEMA_1_POLICY_VERSION:
+    if policy_version == suite.policy_version:
+        return
+    reproduction = (
+        f"; check out a commit with policy {SCHEMA_1_POLICY_VERSION} to reproduce it"
+        if suite.legacy
+        else ""
+    )
+    raise SuiteValidationError(
+        f"suite {suite.suite_id} (schema {suite.schema_version}) is bound to "
+        f"policy {suite.policy_version}, but this checkout runs policy "
+        f"{policy_version}{reproduction}"
+    )
+
+
+def require_suite_configuration(
+    suite: EvaluationSuite, policy_version: str, knowledge_bundle_id: str
+) -> None:
+    require_suite_policy(suite, policy_version)
+    if not suite.legacy and suite.knowledge_bundle_id != knowledge_bundle_id:
         raise SuiteValidationError(
-            f"suite {suite.suite_id} (schema {SUITE_SCHEMA_VERSION}) is bound to "
-            f"policy {SCHEMA_1_POLICY_VERSION}, but this checkout runs policy "
-            f"{policy_version}; check out a commit with policy "
-            f"{SCHEMA_1_POLICY_VERSION} to reproduce it"
+            f"suite {suite.suite_id} (schema {suite.schema_version}) is bound to "
+            f"knowledge bundle {suite.knowledge_bundle_id}, but this checkout "
+            f"loads {knowledge_bundle_id}"
         )
 
 
@@ -1273,7 +2728,8 @@ def run_evaluation(
     progress: TextIO | None = sys.stderr,
 ) -> EvaluationRun:
     suite = options.suite
-    require_suite_policy(suite, POLICY_VERSION)
+    knowledge_bundle = load_default_knowledge_bundle()
+    require_suite_configuration(suite, POLICY_VERSION, knowledge_bundle.bundle_id)
     if options.development_scripted_model:
         config = OllamaConfig(model=DEVELOPMENT_MODEL_NAME)
         model_factory: ModelFactory | None = _development_model
@@ -1287,7 +2743,12 @@ def run_evaluation(
         model_factory = None
         mode = "ollama"
 
-    manager = RunManager(options.data_directory, config, model_factory=model_factory)
+    manager = RunManager(
+        options.data_directory,
+        config,
+        model_factory=model_factory,
+        knowledge_bundle=knowledge_bundle,
+    )
     started_at = _utc_now()
     report = EvaluationReport(
         suite=suite,
@@ -1305,17 +2766,23 @@ def run_evaluation(
     writer = ReportWriter(options.report_directory, stem)
     log = _Progress(progress)
     interrupted = False
+    episodes = [
+        (case, seed)
+        for case in suite.cases
+        for seed in report.requested_seeds
+        if seed in case.seeds
+    ]
     try:
         writer.write(report)
-        order = report.requested_seeds
-        for position, seed in enumerate(order, start=1):
-            log(f"seed {seed} ({position}/{len(order)}) starting")
-            result, interrupted = _evaluate_seed(manager, options, seed, log)
+        for position, (case, seed) in enumerate(episodes, start=1):
+            label = f"{case.case_id} seed {seed}"
+            log(f"{label} ({position}/{len(episodes)}) starting")
+            result, interrupted = _evaluate_seed(manager, options, case, seed, log)
             report.results.append(result)
             writer.write(report)
             stats = result.decision_stats
             log(
-                f"seed {seed} ({position}/{len(order)}) "
+                f"{label} ({position}/{len(episodes)}) "
                 f"{result.outcome.value if result.outcome else 'no outcome'} "
                 f"after {result.steps} steps in {result.wall_seconds:.1f}s; "
                 f"{stats.decisions} model decisions, p50 "
@@ -1336,9 +2803,12 @@ def run_evaluation(
                 ReportStatus.INTERRUPTED
                 if interrupted
                 else ReportStatus.FAILED
-                if len(report.results) != len(report.requested_seeds)
+                if len(report.results) != len(episodes)
                 else ReportStatus.COMPLETE
-                if set(report.requested_seeds) == set(suite.seeds)
+                if all(
+                    set(report._requested_for_case(case)) == set(case.seeds)
+                    for case in suite.cases
+                )
                 else ReportStatus.PARTIAL
             )
             writer.write(report)
@@ -1351,6 +2821,7 @@ def run_evaluation(
 def _evaluate_seed(
     manager: RunManager,
     options: EvaluationOptions,
+    case: EvaluationCase,
     seed: int,
     log: Callable[[str], None],
 ) -> tuple[SeedResult, bool]:
@@ -1361,7 +2832,10 @@ def _evaluate_seed(
     ended_by = "episode_end"
     try:
         created = manager.create_run(
-            seed=seed, max_episode_steps=suite.max_episode_steps, auto_start=True
+            seed=seed,
+            max_episode_steps=case.max_episode_steps,
+            auto_start=True,
+            task=case.task,
         )
         run_id = created.id
         settled = _wait_until_settled(manager.store, run_id, seed, options, log)
@@ -1379,7 +2853,11 @@ def _evaluate_seed(
         if run_id is None:
             return (
                 _creation_failure(
-                    seed, str(error), time.monotonic() - started, "create_failed"
+                    case.case_id,
+                    seed,
+                    str(error),
+                    time.monotonic() - started,
+                    "create_failed",
                 ),
                 False,
             )
@@ -1387,6 +2865,7 @@ def _evaluate_seed(
     if run_id is None:
         return (
             _creation_failure(
+                case.case_id,
                 seed,
                 "interrupted before run creation",
                 time.monotonic() - started,
@@ -1406,6 +2885,7 @@ def _evaluate_seed(
             ended_by=ended_by,
             wall_seconds=wall_seconds,
             data_directory=options.data_directory,
+            case=case,
         ),
         interrupted,
     )
@@ -1471,7 +2951,7 @@ def _all_events(store: RunStore, run_id: str) -> tuple[RunEvent, ...]:
 
 
 def _creation_failure(
-    seed: int, error: str, wall_seconds: float, ended_by: str
+    case_id: str, seed: int, error: str, wall_seconds: float, ended_by: str
 ) -> SeedResult:
     return SeedResult(
         seed=seed,
@@ -1493,6 +2973,7 @@ def _creation_failure(
         integrity_problems=(f"run was not created: {error}",),
         configuration=None,
         ollama_version=None,
+        case_id=case_id,
     )
 
 

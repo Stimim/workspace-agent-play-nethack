@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from nethack_agent import evaluation, run_manager
+from nethack_agent.contracts import ContractError
 from nethack_agent.decision import DecisionMetrics, RunOutcome, RunState
 from nethack_agent.evaluation import (
     SCHEMA_1_POLICY_VERSION,
@@ -37,9 +38,13 @@ from nethack_agent.ollama import OllamaConfig
 from nethack_agent.run_manager import RunManager
 from nethack_agent.storage import RunRecord, RunStore
 from nethack_agent.tasks import ActionProfile, NleTask, TaskSpec
-from nethack_agent.traversal import LevelKey, Objective, ReachLevelLeg
+from nethack_agent.traversal import EnterDungeonLeg, LevelKey, Objective
 
 SUITE_PATH = Path(__file__).resolve().parents[1] / "evaluation" / "staircase-v1.json"
+STAIRCASE_V2_PATH = (
+    Path(__file__).resolve().parents[1] / "evaluation" / "staircase-v2.json"
+)
+REPORT_DIRECTORY = Path(__file__).resolve().parents[1] / "evaluation" / "reports"
 
 
 @pytest.fixture
@@ -55,6 +60,10 @@ def bound_policy(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def suite_payload() -> dict[str, object]:
     return json.loads(SUITE_PATH.read_text(encoding="utf-8"))
+
+
+def suite_2_payload() -> dict[str, object]:
+    return json.loads(STAIRCASE_V2_PATH.read_text(encoding="utf-8"))
 
 
 def write_suite(tmp_path: Path, payload: dict[str, object]) -> Path:
@@ -130,6 +139,67 @@ def test_committed_suite_is_valid_and_fixed() -> None:
     assert suite.acceptance.max_invalid_actions == 0
     assert suite.acceptance.max_gate_rejections == 0
     assert suite.acceptance.require_complete_records
+
+
+def test_committed_schema_2_suite_pins_policy_knowledge_and_case_task() -> None:
+    suite = load_suite(STAIRCASE_V2_PATH)
+
+    assert suite.schema_version == 2
+    assert suite.policy_version == run_manager.POLICY_VERSION
+    assert suite.knowledge_bundle_id == "staircase-reviewed-v3"
+    assert [case.case_id for case in suite.cases] == ["staircase"]
+    assert suite.cases[0].task.environment is NleTask.STAIRCASE
+    assert suite.cases[0].acceptance.min_successes == 6
+    assert suite.cases[0].acceptance.required_success_seeds == (6,)
+
+
+@pytest.mark.parametrize("malformation", ["extra", "duplicate_case", "duplicate_seed"])
+def test_schema_2_suite_contract_is_strict(tmp_path: Path, malformation: str) -> None:
+    payload = suite_2_payload()
+    cases = payload["cases"]
+    assert isinstance(cases, list)
+    case = cases[0]
+    assert isinstance(case, dict)
+    if malformation == "extra":
+        case["unexpected"] = True
+    elif malformation == "duplicate_case":
+        cases.append(json.loads(json.dumps(case)))
+    else:
+        case["seeds"] = [1, 1]
+
+    with pytest.raises(SuiteValidationError):
+        load_suite(write_suite(tmp_path, payload))
+
+
+@pytest.mark.parametrize(
+    ("pin", "message"),
+    [
+        ("policy_version", "bound to policy"),
+        ("knowledge_bundle_id", "bound to knowledge bundle"),
+    ],
+)
+def test_schema_2_pin_mismatch_is_refused_before_writing(
+    tmp_path: Path, pin: str, message: str
+) -> None:
+    payload = suite_2_payload()
+    payload[pin] = "other-reviewed-v1"
+    suite = load_suite(write_suite(tmp_path, payload))
+    data_directory = tmp_path / "data"
+    report_directory = tmp_path / "reports"
+
+    with pytest.raises(SuiteValidationError, match=message):
+        run_evaluation(
+            EvaluationOptions(
+                suite=suite,
+                data_directory=data_directory,
+                report_directory=report_directory,
+                development_scripted_model=True,
+            ),
+            progress=None,
+        )
+
+    assert not data_directory.exists()
+    assert not report_directory.exists()
 
 
 @pytest.mark.parametrize(
@@ -277,8 +347,8 @@ def make_report(
         suite=load_suite(SUITE_PATH),
         model_mode="ollama",
         model="gemma4-nethack:latest",
-        policy_version="policy",
-        knowledge_version="knowledge",
+        policy_version=SCHEMA_1_POLICY_VERSION,
+        knowledge_version="staircase-reviewed-v2+sha256:" + "0" * 64,
         ollama_num_ctx=8192,
         requested_seeds=tuple(range(1, 11)),
         data_directory="data",
@@ -350,7 +420,7 @@ def test_report_writer_writes_world_readable_status_json(tmp_path: Path) -> None
     writer = written(tmp_path, make_report([result(1), result(2, error="boom")]))
 
     stored = json.loads(writer.paths.json.read_text(encoding="utf-8"))
-    assert stored["report_schema_version"] == 2
+    assert stored["report_schema_version"] == 3
     assert stored["status"] == ReportStatus.RUNNING.value
     assert stored["status_reason"] is None
     assert render_report_markdown(stored) == writer.paths.markdown.read_text(
@@ -360,16 +430,42 @@ def test_report_writer_writes_world_readable_status_json(tmp_path: Path) -> None
         assert stat.S_IMODE(path.stat().st_mode) == 0o644
 
 
-@pytest.mark.parametrize("schema_version", [1, 2])
-def test_abort_finalizes_unfinished_report_and_keeps_evidence(
-    tmp_path: Path, schema_version: int
-) -> None:
+@pytest.mark.parametrize("malformation", ["missing", "extra"])
+def test_schema_3_report_metrics_are_strict(malformation: str) -> None:
+    payload = make_report([result(1)]).to_json()
+    case_results = payload["case_results"]
+    assert isinstance(case_results, list)
+    case = case_results[0]
+    assert isinstance(case, dict)
+    results = case["results"]
+    assert isinstance(results, list)
+    seed_result = results[0]
+    assert isinstance(seed_result, dict)
+    metrics = seed_result["metrics"]
+    assert isinstance(metrics, dict)
+    if malformation == "missing":
+        del metrics["game_turns"]
+    else:
+        metrics["unexpected"] = True
+
+    with pytest.raises(ContractError, match="episode metrics fields are invalid"):
+        render_report_markdown(payload)
+
+
+def test_committed_schema_2_reports_still_render_byte_for_byte() -> None:
+    reports = sorted(REPORT_DIRECTORY.glob("staircase-v1-*.json"))
+    assert reports
+    for path in reports:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        assert payload["report_schema_version"] == 2
+        assert render_report_markdown(payload) == path.with_suffix(".md").read_text(
+            encoding="utf-8"
+        )
+
+
+def test_abort_finalizes_unfinished_report_and_keeps_evidence(tmp_path: Path) -> None:
     writer = written(tmp_path, interrupted_report())
     original = json.loads(writer.paths.json.read_text(encoding="utf-8"))
-    if schema_version == 1:
-        del original["status_reason"]
-        original["report_schema_version"] = 1
-        writer.paths.json.write_text(json.dumps(original), encoding="utf-8")
     writer.paths.json.chmod(0o600)
     writer.paths.markdown.chmod(0o600)
 
@@ -382,10 +478,10 @@ def test_abort_finalizes_unfinished_report_and_keeps_evidence(
         "suite-20260927T000000Z.md",
     ]
     stored = json.loads(paths.json.read_text(encoding="utf-8"))
-    assert stored["report_schema_version"] == 2
+    assert stored["report_schema_version"] == 3
     assert stored["status"] == "aborted"
     assert stored["status_reason"] == "policy replaced"
-    unchanged = {"status", "status_reason", "report_schema_version"}
+    unchanged = {"status", "status_reason"}
     assert {k: v for k, v in stored.items() if k not in unchanged} == {
         k: v for k, v in original.items() if k not in unchanged
     }
@@ -394,7 +490,7 @@ def test_abort_finalizes_unfinished_report_and_keeps_evidence(
     assert "- Finished: 2026-09-27T01:00:00+00:00" in markdown
     assert "## Acceptance: FAIL" in markdown
     assert "Milestone accepted: no." in markdown
-    assert "| 2 | stopped | interrupted | 4 |" in markdown
+    assert "## Case `staircase`" in markdown
     for path in (paths.json, paths.markdown):
         assert stat.S_IMODE(path.stat().st_mode) == 0o644
 
@@ -455,7 +551,7 @@ def test_abort_rejects_invalid_reasons(tmp_path: Path, reason: str) -> None:
 def test_abort_rejects_malformed_reports_without_writing(tmp_path: Path) -> None:
     writer = written(tmp_path, interrupted_report())
     payload = json.loads(writer.paths.json.read_text(encoding="utf-8"))
-    del payload["results"][0]["steps"]
+    del payload["case_results"][0]["results"][0]["steps"]
     writer.paths.json.write_text(json.dumps(payload), encoding="utf-8")
     markdown = writer.paths.markdown.read_bytes()
 
@@ -525,7 +621,7 @@ def test_development_evaluator_runs_real_nle_and_audits_records(
     stored = json.loads(run.paths.json.read_text(encoding="utf-8"))
     assert stored["status"] == "complete"
     assert stored["configuration"]["model_mode"] == "development_scripted"
-    assert len(stored["results"]) == 10
+    assert len(stored["case_results"][0]["results"]) == 10
     assert run.paths.markdown.is_file()
 
     first = report.results[0]
@@ -657,11 +753,11 @@ def test_audit_accepts_permitted_traversals_and_flags_unpermitted_ones(
     task = TaskSpec(
         NleTask.SCORE,
         ActionProfile.NLE_TASK_ACTIONS,
-        Objective((ReachLevelLeg(LevelKey(0, 3)), ReachLevelLeg(LevelKey(0, 1)))),
+        Objective((EnterDungeonLeg(2),)),
     )
     try:
         run_id = manager.create_run(
-            seed=6, max_episode_steps=600, auto_start=True, task=task
+            seed=4, max_episode_steps=600, auto_start=True, task=task
         ).id
         deadline = time.monotonic() + 120
         while manager.store.get_run(run_id).state is RunState.RUNNING:
@@ -670,21 +766,24 @@ def test_audit_accepts_permitted_traversals_and_flags_unpermitted_ones(
     finally:
         manager.close()
     store = RunStore(data_directory / "runs.sqlite3")
-    suite = replace(
-        load_suite(SUITE_PATH),
-        environment=NleTask.SCORE.value,
+    base_suite = load_suite(SUITE_PATH)
+    case = replace(
+        base_suite.cases[0],
+        task=task,
         max_episode_steps=600,
     )
+    suite = replace(base_suite, cases=(case,))
 
     def audit(record: RunRecord) -> SeedResult:
         return summarize_run(
             record,
             store.events_after(run_id, limit=1000),
             suite=suite,
-            seed=6,
+            seed=4,
             ended_by="terminal",
             wall_seconds=0.0,
             data_directory=data_directory,
+            case=case,
         )
 
     record = store.get_run(run_id)
@@ -693,23 +792,45 @@ def test_audit_accepts_permitted_traversals_and_flags_unpermitted_ones(
     assert result.integrity_problems == ()
     assert result.invalid_actions == 0
     assert result.gate_rejections == 0
+    assert result.metrics.objective_legs_completed == 1
+    assert result.metrics.down_stair_traversals == 3
+    assert result.metrics.up_stair_traversals == 1
+    assert result.metrics.deepest_level == LevelKey(0, 3)
+    assert result.metrics.final_hit_points > 0
 
-    # The same stored level changes are invalid for a run stored before task
-    # specs, which executed the staircase task.
-    assert audit(replace(record, task=None)).invalid_actions == 4
+    # The same stored level changes are invalid for a legacy run whose stored
+    # task would have prohibited every level change.
+    assert audit(replace(record, task=None)).invalid_actions > 0
 
-    # An intent that claims a staircase the hero was not standing on is
-    # caught against the observation the step was decided on.
+    # Unknown branch stairs require the recorded evidence that two stairs of
+    # that direction were known. Absence or false evidence never broadens the
+    # audit permit, and a mismatched destination coordinate is also rejected.
     with sqlite3.connect(data_directory / "runs.sqlite3") as connection:
         rowid, payload = next(
             (rowid, payload)
             for rowid, text in connection.execute(
                 "SELECT rowid, payload_json FROM events ORDER BY sequence"
             )
-            if (payload := json.loads(text)).get("action", {}).get("name")
-            == "MiscDirection.DOWN"
+            if isinstance(payload := json.loads(text), dict)
+            and isinstance(selection := payload.get("selection"), dict)
+            and isinstance(intent := selection.get("intent"), dict)
+            and isinstance(destination := intent.get("destination"), dict)
+            and isinstance(stair := destination.get("stair"), dict)
+            and stair.get("kind") == "unknown"
+            and payload.get("action", {}).get("name") == "MiscDirection.DOWN"
+            and destination.get("pair_known") is True
         )
-        payload["selection"]["intent"]["destination"]["x"] += 1
+        destination = payload["selection"]["intent"]["destination"]
+        destination["pair_known"] = False
+        connection.execute(
+            "UPDATE events SET payload_json = ? WHERE rowid = ?",
+            (json.dumps(payload), rowid),
+        )
+    assert audit(record).invalid_actions == 1
+
+    destination["pair_known"] = True
+    destination["x"] += 1
+    with sqlite3.connect(data_directory / "runs.sqlite3") as connection:
         connection.execute(
             "UPDATE events SET payload_json = ? WHERE rowid = ?",
             (json.dumps(payload), rowid),

@@ -1,0 +1,41 @@
+{
+  "schema_version": 2,
+  "suite_id": "staircase-v2",
+  "character": "val-dwa-law",
+  "policy_version": "hierarchical-traversal-v1",
+  "knowledge_bundle_id": "staircase-reviewed-v3",
+  "seed_selection": "This regression case deliberately reuses staircase-v1 seeds 1 through 10 so the final traversal policy can be compared with the accepted milestone-1 trajectories. The seeds remain in their original order and include reference seed 6.",
+  "step_cap_rationale": "The 1000-step cap is reused unchanged from staircase-v1. It is long enough for the accepted exploration policy on these fixed maps while bounding hunger-limited failures, and was fixed before any staircase-v2 episode ran.",
+  "cases": [
+    {
+      "case_id": "staircase",
+      "task": {
+        "environment": "NetHackStaircase-v0",
+        "action_profile": "nle-task-actions",
+        "objective": {
+          "legs": [
+            {
+              "kind": "stand_on_stairs",
+              "target": {
+                "direction": "down",
+                "connection": "any",
+                "dungeon_number": null
+              }
+            }
+          ]
+        }
+      },
+      "seeds": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      "max_episode_steps": 1000,
+      "acceptance": {
+        "min_successes": 6,
+        "required_success_seeds": [6]
+      }
+    }
+  ],
+  "acceptance": {
+    "max_invalid_actions": 0,
+    "max_gate_rejections": 0,
+    "require_complete_records": true
+  }
+}

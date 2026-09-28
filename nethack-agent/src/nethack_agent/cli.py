@@ -462,10 +462,11 @@ def _run_evaluation_command(arguments: argparse.Namespace) -> int:
     else:
         acceptance = run.report.acceptance()
         aggregate = run.report.aggregate_json()
+        episode_count = sum(len(case.seeds) for case in run.report.suite.cases)
         print(
             f"{'PASS' if acceptance.passed else 'FAIL'} evaluation "
             f"{run.report.suite.suite_id} ({run.report.status.value}): "
-            f"{aggregate['task_successes']}/{len(run.report.suite.seeds)} task "
+            f"{aggregate['task_successes']}/{episode_count} task "
             f"successes; report {run.paths.json}"
         )
         for reason in acceptance.reasons:
