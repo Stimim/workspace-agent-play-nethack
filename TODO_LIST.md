@@ -56,6 +56,9 @@ Dependency order for the four capability items below: traversal goals, then NLE 
   - [x] `scout-v1` and `eat-v1` baselines committed and run once with the local model: both passed their probe-derived metric gates with 0/5 objective completions; `staircase-v3` passed and `traversal-v2` failed enter-mines at 1/5 ([note 0017](docs/notes/0017-scout-and-eat-task-suites.md)).
   - [ ] `gold-v1` (route to visible gold under NLE's `pickup_types:$`) and `oracle-v1` (NLE success; exact Oracle glyph, never attacked) with a new policy and its own regression suite ids.
   - [x] Typed episode metrics (gold, score, task return, hunger and worst hunger, explored cells, HP/XL, death cause) and typed metric thresholds fixed before each run; a metric-gated case may require no objective success.
+  - [x] Oracle goal and leg contracts: strict `approach_oracle` goal (token `approach_oracle:<dnum>:<dlevel>`) and `find_oracle` leg; `NetHackOracle-v0` is rejected as not supported yet and the planner refuses `find_oracle` objectives (94e3180).
+  - [x] Policy `hierarchical-task-specialists-v1`: deterministic gold navigation on `NetHackGold-v0` to the nearest reachable displayed gold under `pickup_types:$`, with `gold` intents audited against the decided-on observation's gold glyph (7c71d7a).
+  - [ ] Not started: `gold-v1` and `oracle-v1` suites and Oracle navigation.
   - [ ] Bounded search budget or exploration skill: exhaustive hidden-passage search costs more steps than the Scout and Eat hunger horizons (evidence in note 0017); not implemented until a later policy.
 
 ### Development tooling
