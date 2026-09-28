@@ -195,7 +195,7 @@ class OllamaDecisionModel:
                 stuck,
                 self._knowledge_bundle.prompt_context,
             ),
-            skill_decision_schema(available_goals),
+            skill_decision_schema(available_goals, available_skills),
             lambda text: parse_skill_decision(text, available_goals, skills),
         )
         return ModelSkillDecision(decision, metrics, raw_response)
@@ -370,6 +370,11 @@ def _needed_stairs(goals: tuple[Goal, ...]) -> str:
 def _skill_description(skill: Skill, goals: tuple[Goal, ...]) -> str:
     if skill is Skill.EXPLORE_LEVEL:
         return _EXPLORE_DESCRIPTION
+    if skill is Skill.HUNGER:
+        return (
+            "eat one explicitly known inventory food ration at Hungry or worse; "
+            "this deterministic skill is not offered to the model"
+        )
     staircases = _needed_stairs(goals)
     return (
         f"route over known terrain to a remembered {staircases} matching the "
@@ -441,7 +446,6 @@ def _action_prompt(
     map_text = "\n".join(observation.map.rows)
     inventory = [
         {
-            "letter": item.letter,
             "description": item.description,
             "object_class": item.object_class,
         }

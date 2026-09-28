@@ -16,9 +16,11 @@ from nethack_agent.decision import (
     ActionDecision,
     ActionSelectionSource,
     DecisionMetrics,
+    HungerPermit,
     MapCell,
     ModelActionDecision,
     ModelSkillDecision,
+    PromptPermit,
     RunOutcome,
     RunState,
     Skill,
@@ -132,7 +134,10 @@ class ConsultingModel:
         stuck: StuckReason | None,
     ) -> ModelSkillDecision:
         del observation, goals
-        assert set(skills) == set(Skill)
+        assert set(skills) == {
+            Skill.STAIRCASE_NAVIGATION,
+            Skill.EXPLORE_LEVEL,
+        }
         self.consultations.append(stuck)
         skill = Skill.EXPLORE_LEVEL if stuck is None else self.stuck_skill
         return ModelSkillDecision(
@@ -293,6 +298,52 @@ def test_action_gate_passes_level_changes_only_with_a_matching_permit(
         assert environment.step_index == 0
         assert level_change not in gate.allowed_actions
         assert name not in gate.actions_by_name
+    finally:
+        environment.close()
+
+
+def test_action_gate_keeps_hunger_commands_out_of_model_fallbacks(
+    tmp_path: Path,
+) -> None:
+    task = TaskSpec(
+        NleTask.SCORE,
+        ActionProfile.NLE_HUNGER_ACTIONS,
+        Objective((ReachLevelLeg(LevelKey(0, 2)),)),
+    )
+    environment = NleEnvironment(
+        ScenarioConfig(
+            seed=6,
+            artifact_directory=tmp_path,
+            max_episode_steps=20,
+            task=task,
+        )
+    )
+    try:
+        environment.reset()
+        gate = ActionGate(environment.legal_actions, task.action_profile)
+        by_command = {action.command: action for action in environment.legal_actions}
+        eat = by_command[ord("e")]
+        prompt_d = by_command[ord("d")]
+        movement_h = by_command[ord("h")]
+
+        with pytest.raises(ActionGateError, match="hunger permit"):
+            gate.resolve(eat.index)
+        assert gate.resolve(eat.index, hunger_permit=HungerPermit("d")) == eat
+
+        with pytest.raises(ActionGateError, match="active item-selection"):
+            gate.resolve(prompt_d.index)
+        with pytest.raises(ActionGateError, match="active item-selection"):
+            gate.resolve(prompt_d.index, prompt_permit=PromptPermit(ord("z")))
+        assert (
+            gate.resolve(prompt_d.index, prompt_permit=PromptPermit(ord("d")))
+            == prompt_d
+        )
+
+        # The movement collision keeps its ordinary role outside prompts.
+        assert gate.resolve(movement_h.index) == movement_h
+        assert movement_h in gate.allowed_actions
+        assert eat not in gate.allowed_actions
+        assert prompt_d not in gate.allowed_actions
     finally:
         environment.close()
 

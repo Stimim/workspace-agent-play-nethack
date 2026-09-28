@@ -16,6 +16,7 @@ from nethack_agent.contracts import (
     optional_enum_value,
     string_value,
 )
+from nethack_agent.tasks import PROMPT_KEY_ACTION_NAMES
 from nethack_agent.traversal import (
     DUNGEON_EXIT_LEVEL,
     GOAL_TYPES,
@@ -37,10 +38,14 @@ LEVEL_CHANGE_ACTIONS: Final[dict[str, StairDirection]] = {
     "MiscDirection.DOWN": StairDirection.DOWN,
 }
 
+EAT_ACTION_NAME: Final = "Command.EAT"
+ESC_COMMAND: Final = 27
+
 
 class Skill(Enum):
     STAIRCASE_NAVIGATION = "staircase_navigation"
     EXPLORE_LEVEL = "explore_level"
+    HUNGER = "hunger"
 
 
 class SkillSelectionSource(Enum):
@@ -88,15 +93,17 @@ MAX_DECISION_RATIONALE_LENGTH: Final = 200
 MAX_INTENT_PATH_LENGTH: Final = 21 * 79
 
 
-def skill_decision_schema(goals: tuple[Goal, ...]) -> dict[str, object]:
-    """The Ollama generation schema offering exactly these goals by token."""
+def skill_decision_schema(
+    goals: tuple[Goal, ...], skills: tuple[Skill, ...] = tuple(Skill)
+) -> dict[str, object]:
+    """The Ollama generation schema offering exactly these goals and skills."""
     return {
         "type": "object",
         "additionalProperties": False,
         "required": ["goal", "skill", "rationale"],
         "properties": {
             "goal": {"type": "string", "enum": [goal.token for goal in goals]},
-            "skill": {"type": "string", "enum": [skill.value for skill in Skill]},
+            "skill": {"type": "string", "enum": [skill.value for skill in skills]},
             "rationale": {
                 "type": "string",
                 "minLength": 1,
@@ -748,6 +755,100 @@ class TraversalPermit:
             raise TypeError("permit level must be a LevelKey")
         if not isinstance(self.cell, MapCell):
             raise TypeError("permit cell must be a MapCell")
+
+
+@dataclass(frozen=True, slots=True)
+class HungerPermit:
+    """Authorization for one evidence-backed EAT command."""
+
+    item_letter: str
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.item_letter, str)
+            or len(self.item_letter) != 1
+            or not self.item_letter.isascii()
+            or not self.item_letter.isalpha()
+        ):
+            raise ValueError("hunger permit item_letter must be one ASCII letter")
+
+
+@dataclass(frozen=True, slots=True)
+class PromptPermit:
+    """Authorization for one command that answers or cancels an item prompt."""
+
+    command: int
+
+    def __post_init__(self) -> None:
+        integer_value(self.command, "prompt permit command", minimum=0, maximum=255)
+
+
+def survival_action_selection_error(
+    action_name: str, selection: ActionSelection
+) -> str | None:
+    """Why a hunger-only action is invalid from its recorded selection fields."""
+    if action_name == EAT_ACTION_NAME and (
+        selection.source is not ActionSelectionSource.DETERMINISTIC_SKILL
+        or selection.skill is not Skill.HUNGER
+        or selection.intent is not None
+    ):
+        return "only the deterministic hunger skill may select EAT"
+    if action_name in PROMPT_KEY_ACTION_NAMES and (
+        selection.source is not ActionSelectionSource.DETERMINISTIC_PROMPT
+        or selection.skill is not Skill.HUNGER
+        or selection.intent is not None
+    ):
+        return "prompt-key actions require the deterministic hunger prompt flow"
+    return None
+
+
+def hunger_action_error(
+    action_name: str,
+    selection: ActionSelection,
+    *,
+    hunger: int,
+    prompt_active: bool,
+    safe_ration_available: bool,
+) -> str | None:
+    """Why an EAT selection lacks the observation evidence needed for a permit."""
+    error = survival_action_selection_error(action_name, selection)
+    if error is not None or action_name != EAT_ACTION_NAME:
+        return error
+    if prompt_active:
+        return "EAT cannot answer an active prompt"
+    if hunger < 2:
+        return "EAT requires Hungry or worse"
+    if not safe_ration_available:
+        return "EAT requires an explicitly known-safe inventory food ration"
+    return None
+
+
+def prompt_response_error(
+    action_name: str,
+    command: int,
+    selection: ActionSelection,
+    *,
+    prompt_active: bool,
+    item_selection: bool,
+    offered_commands: frozenset[int],
+) -> str | None:
+    """Why an item-prompt answer lacks the active prompt evidence for a permit."""
+    error = survival_action_selection_error(action_name, selection)
+    if error is not None:
+        return error
+    if (
+        selection.source is not ActionSelectionSource.DETERMINISTIC_PROMPT
+        or selection.skill is not Skill.HUNGER
+        or selection.intent is not None
+    ):
+        return "only the deterministic hunger prompt flow may answer item prompts"
+    if not prompt_active or not item_selection:
+        return (
+            "an item prompt response requires a matching active item-selection prompt"
+        )
+    if command != ESC_COMMAND and command not in offered_commands:
+        return "the item prompt did not offer that inventory letter"
+    return None
 
 
 def level_change_selection_error(

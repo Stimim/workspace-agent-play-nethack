@@ -267,6 +267,52 @@ def test_a_recorded_level_change_must_be_a_staircase_traversal(
         StepPayload.from_json(unidentified)
 
 
+def test_recorded_eat_action_requires_the_deterministic_hunger_skill(
+    tmp_path: Path,
+) -> None:
+    step = event_fixtures(tmp_path)[3]
+    assert isinstance(step, StepPayload)
+    eat = LegalAction(21, ord("e"), "Command.EAT")
+    payload = step.to_json()
+    payload["selection"]["action_index"] = eat.index  # type: ignore[index]
+    payload["selection"]["skill"] = Skill.EXPLORE_LEVEL.value  # type: ignore[index]
+    payload["selection"]["intent"] = None  # type: ignore[index]
+    payload["action"] = eat.to_json()
+    payload["skill_decision"] = None
+    payload["skill_metrics"] = None
+    with pytest.raises(ContractError, match="deterministic hunger skill"):
+        StepPayload.from_json(payload)
+
+    payload["selection"]["skill"] = Skill.HUNGER.value  # type: ignore[index]
+    parsed = StepPayload.from_json(payload)
+    assert parsed.action == eat
+    assert parsed.selection.skill is Skill.HUNGER
+
+
+def test_recorded_added_prompt_key_requires_hunger_prompt_source(
+    tmp_path: Path,
+) -> None:
+    step = event_fixtures(tmp_path)[3]
+    assert isinstance(step, StepPayload)
+    prompt_key = LegalAction(24, ord("d"), "Command.DROP")
+    payload = step.to_json()
+    payload["selection"]["action_index"] = prompt_key.index  # type: ignore[index]
+    payload["selection"]["skill"] = Skill.HUNGER.value  # type: ignore[index]
+    payload["selection"]["intent"] = None  # type: ignore[index]
+    payload["action"] = prompt_key.to_json()
+    payload["skill_decision"] = None
+    payload["skill_metrics"] = None
+    with pytest.raises(ContractError, match="hunger prompt flow"):
+        StepPayload.from_json(payload)
+
+    payload["selection"]["source"] = (  # type: ignore[index]
+        ActionSelectionSource.DETERMINISTIC_PROMPT.value
+    )
+    parsed = StepPayload.from_json(payload)
+    assert parsed.action == prompt_key
+    assert parsed.selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
+
+
 def test_step_intent_and_path_are_optional_for_legacy_steps(tmp_path: Path) -> None:
     step = event_fixtures(tmp_path)[3]
     assert isinstance(step, StepPayload)

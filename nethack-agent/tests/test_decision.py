@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from nethack_agent.coordinator import ActionGate
 from nethack_agent.decision import (
     MAX_CANDIDATE_REASON_LENGTH,
     MAX_FALLBACK_CANDIDATES,
@@ -16,9 +17,11 @@ from nethack_agent.decision import (
     Skill,
     SkillSelectionSource,
     StuckReason,
+    hunger_action_error,
     level_change_error,
     parse_action_decision,
     parse_skill_decision,
+    prompt_response_error,
     skill_decision_schema,
 )
 from nethack_agent.environment import NleEnvironment, ScenarioConfig
@@ -47,8 +50,10 @@ class ScriptedClient:
     def __init__(self, responses: list[str]) -> None:
         self.responses = responses
         self.calls = 0
+        self.prompts: list[str] = []
 
-    def generate(self, *_: object, **__: object) -> Generation:
+    def generate(self, prompt: str, *_: object, **__: object) -> Generation:
+        self.prompts.append(prompt)
         response = self.responses[self.calls]
         self.calls += 1
         return Generation(response, 10, 5, 1_000_000)
@@ -209,6 +214,119 @@ def test_model_repairs_one_invalid_action_response(tmp_path: Path) -> None:
     assert result.decision.action_index == 2
     assert result.metrics.repair_attempted
     assert client.calls == 2
+
+
+def test_model_fallback_never_receives_eat_or_inventory_letters(
+    tmp_path: Path,
+) -> None:
+    environment, observation = projected_state(tmp_path)
+    client = ScriptedClient([valid_action_decision()])
+    try:
+        gate = ActionGate(environment.legal_actions)
+        model(client).select_action(
+            observation,
+            gate.allowed_actions,
+            STAND_ON_DOWNSTAIRS,
+            Skill.STAIRCASE_NAVIGATION,
+        )
+    finally:
+        environment.close()
+
+    assert len(client.prompts) == 1
+    prompt = client.prompts[0]
+    assert '"letter"' not in prompt
+    assert "Command.EAT" not in prompt
+    assert observation.inventory[0].description in prompt
+
+
+def test_survival_permit_predicates_require_hunger_and_matching_prompt_evidence() -> (
+    None
+):
+    eat = ActionSelection(
+        ActionSelectionSource.DETERMINISTIC_SKILL,
+        STAND_ON_DOWNSTAIRS,
+        Skill.HUNGER,
+        SkillSelectionSource.ARBITER,
+        None,
+        21,
+        "Eat a verified ration.",
+        None,
+    )
+    prompt = ActionSelection(
+        ActionSelectionSource.DETERMINISTIC_PROMPT,
+        STAND_ON_DOWNSTAIRS,
+        Skill.HUNGER,
+        SkillSelectionSource.ARBITER,
+        None,
+        24,
+        "Select the verified ration.",
+        None,
+    )
+
+    assert (
+        hunger_action_error(
+            "Command.EAT",
+            eat,
+            hunger=1,
+            prompt_active=False,
+            safe_ration_available=True,
+        )
+        == "EAT requires Hungry or worse"
+    )
+    assert (
+        hunger_action_error(
+            "Command.EAT",
+            eat,
+            hunger=2,
+            prompt_active=False,
+            safe_ration_available=True,
+        )
+        is None
+    )
+    assert (
+        prompt_response_error(
+            "Command.DROP",
+            ord("d"),
+            prompt,
+            prompt_active=False,
+            item_selection=True,
+            offered_commands=frozenset({ord("d")}),
+        )
+        is not None
+    )
+    assert (
+        prompt_response_error(
+            "Command.DROP",
+            ord("d"),
+            prompt,
+            prompt_active=True,
+            item_selection=True,
+            offered_commands=frozenset({ord("z")}),
+        )
+        == "the item prompt did not offer that inventory letter"
+    )
+    assert (
+        prompt_response_error(
+            "Command.DROP",
+            ord("d"),
+            prompt,
+            prompt_active=True,
+            item_selection=True,
+            offered_commands=frozenset({ord("d")}),
+        )
+        is None
+    )
+    assert (
+        prompt_response_error(
+            "CompassDirection.W",
+            ord("h"),
+            prompt,
+            prompt_active=True,
+            item_selection=True,
+            offered_commands=frozenset({ord("h")}),
+        )
+        is None
+    )
 
 
 def test_model_parses_typed_goal_and_skill(tmp_path: Path) -> None:
@@ -451,13 +569,7 @@ def test_every_goal_has_a_distinct_token_the_parser_maps_back() -> None:
 
 
 class RecordingClient(ScriptedClient):
-    def __init__(self, responses: list[str]) -> None:
-        super().__init__(responses)
-        self.prompts: list[str] = []
-
-    def generate(self, prompt: str, *args: object, **kwargs: object) -> Generation:
-        self.prompts.append(prompt)
-        return super().generate(prompt, *args, **kwargs)
+    pass
 
 
 def test_stuck_prompt_describes_every_offered_goal_and_its_staircase(

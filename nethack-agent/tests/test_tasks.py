@@ -2,11 +2,14 @@ import json
 from pathlib import Path
 
 import pytest
+from nle import nethack
+from nle.env.tasks import TASK_ACTIONS
 
 from nethack_agent.contracts import ContractError
 from nethack_agent.tasks import (
     STAIRCASE_TASK,
     ActionProfile,
+    ActionRole,
     NleTask,
     TaskSpec,
     load_task_file,
@@ -52,6 +55,27 @@ def test_staircase_task_round_trips_through_its_canonical_json() -> None:
             ]
         },
     }
+
+
+def test_hunger_profile_adds_only_esc_and_deduplicated_inventory_keys() -> None:
+    profile = ActionProfile.NLE_HUNGER_ACTIONS
+    commands = tuple(int(action) for action in profile.actions)
+    task_commands = tuple(int(action) for action in TASK_ACTIONS)
+
+    assert commands[: len(task_commands)] == task_commands
+    assert len(commands) == len(set(commands))
+    assert int(nethack.Command.ESC) in commands
+    assert set(map(ord, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")) <= set(
+        commands
+    )
+    assert all(
+        profile.role(action) is ActionRole.PROMPT_KEY
+        for action in profile.actions[len(task_commands) :]
+    )
+    movement = next(action for action in profile.actions if int(action) == ord("h"))
+    assert profile.role(movement) is ActionRole.ROUTINE
+    eat = next(action for action in profile.actions if int(action) == ord("e"))
+    assert profile.role(eat) is ActionRole.HUNGER
 
 
 def test_score_task_accepts_any_objective_legs() -> None:

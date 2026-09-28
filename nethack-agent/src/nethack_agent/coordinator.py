@@ -7,12 +7,15 @@ from pathlib import Path
 from typing import Final
 
 from nethack_agent.decision import (
+    EAT_ACTION_NAME,
     LEVEL_CHANGE_ACTIONS,
     ActionSelection,
     ActionSelectionSource,
+    HungerPermit,
     MapCell,
     ModelActionDecision,
     ModelSkillDecision,
+    PromptPermit,
     RunOutcome,
     RunState,
     Skill,
@@ -20,7 +23,9 @@ from nethack_agent.decision import (
     SkillSelectionSource,
     StuckReason,
     TraversalPermit,
+    hunger_action_error,
     level_change_error,
+    prompt_response_error,
 )
 from nethack_agent.environment import LegalAction, NleEnvironment, StepTransition
 from nethack_agent.model import DecisionFailure, HierarchicalDecisionModel
@@ -34,11 +39,14 @@ from nethack_agent.observation import ObservationProjector, ProjectedObservation
 from nethack_agent.planner import ObjectivePlanner
 from nethack_agent.skills import (
     ExploreLevelSkill,
+    HungerSkill,
     SafePromptHandler,
     SkillAction,
     StaircaseNavigationSkill,
+    item_selection_commands,
+    safe_food_rations,
 )
-from nethack_agent.tasks import NleTask
+from nethack_agent.tasks import ActionProfile, ActionRole, NleTask
 from nethack_agent.traversal import (
     STAND_ON_DOWNSTAIRS,
     Goal,
@@ -76,24 +84,39 @@ class CoordinatorInvariantError(CoordinatorError):
 
 
 class ActionGate:
-    """Resolve only legal actions; a level change also needs a traversal permit."""
+    """Resolve legal actions, requiring typed permits for restricted roles."""
 
-    def __init__(self, legal_actions: tuple[LegalAction, ...]) -> None:
+    def __init__(
+        self,
+        legal_actions: tuple[LegalAction, ...],
+        action_profile: ActionProfile = ActionProfile.NLE_TASK_ACTIONS,
+    ) -> None:
         indices = tuple(action.index for action in legal_actions)
         if not legal_actions or indices != tuple(range(len(legal_actions))):
             raise CoordinatorInvariantError(
                 "legal action table is not indexed contiguously"
             )
+        profile_actions = action_profile.actions
+        if len(legal_actions) != len(profile_actions):
+            raise CoordinatorInvariantError(
+                "legal action table does not match its action profile"
+            )
+        roles = tuple(action_profile.role(action) for action in profile_actions)
         self._legal_actions = legal_actions
+        self._roles = roles
         self._allowed_actions = tuple(
+            action
+            for action, role in zip(legal_actions, roles, strict=True)
+            if action.name not in LEVEL_CHANGE_ACTIONS
+            and role not in {ActionRole.HUNGER, ActionRole.PROMPT_KEY}
+        )
+        unrestricted = tuple(
             action
             for action in legal_actions
             if action.name not in LEVEL_CHANGE_ACTIONS
         )
-        self.actions_by_name = {action.name: action for action in self._allowed_actions}
-        self.actions_by_command = {
-            action.command: action for action in self._allowed_actions
-        }
+        self.actions_by_name = {action.name: action for action in unrestricted}
+        self.actions_by_command = {action.command: action for action in unrestricted}
         self.level_change_actions: dict[StairDirection, LegalAction] = {
             LEVEL_CHANGE_ACTIONS[action.name]: action
             for action in legal_actions
@@ -102,11 +125,19 @@ class ActionGate:
 
     @property
     def allowed_actions(self) -> tuple[LegalAction, ...]:
-        """Actions any layer may propose without a permit; the model's choices."""
+        """Routine actions offered to the model without a contextual permit."""
         return self._allowed_actions
 
+    def is_prompt_key(self, action: LegalAction) -> bool:
+        return self._roles[action.index] is ActionRole.PROMPT_KEY
+
     def resolve(
-        self, action_index: int, permit: TraversalPermit | None = None
+        self,
+        action_index: int,
+        permit: TraversalPermit | None = None,
+        *,
+        hunger_permit: HungerPermit | None = None,
+        prompt_permit: PromptPermit | None = None,
     ) -> LegalAction:
         if isinstance(action_index, bool) or not isinstance(action_index, int):
             raise ActionGateError("action index must be an integer")
@@ -120,6 +151,18 @@ class ActionGate:
             raise ActionGateError(
                 f"{action.name} is forbidden: changing dungeon level requires a "
                 "coordinator traversal permit in that direction"
+            )
+        role = self._roles[action.index]
+        if role is ActionRole.HUNGER and hunger_permit is None:
+            raise ActionGateError(
+                f"{action.name} is forbidden: EAT requires a hunger permit"
+            )
+        if role is ActionRole.PROMPT_KEY and (
+            prompt_permit is None or prompt_permit.command != action.command
+        ):
+            raise ActionGateError(
+                f"{action.name} is forbidden: prompt keys require a matching "
+                "active item-selection prompt permit"
             )
         return action
 
@@ -185,8 +228,8 @@ class AgentCoordinator:
         self._environment = environment
         self._projector = projector
         self._model = model
-        self._gate = ActionGate(environment.legal_actions)
         task = environment.task
+        self._gate = ActionGate(environment.legal_actions, task.action_profile)
         self._planner = ObjectivePlanner(task.objective)
         # Only an objective with a leg beyond standing on stairs may change level.
         self._level_changes_allowed = task.objective.changes_level
@@ -197,6 +240,11 @@ class AgentCoordinator:
         self._navigation = StaircaseNavigationSkill()
         self._exploration = ExploreLevelSkill()
         self._prompt_handler = SafePromptHandler()
+        self._hunger = (
+            HungerSkill()
+            if task.action_profile is ActionProfile.NLE_HUNGER_ACTIONS
+            else None
+        )
         self._dungeon = DungeonMemory()
         self._lock = threading.RLock()
         self._state = RunState.IDLE
@@ -231,6 +279,8 @@ class AgentCoordinator:
                 raise CoordinatorLifecycleError("coordinator can only start from idle")
             self._projector.reset()
             self._dungeon.reset()
+            if self._hunger is not None:
+                self._hunger.reset()
             try:
                 raw = self._environment.reset()
                 self._observation = self._projector.project(raw, step_index=0)
@@ -321,8 +371,15 @@ class AgentCoordinator:
                 if self._advance_was_canceled_locked(revision, started_state):
                     return None
                 try:
-                    permit = self._traversal_permit(selection, before)
-                    action = self._gate.resolve(selection.action_index, permit)
+                    traversal_permit = self._traversal_permit(selection, before)
+                    hunger_permit = self._hunger_permit(selection, before)
+                    prompt_permit = self._prompt_permit(selection, before)
+                    action = self._gate.resolve(
+                        selection.action_index,
+                        traversal_permit,
+                        hunger_permit=hunger_permit,
+                        prompt_permit=prompt_permit,
+                    )
                 except ActionGateError as error:
                     self._state = RunState.PAUSED
                     self._last_error = str(error)
@@ -389,9 +446,10 @@ class AgentCoordinator:
         """Choose one action; return None when a lifecycle change canceled it.
 
         The objective planner sets the step's goal. Priority: a pending
-        exploration kick direction, safe prompt answers, the model for
-        unhandled prompts, staircase navigation to a reachable remembered
-        staircase matching the goal, then level exploration. When exploration
+        exploration kick direction, the bounded hunger sequence, safe prompt
+        answers, the model for unhandled prompts, staircase navigation to a
+        reachable remembered staircase matching the goal, then level
+        exploration. When exploration
         first exhausts the level, the level is marked exhausted and the goal
         replanned; if that yields no action, the stuck report triggers a model
         skill consultation (rate-limited) and otherwise a model fallback.
@@ -412,6 +470,26 @@ class AgentCoordinator:
             return self._skill_plan(
                 kick, goal, Skill.EXPLORE_LEVEL, arbiter, None, skill_model_decision
             )
+
+        if self._hunger is not None:
+            hunger = self._hunger.select_action(
+                before, actions, self._gate.actions_by_command
+            )
+            if hunger is not None:
+                source = (
+                    ActionSelectionSource.DETERMINISTIC_PROMPT
+                    if before.prompt.active
+                    else ActionSelectionSource.DETERMINISTIC_SKILL
+                )
+                return self._skill_plan(
+                    hunger,
+                    goal,
+                    Skill.HUNGER,
+                    arbiter,
+                    None,
+                    skill_model_decision,
+                    source=source,
+                )
 
         prompt = self._prompt_handler.select_action(
             before, actions, self._gate.actions_by_command
@@ -589,10 +667,60 @@ class AgentCoordinator:
             raise ActionGateError(error)
         return TraversalPermit(direction, level, MapCell(*position))
 
+    def _hunger_permit(
+        self, selection: ActionSelection, before: ProjectedObservation
+    ) -> HungerPermit | None:
+        legal = self._environment.legal_actions
+        index = selection.action_index
+        if not 0 <= index < len(legal) or legal[index].name != EAT_ACTION_NAME:
+            return None
+        rations = safe_food_rations(before)
+        error = hunger_action_error(
+            legal[index].name,
+            selection,
+            hunger=before.player.hunger,
+            prompt_active=before.prompt.active,
+            safe_ration_available=bool(rations),
+        )
+        if error is not None:
+            raise ActionGateError(error)
+        return HungerPermit(rations[0].letter)
+
+    def _prompt_permit(
+        self, selection: ActionSelection, before: ProjectedObservation
+    ) -> PromptPermit | None:
+        legal = self._environment.legal_actions
+        index = selection.action_index
+        if not 0 <= index < len(legal):
+            return None
+        action = legal[index]
+        if not self._gate.is_prompt_key(action) and not (
+            selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
+            and selection.skill is Skill.HUNGER
+        ):
+            return None
+        offered = item_selection_commands(before)
+        error = prompt_response_error(
+            action.name,
+            action.command,
+            selection,
+            prompt_active=before.prompt.active,
+            item_selection=offered is not None,
+            offered_commands=offered or frozenset(),
+        )
+        if error is not None:
+            raise ActionGateError(error)
+        return PromptPermit(action.command)
+
     def _select_skill(
         self, before: ProjectedObservation, stuck: StuckReason | None, goal: Goal
     ) -> ModelSkillDecision:
-        decision = self._model.select_skill(before, (goal,), tuple(Skill), stuck)
+        decision = self._model.select_skill(
+            before,
+            (goal,),
+            (Skill.STAIRCASE_NAVIGATION, Skill.EXPLORE_LEVEL),
+            stuck,
+        )
         if decision.decision.goal != goal:
             raise CoordinatorInvariantError(
                 f"model selected unavailable goal {decision.decision.goal.token}"

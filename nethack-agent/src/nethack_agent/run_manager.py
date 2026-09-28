@@ -49,10 +49,10 @@ from nethack_agent.storage import (
 )
 from nethack_agent.tasks import STAIRCASE_TASK, TaskSpec
 
-# Typed traversal goals, objective planning, and permit-gated level changes
-# (ADR 0004). They changed the model prompts and output contract after
-# hierarchical-explore-v1, which only its own checkout can reproduce.
-POLICY_VERSION: Final = "hierarchical-traversal-v1"
+# Survival policy adds evidence-bounded adjacent defense and known-ration
+# eating to hierarchical-traversal-v1. Traversal suites and reports remain
+# pinned to their original policy.
+POLICY_VERSION: Final = "hierarchical-survival-v1"
 _ACTIVE_STATES: Final = frozenset({RunState.IDLE, RunState.RUNNING, RunState.PAUSED})
 
 

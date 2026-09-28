@@ -164,10 +164,13 @@ _BOULDER_OBJECT: Final = next(
     for index in range(nethack.NUM_OBJECTS)
     if nethack.OBJ_NAME(nethack.objclass(index)) == "boulder"
 )
-# Passive-response monsters that must never be meleed by a level-1 hero
-# (NetHackWiki "Passive"; floating eye paralysis and mold/jelly/spore damage).
+# Monsters that must never be meleed by the deterministic policy. The passive
+# list protects the level-1 hero from paralysis or retaliation; the always-
+# peaceful Oracle is protected from the first adjacent observation, before a
+# "Really attack?" prompt could add her glyph to peaceful memory.
 _NEVER_MELEE: Final = frozenset(
     {
+        "Oracle",
         "floating eye",
         "gas spore",
         "brown mold",

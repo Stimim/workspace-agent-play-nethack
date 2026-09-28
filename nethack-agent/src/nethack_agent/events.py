@@ -27,6 +27,7 @@ from nethack_agent.decision import (
     SkillDecision,
     SkillSelectionSource,
     level_change_selection_error,
+    survival_action_selection_error,
 )
 from nethack_agent.environment import LegalAction
 from nethack_agent.model import DecisionAttemptDiagnostic, DecisionFailure
@@ -240,6 +241,11 @@ class StepPayload:
                 cell.y >= len(rows) or cell.x >= len(rows[0]) for cell in intent.cells()
             ):
                 raise ContractError("step intent cell is outside the observation map")
+        survival_error = survival_action_selection_error(
+            self.action.name, self.selection
+        )
+        if survival_error is not None:
+            raise ContractError(f"step survival action is invalid: {survival_error}")
         direction = LEVEL_CHANGE_ACTIONS.get(self.action.name)
         if direction is not None:
             error = level_change_selection_error(direction, self.selection)

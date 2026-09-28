@@ -148,7 +148,7 @@ def test_committed_schema_2_suite_pins_policy_knowledge_and_case_task() -> None:
     suite = load_suite(STAIRCASE_V2_PATH)
 
     assert suite.schema_version == 2
-    assert suite.policy_version == run_manager.POLICY_VERSION
+    assert suite.policy_version == "hierarchical-traversal-v1"
     assert suite.knowledge_bundle_id == "staircase-reviewed-v3"
     assert [case.case_id for case in suite.cases] == ["staircase"]
     assert suite.cases[0].task.environment is NleTask.STAIRCASE
@@ -171,6 +171,25 @@ def test_committed_traversal_suite_fixes_cases_seeds_and_thresholds() -> None:
     assert [
         [leg.kind.value for leg in case.task.objective.legs] for case in suite.cases
     ] == [["reach_level"], ["reach_level", "reach_level"], ["enter_dungeon"]]
+
+
+@pytest.mark.parametrize("suite_path", [STAIRCASE_V2_PATH, TRAVERSAL_V1_PATH])
+def test_committed_traversal_suites_refuse_under_survival_policy_before_any_episode(
+    tmp_path: Path, suite_path: Path
+) -> None:
+    assert run_manager.POLICY_VERSION == "hierarchical-survival-v1"
+    options = EvaluationOptions(
+        suite=load_suite(suite_path),
+        data_directory=tmp_path / "data",
+        report_directory=tmp_path / "reports",
+        development_scripted_model=True,
+    )
+
+    with pytest.raises(SuiteValidationError, match="bound to policy"):
+        run_evaluation(options, progress=None)
+
+    assert not (tmp_path / "data").exists()
+    assert not (tmp_path / "reports").exists()
 
 
 @pytest.mark.parametrize("malformation", ["extra", "duplicate_case", "duplicate_seed"])
@@ -202,6 +221,8 @@ def test_schema_2_pin_mismatch_is_refused_before_writing(
     tmp_path: Path, pin: str, message: str
 ) -> None:
     payload = suite_2_payload()
+    if pin != "policy_version":
+        payload["policy_version"] = run_manager.POLICY_VERSION
     payload[pin] = "other-reviewed-v1"
     suite = load_suite(write_suite(tmp_path, payload))
     data_directory = tmp_path / "data"

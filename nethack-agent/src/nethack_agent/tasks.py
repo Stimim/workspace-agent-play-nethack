@@ -55,20 +55,64 @@ class NleTask(Enum):
         return (*options, "autoopen")
 
 
+class ActionRole(Enum):
+    """Static policy role of one action in an action profile."""
+
+    ROUTINE = "routine"
+    HUNGER = "hunger"
+    PROMPT_KEY = "prompt_key"
+
+
 class ActionProfile(Enum):
     """A named, code-defined tuple of NLE action members."""
 
     # NLE's `TASK_ACTIONS`: the 23 actions every task except Challenge uses.
     NLE_TASK_ACTIONS = "nle-task-actions"
+    # The task actions plus ESC and every a-z/A-Z inventory-selection key.
+    NLE_HUNGER_ACTIONS = "nle-hunger-actions"
 
     @property
     def actions(self) -> tuple[IntEnum, ...]:
         return _PROFILE_ACTIONS[self]
 
+    def role(self, action: IntEnum) -> ActionRole:
+        command = int(action)
+        if command in _PROFILE_PROMPT_KEY_COMMANDS[self]:
+            return ActionRole.PROMPT_KEY
+        if command == int(nethack.Command.EAT):
+            return ActionRole.HUNGER
+        return ActionRole.ROUTINE
+
+
+_TASK_ACTIONS: Final = tuple(TASK_ACTIONS)
+_TASK_COMMANDS: Final = frozenset(int(action) for action in _TASK_ACTIONS)
+_COMMAND_BY_VALUE: Final = {int(action): action for action in nethack.Command}
+_INVENTORY_LETTER_COMMANDS: Final = tuple(
+    ord(letter) for letter in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+)
+_HUNGER_ADDITIONS: Final = (
+    nethack.Command.ESC,
+    *(
+        _COMMAND_BY_VALUE[command]
+        for command in _INVENTORY_LETTER_COMMANDS
+        if command not in _TASK_COMMANDS
+    ),
+)
+_HUNGER_ACTIONS: Final = (*_TASK_ACTIONS, *_HUNGER_ADDITIONS)
 
 _PROFILE_ACTIONS: Final[dict[ActionProfile, tuple[IntEnum, ...]]] = {
-    ActionProfile.NLE_TASK_ACTIONS: tuple(TASK_ACTIONS),
+    ActionProfile.NLE_TASK_ACTIONS: _TASK_ACTIONS,
+    ActionProfile.NLE_HUNGER_ACTIONS: _HUNGER_ACTIONS,
 }
+_PROFILE_PROMPT_KEY_COMMANDS: Final[dict[ActionProfile, frozenset[int]]] = {
+    ActionProfile.NLE_TASK_ACTIONS: frozenset(),
+    ActionProfile.NLE_HUNGER_ACTIONS: frozenset(
+        int(action) for action in _HUNGER_ADDITIONS
+    ),
+}
+PROMPT_KEY_ACTION_NAMES: Final = frozenset(
+    f"{type(action).__name__}.{action.name}" for action in _HUNGER_ADDITIONS
+)
 
 # Tasks whose objectives are defined. ADR 0004 section 8 adds Scout, Gold, Eat
 # and Oracle together with the objective legs they need.

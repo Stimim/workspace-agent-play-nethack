@@ -30,6 +30,8 @@ from nethack_agent.navigation import (
     route_tree,
 )
 from nethack_agent.observation import (
+    BucStatus,
+    InventoryItem,
     MapView,
     ObservationProjector,
     ProjectedObservation,
@@ -38,10 +40,12 @@ from nethack_agent.observation import (
 from nethack_agent.skills import (
     SEARCHES_PER_ROUND,
     ExploreLevelSkill,
+    HungerSkill,
     SafePromptHandler,
     SkillAction,
     StaircaseNavigationSkill,
     _past_monster,
+    is_safe_food_ration,
 )
 from nethack_agent.traversal import (
     DUNGEON_EXIT,
@@ -85,6 +89,7 @@ _GLYPHS = {
     "j": nethack.GLYPH_MON_OFF + _MONSTERS["jackal"],
     "e": nethack.GLYPH_MON_OFF + _MONSTERS["floating eye"],
     "f": nethack.GLYPH_PET_OFF + _MONSTERS["kitten"],
+    "Q": nethack.GLYPH_MON_OFF + _MONSTERS["Oracle"],
     "@": nethack.GLYPH_MON_OFF + _MONSTERS["valkyrie"],
 }
 
@@ -364,6 +369,44 @@ def test_staircase_defense_keeps_the_chosen_downstairs_as_destination(
     assert proposal.intent == ActionIntent(
         IntentDestination(DestinationKind.DOWNSTAIRS, 5, 2, UNKNOWN_STAIR, False),
         MapCell(2, 1),
+        None,
+    )
+
+
+@pytest.mark.parametrize(
+    ("goal", "level_change"),
+    [
+        (
+            StandOnStairsGoal(
+                StairTarget(StairDirection.DOWN, StairConnection.ANY, None)
+            ),
+            None,
+        ),
+        (_MAIN_DOWN, _DOWN_ACTION),
+    ],
+)
+def test_staircase_skill_fights_before_waiting_or_traversing_from_stairs(
+    template: ProjectedObservation,
+    actions: dict[str, LegalAction],
+    goal: StandOnStairsGoal | TraverseStairsGoal,
+    level_change: LegalAction | None,
+) -> None:
+    memory = remembered(
+        template,
+        ("|>j@|",),
+        ("|@j.|",),
+    )
+
+    proposal = StaircaseNavigationSkill().select_action(
+        memory, actions, goal, level_change
+    )
+
+    assert proposal is not None
+    assert action_name(actions, proposal.action_index) == "CompassDirection.E"
+    assert proposal.record.kind is ActionKind.MOVE
+    assert proposal.intent == ActionIntent(
+        IntentDestination(DestinationKind.DOWNSTAIRS, 1, 0, UNKNOWN_STAIR, False),
+        MapCell(2, 0),
         None,
     )
 
@@ -664,6 +707,20 @@ def test_exploration_attacks_adjacent_hostiles_but_not_passive_or_pets(
     )
 
 
+def test_oracle_is_never_treated_as_an_adjacent_hostile(
+    template: ProjectedObservation, actions: dict[str, LegalAction]
+) -> None:
+    memory = remembered(template, ("|@Q.>|",))
+
+    proposal = StaircaseNavigationSkill().select_action(memory, actions)
+
+    assert memory.hostile_blocker((2, 0)) is None
+    if proposal is not None:
+        assert action_name(actions, proposal.action_index) != "CompassDirection.E"
+        assert proposal.intent is not None
+        assert proposal.intent.attack_target is None
+
+
 def test_object_in_dark_corridor_is_passable_and_door_under_hero_is_open(
     template: ProjectedObservation, actions: dict[str, LegalAction]
 ) -> None:
@@ -937,7 +994,10 @@ def test_development_policy_explores_real_levels_to_the_downstairs(
         and record.action.name not in LEVEL_CHANGE_ACTIONS
         for record in records
     )
-    assert {record.selection.skill for record in records} == set(Skill)
+    assert {record.selection.skill for record in records} == {
+        Skill.STAIRCASE_NAVIGATION,
+        Skill.EXPLORE_LEVEL,
+    }
     routed = 0
     for record in records:
         intent = record.selection.intent
@@ -1007,3 +1067,162 @@ def test_safe_prompt_handler_acknowledges_or_declines_only_known_prompts(
     assert decline is not None
     assert by_command[ord("n")].index == decline.action_index
     assert ambiguous is None
+
+
+_HUNGER_ACTION_TABLE = (
+    LegalAction(0, ord("e"), "Command.EAT"),
+    LegalAction(1, 27, "Command.ESC"),
+    LegalAction(2, ord("d"), "Command.DROP"),
+    LegalAction(3, ord("h"), "CompassDirection.W"),
+    LegalAction(4, ord("n"), "CompassDirection.SE"),
+    LegalAction(5, ord("q"), "Command.QUAFF"),
+    LegalAction(6, ord("z"), "Command.ZAP"),
+)
+_HUNGER_BY_NAME = {action.name: action for action in _HUNGER_ACTION_TABLE}
+_HUNGER_BY_COMMAND = {action.command: action for action in _HUNGER_ACTION_TABLE}
+
+
+def _ration(
+    template: ProjectedObservation,
+    *,
+    letter: str = "d",
+    description: str = "an uncursed food ration",
+    buc: BucStatus = BucStatus.UNCURSED,
+) -> InventoryItem:
+    return replace(
+        template.inventory[0],
+        letter=letter,
+        description=description,
+        object_class=int(nethack.FOOD_CLASS),
+        buc=buc,
+    )
+
+
+@pytest.mark.parametrize(
+    ("hunger", "acts"), [(0, False), (1, False), (2, True), (4, True)]
+)
+def test_hunger_skill_starts_only_at_hungry_or_worse(
+    template: ProjectedObservation, hunger: int, acts: bool
+) -> None:
+    observation = replace(
+        template,
+        player=replace(template.player, hunger=hunger),
+        inventory=(_ration(template),),
+    )
+
+    proposal = HungerSkill().select_action(
+        observation, _HUNGER_BY_NAME, _HUNGER_BY_COMMAND
+    )
+
+    assert (proposal is not None) is acts
+    if proposal is not None:
+        assert proposal.action_index == _HUNGER_BY_NAME["Command.EAT"].index
+
+
+@pytest.mark.parametrize(
+    ("description", "buc", "safe"),
+    [
+        ("a food ration", BucStatus.UNKNOWN, True),
+        ("an uncursed food ration", BucStatus.UNCURSED, True),
+        ("2 blessed +0 food rations", BucStatus.BLESSED, True),
+        ("the cursed -1 food ration", BucStatus.CURSED, True),
+        ("food ration", BucStatus.UNKNOWN, False),
+        ("a partly eaten food ration", BucStatus.UNKNOWN, False),
+        ("a lichen corpse", BucStatus.UNKNOWN, False),
+        ("an uncursed food ration", BucStatus.UNKNOWN, False),
+    ],
+)
+def test_safe_ration_recognition_is_exact_and_uses_buc_evidence(
+    template: ProjectedObservation,
+    description: str,
+    buc: BucStatus,
+    safe: bool,
+) -> None:
+    assert (
+        is_safe_food_ration(_ration(template, description=description, buc=buc)) is safe
+    )
+
+
+@pytest.mark.parametrize(
+    ("current_letter", "action_name"),
+    [("q", "Command.QUAFF"), ("h", "CompassDirection.W")],
+)
+def test_hunger_skill_answers_with_the_rations_current_offered_letter(
+    template: ProjectedObservation, current_letter: str, action_name: str
+) -> None:
+    skill = HungerSkill()
+    initial = replace(
+        template,
+        player=replace(template.player, hunger=2),
+        inventory=(_ration(template),),
+    )
+    eat = skill.select_action(initial, _HUNGER_BY_NAME, _HUNGER_BY_COMMAND)
+    prompt = replace(
+        initial,
+        step_index=1,
+        message=f"What do you want to eat? [{current_letter} or ?*]",
+        prompt=PromptState(True, False, False),
+        inventory=(_ration(template, letter=current_letter),),
+    )
+
+    answer = skill.select_action(prompt, _HUNGER_BY_NAME, _HUNGER_BY_COMMAND)
+
+    assert eat is not None
+    assert eat.action_index == _HUNGER_BY_NAME["Command.EAT"].index
+    assert answer is not None
+    assert answer.action_index == _HUNGER_BY_NAME[action_name].index
+
+
+def test_hunger_skill_cancels_mismatched_item_prompt_and_clears_sequence(
+    template: ProjectedObservation,
+) -> None:
+    skill = HungerSkill()
+    hungry = replace(
+        template,
+        player=replace(template.player, hunger=2),
+        inventory=(_ration(template),),
+    )
+    assert skill.select_action(hungry, _HUNGER_BY_NAME, _HUNGER_BY_COMMAND) is not None
+    mismatch = replace(
+        hungry,
+        step_index=1,
+        message="What do you want to eat? [z or ?*]",
+        prompt=PromptState(True, False, False),
+    )
+
+    canceled = skill.select_action(mismatch, _HUNGER_BY_NAME, _HUNGER_BY_COMMAND)
+    restarted = skill.select_action(hungry, _HUNGER_BY_NAME, _HUNGER_BY_COMMAND)
+
+    assert canceled is not None
+    assert canceled.action_index == _HUNGER_BY_NAME["Command.ESC"].index
+    assert restarted is not None
+    assert restarted.action_index == _HUNGER_BY_NAME["Command.EAT"].index
+
+
+def test_unknown_food_is_not_eaten_and_floor_corpse_prompt_is_declined(
+    template: ProjectedObservation,
+) -> None:
+    corpse = _ration(
+        template,
+        description="a newt corpse",
+        buc=BucStatus.UNKNOWN,
+    )
+    hungry = replace(
+        template,
+        player=replace(template.player, hunger=4),
+        inventory=(corpse,),
+    )
+    floor_prompt = replace(
+        hungry,
+        message="There is a newt corpse here; eat it? [ynq] (n)",
+        prompt=PromptState(True, False, False),
+    )
+
+    assert (
+        HungerSkill().select_action(hungry, _HUNGER_BY_NAME, _HUNGER_BY_COMMAND) is None
+    )
+    declined = SafePromptHandler.select_action(
+        floor_prompt, _HUNGER_BY_NAME, _HUNGER_BY_COMMAND
+    )
+    assert declined is not None
+    assert declined.action_index == _HUNGER_BY_COMMAND[ord("n")].index

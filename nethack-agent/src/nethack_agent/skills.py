@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Final
+
+from nle import nethack
 
 from nethack_agent.decision import (
     STAIR_DESTINATIONS,
@@ -23,7 +26,11 @@ from nethack_agent.navigation import (
     RouteTree,
     route_tree,
 )
-from nethack_agent.observation import ProjectedObservation
+from nethack_agent.observation import (
+    BucStatus,
+    InventoryItem,
+    ProjectedObservation,
+)
 from nethack_agent.traversal import (
     DUNGEONS_OF_DOOM,
     STAND_ON_DOWNSTAIRS,
@@ -53,6 +60,19 @@ _FRONTIER_PASSAGES: Final = frozenset(
         CellKind.CLOSED_DOOR,
         CellKind.CORRIDOR,
     }
+)
+
+_INVENTORY_LETTERS: Final = frozenset(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+)
+_SAFE_RATION_DESCRIPTION: Final = re.compile(
+    r"^(?P<count>a|an|the|[1-9]\d*) "
+    r"(?:(?P<buc>blessed|uncursed|cursed) )?"
+    r"(?:(?P<enchantment>[+-]\d+) )?"
+    r"(?P<name>food ration|food rations)$"
+)
+_ITEM_SELECTION_PROMPT: Final = re.compile(
+    r"^What do you want to eat\? \[(?P<letters>[A-Za-z]+) or \?\*\]$"
 )
 
 
@@ -138,6 +158,9 @@ class StaircaseNavigationSkill:
         )
         if chosen == origin:
             here = ActionIntent(destination, None, None)
+            defense = _attack_adjacent_hostile(memory, actions_by_name, destination)
+            if defense is not None:
+                return defense
             if isinstance(goal, TraverseStairsGoal):
                 if level_change is None:
                     return None
@@ -265,6 +288,139 @@ class ExploreLevelSkill:
             StuckReason.MONSTER_BLOCKED
             if blocked_by_monster
             else StuckReason.SEARCH_EXHAUSTED,
+        )
+
+
+def is_safe_food_ration(item: InventoryItem) -> bool:
+    """Whether typed inventory evidence names exactly a food-ration stack."""
+    if item.letter not in _INVENTORY_LETTERS or item.object_class != int(
+        nethack.FOOD_CLASS
+    ):
+        return False
+    match = _SAFE_RATION_DESCRIPTION.fullmatch(item.description)
+    if match is None:
+        return False
+    count = match.group("count")
+    plural = match.group("name") == "food rations"
+    if count.isdigit():
+        if (int(count) == 1) == plural:
+            return False
+    elif plural:
+        return False
+    described_buc = match.group("buc")
+    expected_buc = (
+        BucStatus.UNKNOWN if described_buc is None else BucStatus(described_buc)
+    )
+    return item.buc is expected_buc
+
+
+def safe_food_rations(
+    observation: ProjectedObservation,
+) -> tuple[InventoryItem, ...]:
+    return tuple(
+        sorted(
+            (item for item in observation.inventory if is_safe_food_ration(item)),
+            key=lambda item: item.letter,
+        )
+    )
+
+
+def item_selection_commands(
+    observation: ProjectedObservation,
+) -> frozenset[int] | None:
+    """Literal inventory letters offered by the exact NLE eat-item prompt."""
+    if not observation.prompt.single_character_choice:
+        return None
+    match = _ITEM_SELECTION_PROMPT.fullmatch(observation.message.strip())
+    if match is None:
+        return None
+    return frozenset(ord(letter) for letter in match.group("letters"))
+
+
+def _same_ration(first: InventoryItem, second: InventoryItem) -> bool:
+    return (
+        first.description == second.description
+        and first.glyph == second.glyph
+        and first.object_class == second.object_class
+        and first.buc is second.buc
+    )
+
+
+class HungerSkill:
+    """Eat one known food ration at Hungry or worse, then answer its one prompt."""
+
+    def __init__(self) -> None:
+        self._pending: InventoryItem | None = None
+
+    def reset(self) -> None:
+        self._pending = None
+
+    def select_action(
+        self,
+        observation: ProjectedObservation,
+        actions_by_name: dict[str, LegalAction],
+        actions_by_command: dict[int, LegalAction],
+    ) -> SkillAction | None:
+        origin = (observation.player.x, observation.player.y)
+        if self._pending is not None:
+            pending = self._pending
+            self._pending = None
+            if not observation.prompt.active:
+                return None
+            offered = item_selection_commands(observation)
+            if offered is None:
+                return None
+            if offered:
+                matches = tuple(
+                    item
+                    for item in safe_food_rations(observation)
+                    if _same_ration(pending, item)
+                )
+                if len(matches) == 1:
+                    letter = matches[0].letter
+                    action = actions_by_command.get(ord(letter))
+                    if ord(letter) in offered and action is not None:
+                        return SkillAction(
+                            action.index,
+                            "Select the verified food ration in inventory slot "
+                            f"{letter}.",
+                            ActionRecord(ActionKind.OTHER, origin),
+                            None,
+                        )
+            cancel = actions_by_command.get(27)
+            if cancel is not None:
+                return SkillAction(
+                    cancel.index,
+                    "Cancel the item prompt because its ration evidence changed.",
+                    ActionRecord(ActionKind.OTHER, origin),
+                    None,
+                )
+            return None
+
+        offered = item_selection_commands(observation)
+        if offered is not None:
+            cancel = actions_by_command.get(27)
+            if cancel is not None:
+                return SkillAction(
+                    cancel.index,
+                    "Cancel an item prompt not started by the bounded hunger skill.",
+                    ActionRecord(ActionKind.OTHER, origin),
+                    None,
+                )
+            return None
+        if observation.prompt.active or observation.player.hunger < 2:
+            return None
+        rations = safe_food_rations(observation)
+        eat = actions_by_name.get("Command.EAT")
+        if not rations or eat is None:
+            return None
+        self._pending = rations[0]
+        return SkillAction(
+            eat.index,
+            "Eat the first verified inventory food ration because hunger is Hungry "
+            "or worse.",
+            ActionRecord(ActionKind.OTHER, origin),
+            None,
         )
 
 
