@@ -723,9 +723,15 @@ def _link(
     )
     origin_memory.links[origin] = StairLink(destination, arrival)
     arrival_memory.set_stair(arrival, direction.opposite)
-    arrival_memory.stair_identities[arrival] = StairIdentity(
-        kind, source.dungeon_number, IdentityEvidence.ARRIVAL
-    )
+    arrived = StairIdentity(kind, source.dungeon_number, IdentityEvidence.ARRIVAL)
+    known = arrival_memory.stair_identities.get(arrival)
+    # Returning by a staircase the hero already used from this side keeps
+    # that stronger traversal evidence when both agree.
+    if known is None or (known.kind, known.dungeon_number) != (
+        arrived.kind,
+        arrived.dungeon_number,
+    ):
+        arrival_memory.stair_identities[arrival] = arrived
     arrival_memory.links[arrival] = StairLink(source, origin)
 
 

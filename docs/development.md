@@ -412,21 +412,25 @@ The Ollama URL must resolve to a loopback hostname or address. Gameplay must rem
 
 The committed milestone suite is `nethack-agent/evaluation/staircase-v1.json`
 (seeds 1–10, 1,000-step cap). It is bound to policy `hierarchical-explore-v1`.
-The current checkout runs the interim policy `hierarchical-traversal-v1-dev`,
-whose typed goals changed the model prompts and output contract (ADR 0004), so
-`eval run` refuses this suite with `FAIL evaluation: suite staircase-v1
-(schema 1) is bound to policy hierarchical-explore-v1 ...` before creating a
-run store, report, or episode. To reproduce milestone 1, check out commit
-`3211405` (the last with the bound policy) in a separate worktree. There,
-confirm Ollama first, then run the whole suite against the configured local
-model:
+The current checkout runs policy `hierarchical-traversal-v1`, whose typed
+goals changed the model prompts and output contract (ADR 0004), so `eval run`
+refuses this suite with `FAIL evaluation: suite staircase-v1 (schema 1) is
+bound to policy hierarchical-explore-v1 ...` before creating a run store,
+report, or episode. To reproduce milestone 1, check out commit `3211405` (the
+last with the bound policy) in a separate worktree and give it a fresh data
+directory that no newer checkout has written: that checkout's strict event
+reader rejects the typed goal objects, stair identities, and intent levels
+that later policies record, so runs a newer checkout wrote into a shared
+`runs.sqlite3` are unreadable there, and mixing policies in one data directory
+defeats per-policy evidence. There, confirm Ollama first, then run the whole suite against
+the configured local model:
 
 ```bash
 cd nethack-agent
 uv run nethack-agent doctor
 uv run nethack-agent eval run \
   --suite evaluation/staircase-v1.json \
-  --data-dir data/evaluations/staircase-v1-explore \
+  --data-dir data/evaluations/staircase-v1-reproduction \
   --report-dir evaluation/reports
 ```
 
@@ -523,7 +527,7 @@ the manifest, and bump `bundle_id` for a semantic card-set change:
 
 ```bash
 cd nethack-agent
-sha256sum knowledge/staircase-goal.md
+sha256sum knowledge/stairs-traversal.md
 uv run pytest -q tests/test_knowledge.py
 uv run python -c 'from nethack_agent.knowledge import load_default_knowledge_bundle as l; b=l(); print(b.version, b.character_count, b.estimated_tokens)'
 ```

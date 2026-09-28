@@ -552,6 +552,28 @@ The protocol:
    - Run `staircase-v2` and `traversal-v1` with the local model.
    - Run `verify network`, `pytest`, and `ruff`.
 
+## Implementation notes
+
+Milestone A steps 1-6 and 8 landed in commits `3211405` through the change
+recorded in [note 0015](../notes/0015-typed-traversal-goals.md); step 7 is
+owned separately. Details that refine the plan above:
+
+- `IntentDestination.pair_known` records whether memory held two staircases of
+  the destination's direction. The coordinator requires it to match memory
+  before issuing a permit, and the evaluator can judge an unknown branch probe
+  from the recorded value rather than from the decided-on observation.
+- Returning by a staircase the hero already used keeps its `traversed`
+  evidence rather than downgrading it to `arrival`.
+- An objective leg naming a dungeon without a known staircase branch from the
+  Dungeons of Doom is rejected when the objective is constructed.
+- `enter_dungeon` searches range levels that are unvisited, not yet
+  exhausted, or show two staircases of the branch direction first (nearest
+  level, deeper on ties), then re-arms each exhausted range level once.
+- The policy is `hierarchical-traversal-v1` and the knowledge bundle
+  `staircase-reviewed-v3`; `staircase-v1` is refused under any policy but
+  `hierarchical-explore-v1`, and commit `3211405` is the last with that
+  policy.
+
 ## Consequences
 
 - Level changes become possible only through one audited path: the planner's

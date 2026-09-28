@@ -551,7 +551,8 @@ class AgentCoordinator:
 
         The shared `level_change_error` predicate judges the recorded
         selection; the level memory must also hold a staircase of that
-        direction under the hero with the identity the intent recorded.
+        direction under the hero with the identity and staircase-pair
+        evidence the intent recorded.
         Actions that do not change level need no permit.
         """
         legal = self._environment.legal_actions
@@ -582,6 +583,8 @@ class AgentCoordinator:
                 error = f"no remembered {direction.value} staircase under the hero"
             elif intent.destination.stair != memory.identity(position):
                 error = "the intent's stair identity is not the remembered one"
+            elif intent.destination.pair_known != memory.pair_known(direction):
+                error = "the intent's staircase-pair evidence is not the remembered one"
         if error is not None:
             raise ActionGateError(error)
         return TraversalPermit(direction, level, MapCell(*position))

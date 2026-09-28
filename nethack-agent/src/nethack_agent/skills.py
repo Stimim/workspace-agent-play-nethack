@@ -130,7 +130,12 @@ class StaircaseNavigationSkill:
             chosen = _best_stair(blocked, candidates)
             if chosen is None:
                 return None
-        destination = IntentDestination(kind, *chosen, memory.identity(chosen))
+        destination = IntentDestination(
+            kind,
+            *chosen,
+            memory.identity(chosen),
+            memory.pair_known(target.direction),
+        )
         if chosen == origin:
             here = ActionIntent(destination, None, None)
             if isinstance(goal, TraverseStairsGoal):

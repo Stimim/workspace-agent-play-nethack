@@ -436,32 +436,47 @@ class IntentDestination:
     # What a stair destination was believed to connect to when chosen. None
     # for other kinds and for stair intents recorded before identities were.
     stair: StairIdentity | None = None
+    # Whether level memory held two staircases of this direction when the
+    # destination was chosen, the evidence that allows an unknown staircase
+    # to be probed as a branch. None for other kinds and for stair intents
+    # recorded before this evidence was.
+    pair_known: bool | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.kind, DestinationKind):
             raise TypeError("destination kind must be a DestinationKind")
         integer_value(self.x, "intent destination x", minimum=0)
         integer_value(self.y, "intent destination y", minimum=0)
+        stair_kind = self.kind in STAIR_DESTINATIONS.values()
         if self.stair is not None:
             if not isinstance(self.stair, StairIdentity):
                 raise TypeError("intent destination stair must be a StairIdentity")
-            if self.kind not in STAIR_DESTINATIONS.values():
+            if not stair_kind:
                 raise ContractError("only a stair destination has a stair identity")
+        if self.pair_known is not None:
+            boolean_value(self.pair_known, "intent destination pair_known")
+            if not stair_kind:
+                raise ContractError("only a stair destination records pair_known")
 
     def to_json(self) -> dict[str, object]:
         result: dict[str, object] = {"kind": self.kind.value, "x": self.x, "y": self.y}
         if self.kind in STAIR_DESTINATIONS.values():
             result["stair"] = self.stair.to_json() if self.stair else None
+            result["pair_known"] = self.pair_known
         return result
 
     @classmethod
     def from_json(cls, value: object) -> Self:
-        # `stair` is absent from stair intents recorded before identities were;
-        # absent and null both mean not recorded.
+        # `stair` and `pair_known` are absent from stair intents recorded
+        # before they were; absent and null both mean not recorded.
         payload = object_value(
-            value, "intent destination", {"kind", "x", "y"}, optional={"stair"}
+            value,
+            "intent destination",
+            {"kind", "x", "y"},
+            optional={"stair", "pair_known"},
         )
         stair = payload.get("stair")
+        pair_known = payload.get("pair_known")
         return cls(
             kind=enum_value(
                 payload["kind"], "intent destination kind", DestinationKind
@@ -472,6 +487,11 @@ class IntentDestination:
                 None
                 if stair is None
                 else StairIdentity.from_json(stair, "intent destination stair")
+            ),
+            pair_known=(
+                None
+                if pair_known is None
+                else boolean_value(pair_known, "intent destination pair_known")
             ),
         )
 

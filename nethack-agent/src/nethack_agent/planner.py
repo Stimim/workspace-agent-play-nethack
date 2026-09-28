@@ -63,19 +63,8 @@ class ObjectivePlanner:
     """Derive each step's goal from the objective's current leg and memory."""
 
     def __init__(self, objective: Objective) -> None:
-        for leg in objective.legs:
-            dungeon = (
-                leg.level.dungeon_number
-                if isinstance(leg, ReachLevelLeg)
-                else leg.dungeon_number
-                if isinstance(leg, EnterDungeonLeg)
-                else DUNGEONS_OF_DOOM
-            )
-            if dungeon != DUNGEONS_OF_DOOM and dungeon not in _BRANCHES:
-                raise ObjectivePlanningError(
-                    f"dungeon {dungeon} has no known staircase branch from the "
-                    "Dungeons of Doom"
-                )
+        # Objective construction already rejects dungeons without a known
+        # staircase branch.
         self.objective = objective
 
     @property

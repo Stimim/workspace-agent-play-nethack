@@ -192,7 +192,9 @@ def test_staircase_skill_routes_multiple_steps_then_waits_on_target(
     template: ProjectedObservation, actions: dict[str, LegalAction]
 ) -> None:
     skill = StaircaseNavigationSkill()
-    downstairs = IntentDestination(DestinationKind.DOWNSTAIRS, 5, 1, UNKNOWN_STAIR)
+    downstairs = IntentDestination(
+        DestinationKind.DOWNSTAIRS, 5, 1, UNKNOWN_STAIR, False
+    )
     names = []
     for hero, row in ((2, "|.@..>|"), (3, "|..@.>|"), (4, "|...@>|")):
         memory = remembered(template, ("-------", row, "-------"))
@@ -243,7 +245,7 @@ def test_staircase_skill_uses_route_distance_then_row_and_column_for_multiple_st
     assert proposal is not None
     assert action_name(actions, proposal.action_index) == "CompassDirection.W"
     assert proposal.intent == ActionIntent(
-        IntentDestination(DestinationKind.DOWNSTAIRS, 1, 1, UNKNOWN_STAIR),
+        IntentDestination(DestinationKind.DOWNSTAIRS, 1, 1, UNKNOWN_STAIR, True),
         None,
         cells((3, 2), (2, 2), (1, 1)),
     )
@@ -273,7 +275,9 @@ def test_traversal_goal_uses_the_matching_staircase_under_the_hero(
     # The use happens in place: the intent names the staircase and its
     # believed identity, with no route.
     assert proposal.intent == ActionIntent(
-        IntentDestination(DestinationKind.DOWNSTAIRS, 2, 0, UNKNOWN_STAIR), None, None
+        IntentDestination(DestinationKind.DOWNSTAIRS, 2, 0, UNKNOWN_STAIR, False),
+        None,
+        None,
     )
     # Without the level-change action there is nothing to propose, and a
     # standing goal waits instead.
@@ -292,8 +296,10 @@ def test_traversal_ranks_established_stairs_before_probes_and_skips_mismatches(
     # for the main staircase.
     probe = skill.select_action(memory, actions, _MAIN_DOWN, _DOWN_ACTION)
     assert probe is not None and probe.intent is not None
+    # The intent records that both `>` were known: the evidence that lets an
+    # unknown staircase be probed as a branch.
     assert probe.intent.destination == IntentDestination(
-        DestinationKind.DOWNSTAIRS, 1, 0, UNKNOWN_STAIR
+        DestinationKind.DOWNSTAIRS, 1, 0, UNKNOWN_STAIR, True
     )
 
     # Once the far `>` is known to be the Mines branch, the near one is main
@@ -310,12 +316,14 @@ def test_traversal_ranks_established_stairs_before_probes_and_skips_mismatches(
         1,
         0,
         StairIdentity(StairIdentityKind.MAIN, 0, IdentityEvidence.ELIMINATION),
+        True,
     )
     assert mines.intent.destination == IntentDestination(
         DestinationKind.DOWNSTAIRS,
         8,
         0,
         StairIdentity(StairIdentityKind.BRANCH, 2, IdentityEvidence.TRAVERSED),
+        True,
     )
 
     # A lone unknown `>` is never probed for a branch.
@@ -354,7 +362,7 @@ def test_staircase_defense_keeps_the_chosen_downstairs_as_destination(
     assert action_name(actions, proposal.action_index) == "CompassDirection.NE"
     # The attack leaves the route, so no path is recorded for this step.
     assert proposal.intent == ActionIntent(
-        IntentDestination(DestinationKind.DOWNSTAIRS, 5, 2, UNKNOWN_STAIR),
+        IntentDestination(DestinationKind.DOWNSTAIRS, 5, 2, UNKNOWN_STAIR, False),
         MapCell(2, 1),
         None,
     )
@@ -408,7 +416,9 @@ def test_monster_blocked_route_is_recorded_while_approaching_not_waiting(
     template: ProjectedObservation, actions: dict[str, LegalAction]
 ) -> None:
     skill = StaircaseNavigationSkill()
-    downstairs = IntentDestination(DestinationKind.DOWNSTAIRS, 5, 1, UNKNOWN_STAIR)
+    downstairs = IntentDestination(
+        DestinationKind.DOWNSTAIRS, 5, 1, UNKNOWN_STAIR, False
+    )
 
     # Memory keeps the floor a monster later stands on.
     seen = ("-------", "|@...>|", "-------")
@@ -828,6 +838,13 @@ def test_stair_traversal_links_both_levels_and_establishes_identities(
     doom = dungeon.observe(sketch(template, ("|.>..@|",), step=3, dungeon_level=2))
     assert doom.position == (5, 0)
     assert dungeon.current is doom
+    # Returning keeps the stronger traversal evidence on both staircases.
+    assert doom.identity((5, 0)) == StairIdentity(
+        StairIdentityKind.BRANCH, 2, IdentityEvidence.TRAVERSED
+    )
+    assert mines.identity((3, 0)) == StairIdentity(
+        StairIdentityKind.BRANCH, 0, IdentityEvidence.TRAVERSED
+    )
 
 
 def test_main_traversal_and_rules_identify_the_remaining_stairs(

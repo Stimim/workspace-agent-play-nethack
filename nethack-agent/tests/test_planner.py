@@ -222,10 +222,3 @@ def test_legs_complete_only_on_their_level_dungeon_or_matching_stair(
     )
     # Completed legs are skipped in order; the first open leg stops advancing.
     assert ObjectivePlanner(objective).advance(0, walk.dungeon) == 2
-
-
-def test_objectives_into_unreachable_dungeons_are_rejected() -> None:
-    with pytest.raises(ObjectivePlanningError, match="dungeon 3"):
-        ObjectivePlanner(Objective((EnterDungeonLeg(3),)))
-    with pytest.raises(ObjectivePlanningError, match="dungeon 5"):
-        ObjectivePlanner(reach(5, 1))

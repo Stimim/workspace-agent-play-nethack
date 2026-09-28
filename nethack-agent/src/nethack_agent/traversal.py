@@ -121,6 +121,11 @@ BRANCH_STAIRS: Final[dict[StairDirection, BranchStairs]] = {
     StairDirection.DOWN: BranchStairs(GNOMISH_MINES, 2, 4),
     StairDirection.UP: BranchStairs(SOKOBAN, 6, 10),
 }
+# Dungeons an objective may name: the Dungeons of Doom and the branches its
+# staircases lead into.
+REACHABLE_DUNGEONS: Final = frozenset(
+    {DUNGEONS_OF_DOOM, *(branch.dungeon_number for branch in BRANCH_STAIRS.values())}
+)
 
 
 class StairConnection(Enum):
@@ -489,6 +494,19 @@ class Objective:
             raise ContractError(
                 f"an objective must have 1 to {MAX_OBJECTIVE_LEGS} legs"
             )
+        for leg in self.legs:
+            dungeon = (
+                leg.level.dungeon_number
+                if isinstance(leg, ReachLevelLeg)
+                else leg.dungeon_number
+                if isinstance(leg, EnterDungeonLeg)
+                else DUNGEONS_OF_DOOM
+            )
+            if dungeon not in REACHABLE_DUNGEONS:
+                raise ContractError(
+                    f"objective dungeon {dungeon} has no known staircase branch "
+                    "from the Dungeons of Doom"
+                )
 
     @property
     def changes_level(self) -> bool:

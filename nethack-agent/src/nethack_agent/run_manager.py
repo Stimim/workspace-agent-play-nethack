@@ -49,10 +49,10 @@ from nethack_agent.storage import (
 )
 from nethack_agent.tasks import STAIRCASE_TASK, TaskSpec
 
-# Interim development id: typed goals changed the model prompts and output
-# contract after hierarchical-explore-v1 (ADR 0004). Committed suites for the
-# traversal policy will pin its final id.
-POLICY_VERSION: Final = "hierarchical-traversal-v1-dev"
+# Typed traversal goals, objective planning, and permit-gated level changes
+# (ADR 0004). They changed the model prompts and output contract after
+# hierarchical-explore-v1, which only its own checkout can reproduce.
+POLICY_VERSION: Final = "hierarchical-traversal-v1"
 _ACTIVE_STATES: Final = frozenset({RunState.IDLE, RunState.RUNNING, RunState.PAUSED})
 
 

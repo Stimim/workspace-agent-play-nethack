@@ -42,8 +42,8 @@ Dependency order for the four capability items below: traversal goals, then NLE 
   - [x] `ObjectivePlanner` and goal-aware staircase navigation and exploration; `objective_complete` outcome.
   - [x] Traversal permits in `ActionGate` and the same predicate in the evaluator audit; `<` on (0, 1) stays forbidden.
   - [x] Intents gain `upstairs`, stair identity, and level; UI and legacy readability.
-  - [x] Interim policy `hierarchical-traversal-v1-dev`; `eval run` refuses schema-1 `staircase-v1` under any policy but `hierarchical-explore-v1` before any episode.
-  - [ ] Replace the staircase knowledge card with a direction- and identity-neutral stairs card, set the final traversal policy id, and record milestone A in a note (ADR 0004 step 8).
+  - [x] Policy `hierarchical-traversal-v1`; `eval run` refuses schema-1 `staircase-v1` under any policy but `hierarchical-explore-v1` before any episode.
+  - [x] Replace the staircase knowledge card with the direction- and identity-neutral `stairs-traversal` card (bundle `staircase-reviewed-v3`), set policy `hierarchical-traversal-v1`, record stair-pair evidence on intents, and record milestone A in [note 0015](docs/notes/0015-typed-traversal-goals.md) (ADR 0004 step 8).
   - [ ] Suite schema 2 pinning policy and knowledge, report schema 3 with traversal metrics, `staircase-v2` regression and `traversal-v1` (descend, round trip, enter Mines); `staircase-v1` stays unchanged and bound to `hierarchical-explore-v1`.
 - [ ] Evaluate model-owned high-level choices when benchmarks expose real trade-offs: descend versus gain resources/levels, pray or use another recovery, and prioritize dangerous visible threats.
   - [ ] Only after suites contain a pre-declared number of decision points with two or more applicable goals.

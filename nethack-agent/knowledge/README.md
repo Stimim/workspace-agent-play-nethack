@@ -12,11 +12,13 @@ README, never enter a prompt.
 
 | Card | Question answered | Sources |
 | --- | --- | --- |
-| `staircase-goal.md` | How do I recognize and reach the Staircase target without descending? | [Staircase](https://nethackwiki.com/wiki/Staircase), [Command](https://nethackwiki.com/wiki/Command), [Gnomish Mines](https://nethackwiki.com/wiki/Gnomish_Mines), [Sokoban](https://nethackwiki.com/wiki/Sokoban) |
+| `stairs-traversal.md` | How do I recognize, reach, and use staircases, and what can the display not tell me? | [Staircase](https://nethackwiki.com/wiki/Staircase), [Command](https://nethackwiki.com/wiki/Command), [Gnomish Mines](https://nethackwiki.com/wiki/Gnomish_Mines), [Sokoban](https://nethackwiki.com/wiki/Sokoban) |
 | `exploration-map.md` | How should I read the ASCII map and explore conservatively? | [Dungeon feature](https://nethackwiki.com/wiki/Dungeon_feature), [Movement](https://nethackwiki.com/wiki/Movement), [Command](https://nethackwiki.com/wiki/Command) |
 | `safe-interaction.md` | What basic monster, door, and prompt facts prevent risky improvisation? | [Melee](https://nethackwiki.com/wiki/Melee), [Movement](https://nethackwiki.com/wiki/Movement), [Door](https://nethackwiki.com/wiki/Door), [Command](https://nethackwiki.com/wiki/Command) |
 
-Facts were extracted on 2026-09-27 from the local NetHackWiki current-page dump
+Facts were extracted on 2026-09-27 (and for `stairs-traversal.md`, which
+replaced the milestone `staircase-goal.md` card in bundle
+`staircase-reviewed-v3`, on 2026-09-28) from the local NetHackWiki current-page dump
 (`docs/external/nethack-wiki-xml-dump/nethackwiki_current.xml`) with the
 repository wiki skill. The raw dump is neither committed nor read at runtime.
 

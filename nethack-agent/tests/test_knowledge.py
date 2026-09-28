@@ -72,7 +72,7 @@ def test_reviewed_bundle_is_deterministic_and_manifest_ordered() -> None:
     assert isinstance(cards, list)
 
     assert first == second
-    assert first.version == f"staircase-reviewed-v2+sha256:{first.content_hash}"
+    assert first.version == f"staircase-reviewed-v3+sha256:{first.content_hash}"
     assert [card.card_id for card in first.cards] == [
         Path(str(card["path"])).stem for card in cards if isinstance(card, dict)
     ]
@@ -140,7 +140,7 @@ def test_manifest_validation_rejects_unreviewed_shapes(
 
 def test_missing_and_tampered_allowlisted_cards_fail(tmp_path: Path) -> None:
     directory = copy_knowledge(tmp_path)
-    card = directory / "staircase-goal.md"
+    card = directory / "stairs-traversal.md"
     card.write_text(card.read_text(encoding="utf-8") + "\nUnreviewed fact.\n")
     with pytest.raises(KnowledgeCardTamperedError, match="hash mismatch"):
         load_knowledge_bundle(directory)

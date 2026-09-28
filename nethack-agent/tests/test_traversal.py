@@ -151,6 +151,21 @@ def test_objectives_round_trip_and_bound_their_legs() -> None:
 
 
 @pytest.mark.parametrize(
+    "leg",
+    [
+        {"kind": "enter_dungeon", "dungeon_number": 3},
+        {"kind": "reach_level", "level": {"dungeon_number": 5, "dungeon_level": 1}},
+    ],
+)
+def test_objectives_name_only_dungeons_reachable_by_staircase(leg: object) -> None:
+    # The Quest (3) and Fort Ludios (5) are entered by portal.
+    with pytest.raises(ContractError, match="no known staircase branch"):
+        Objective.from_json({"legs": [leg]})
+    assert Objective((EnterDungeonLeg(2),)).legs == (EnterDungeonLeg(2),)
+    assert Objective((ReachLevelLeg(LevelKey(4, 1)),)).changes_level
+
+
+@pytest.mark.parametrize(
     ("identity", "match"),
     [
         (

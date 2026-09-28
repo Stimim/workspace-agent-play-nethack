@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
-  "bundle_id": "staircase-reviewed-v2",
+  "bundle_id": "staircase-reviewed-v3",
   "max_context_characters": 6000,
   "cards": [
     {
-      "path": "staircase-goal.md",
-      "sha256": "5545ed5992bf5b9b4be9ee02e3736ad1d95ece736e2c9399bf36bf13a6824ece"
+      "path": "stairs-traversal.md",
+      "sha256": "ad76638fb43557d00cf05ff6bcf86b286f706b3dd5ecbe1c4468ad9db5a9b0fc"
     },
     {
       "path": "exploration-map.md",

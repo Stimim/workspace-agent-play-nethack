@@ -27,8 +27,10 @@ from nethack_agent.model import DecisionFailure, OllamaDecisionModel
 from nethack_agent.observation import ObservationProjector
 from nethack_agent.ollama import Generation, OllamaError
 from nethack_agent.traversal import (
+    MAX_DUNGEON_NUMBER,
     STAND_ON_DOWNSTAIRS,
     UNKNOWN_STAIR,
+    Goal,
     IdentityEvidence,
     LevelKey,
     StairConnection,
@@ -36,6 +38,7 @@ from nethack_agent.traversal import (
     StairIdentity,
     StairIdentityKind,
     StairTarget,
+    StandOnStairsGoal,
     TraverseStairsGoal,
 )
 
@@ -415,3 +418,74 @@ def test_climbing_out_of_the_dungeon_is_always_refused() -> None:
     assert "leaves the dungeon" in refusal(  # type: ignore[operator]
         selection, action="MiscDirection.UP", level=LevelKey(0, 1)
     )
+
+
+def every_goal() -> list[Goal]:
+    targets = [
+        StairTarget(direction, connection, dungeon)
+        for direction in StairDirection
+        for connection in StairConnection
+        for dungeon in (
+            range(MAX_DUNGEON_NUMBER + 1)
+            if connection is StairConnection.BRANCH
+            else (None,)
+        )
+    ]
+    return [StandOnStairsGoal(target) for target in targets] + [
+        TraverseStairsGoal(target)
+        for target in targets
+        if target.connection is not StairConnection.ANY
+    ]
+
+
+def test_every_goal_has_a_distinct_token_the_parser_maps_back() -> None:
+    goals = tuple(every_goal())
+    assert len({goal.token for goal in goals}) == len(goals)
+    for goal in goals:
+        response = json.loads(valid_skill_decision())
+        response["goal"] = goal.token
+        decision = parse_skill_decision(
+            json.dumps(response), goals, frozenset({Skill.STAIRCASE_NAVIGATION})
+        )
+        assert decision.goal == goal
+
+
+class RecordingClient(ScriptedClient):
+    def __init__(self, responses: list[str]) -> None:
+        super().__init__(responses)
+        self.prompts: list[str] = []
+
+    def generate(self, prompt: str, *args: object, **kwargs: object) -> Generation:
+        self.prompts.append(prompt)
+        return super().generate(prompt, *args, **kwargs)
+
+
+def test_stuck_prompt_describes_every_offered_goal_and_its_staircase(
+    tmp_path: Path,
+) -> None:
+    climb = TraverseStairsGoal(
+        StairTarget(StairDirection.UP, StairConnection.MAIN, None)
+    )
+    offered = (climb, STAND_ON_DOWNSTAIRS)
+    response = json.loads(valid_skill_decision())
+    response["goal"] = climb.token
+    client = RecordingClient([json.dumps(response)])
+    environment, observation = projected_state(tmp_path)
+    try:
+        result = model(client).select_skill(
+            observation,
+            offered,
+            (Skill.STAIRCASE_NAVIGATION, Skill.EXPLORE_LEVEL),
+            StuckReason.SEARCH_EXHAUSTED,
+        )
+    finally:
+        environment.close()
+
+    assert result.decision.goal == climb
+    (prompt,) = client.prompts
+    # Each offered goal is listed with its own stand-or-use constraint, and the
+    # stuck situation names the staircases those goals need.
+    assert "- traverse_stairs:up:main: reach the upstairs" in prompt
+    assert "- stand_on_stairs:down:any: stand on a downstairs tile" in prompt
+    assert "without descending" in prompt
+    assert "no upstairs or downstairs matching the goal" in prompt

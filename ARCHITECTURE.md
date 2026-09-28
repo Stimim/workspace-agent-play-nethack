@@ -37,7 +37,7 @@ The product domain. It owns the Python application, local-model integration, NLE
 
 ### NLE adapter
 
-Use the maintained [`NetHack-LE/nle`](https://github.com/NetHack-LE/nle) package through its Gymnasium API. The first task is `NetHackStaircase-v0`; the eventual full-game environment is `NetHackScore-v0` or a narrowly derived environment if a proven requirement appears.
+Use the maintained [`NetHack-LE/nle`](https://github.com/NetHack-LE/nle) package through its Gymnasium API. The first task was `NetHackStaircase-v0`; runs now also execute `NetHackScore-v0` traversal objectives, and the eventual full-game environment is `NetHackScore-v0` or a narrowly derived environment if a proven requirement appears.
 
 The adapter must:
 
@@ -48,13 +48,28 @@ The adapter must:
 - expose only legitimate observations to the policy; NLE's internal task state must never enter a model prompt;
 - translate model intent into the finite action set and reject invalid actions before calling `env.step`.
 
-`NleEnvironment` implements the current boundary. One committed suite seed is
+`NleEnvironment` implements the current boundary. Each run executes one typed
+`tasks.TaskSpec` (`ScenarioConfig.task`, default `STAIRCASE_TASK`): an NLE task
+id (`NleTask`: Staircase, Score, Scout, Gold, Eat, Oracle), an action profile,
+and a `traversal.Objective`. `NetHackStaircase-v0` accepts only its single
+`stand_on_stairs(down, any)` leg and `NetHackScore-v0` any legs; Scout, Gold,
+Eat, and Oracle are rejected until ADR 0004 section 8 defines their
+objectives. An `ActionProfile` is a named, code-defined tuple of NLE action
+members; only `nle-task-actions` (NLE's 23 `TASK_ACTIONS`) exists. The adapter
+passes it as NLE's `actions=` argument and fails construction unless the raw
+environment's action table equals it. One committed suite seed is
 deterministically expanded into separate core, display, and level-generation
 seeds; NLE reseeding is disabled and time-derived effects use the seed. The
-adapter requests only public observation keys, explicitly adds `autoopen` to
-NLE's option list rather than relying on NetHack's default, represents its
-finite action set as typed index/command/name records, and rejects invalid
-indices before NLE.
+adapter requests only public observation keys, passes each task's own NLE
+option choice (NLE applies it only when no options are given; Gold's is
+`pickup_types:$`) plus an explicit `autoopen` rather than relying on NetHack's
+default, represents its finite action set as typed index/command/name records,
+and rejects invalid indices before NLE. Gymnasium's `TimeLimit` enforces the
+episode cap and reports it as `truncated`; NLE's own abort, which would report
+a cap as a terminated `end_status` -1 episode and defaults to 5,000 steps,
+receives `cap + 1` through the registered spec's kwargs so it never fires
+first. NLE zeroes the bottom-line statistics of a terminal observation, so no
+level, position, or objective is read from one.
 
 NLE reuses its NumPy observation buffers. `NleObservation` therefore exposes
 zero-copy views that are valid only until the next `step` or `reset`. Consumers
@@ -176,11 +191,16 @@ actions are cleared whenever the hero enters the level, and everything resets
 on `start`. The look-here messages "There is a staircase down/up here." mark a
 staircase hidden under an object. A stair action followed by a level change
 links both staircases and records their identities (`traversed` and
-`arrival`); on a level with two staircases of one direction the complement of
-an established one follows by `elimination`, and `<` on (0, 1) is the dungeon
-exit by `rule`. A level change without a stair action (a trap door, hole, or
-level teleport) links nothing, and main versus branch stairs cannot be told
-apart before one of these rules applies.
+`arrival`; returning by a staircase the hero already used keeps its
+`traversed` evidence); on a level with two staircases of one direction the
+complement of an established one follows by `elimination`, and `<` on (0, 1)
+is the dungeon exit by `rule`. A level change without a stair action (a trap
+door, hole, or level teleport) links nothing, and main versus branch stairs
+cannot be told apart before one of these rules applies. Current limits: a
+Mines entrance behind a secret door can be missed; Sokoban's dungeon number is
+inferred from `dungeon.def` order and has not been reached; ladders and
+portals are not stairs here; and the baseline's combat, hunger, and eating
+failures (note 0015) still end longer traversal episodes.
 Breadth-first routes follow NetHack 3.6.7 `test_move`: no diagonal move into or
 out of an open or closed door (doorless and broken doorways allow diagonals),
 closed doors are entered orthogonally because moving into one opens it,
@@ -223,8 +243,9 @@ passes: the task's objective has a leg beyond standing on stairs, the goal is
 proposed it with an in-place intent on the hero's cell recording the stair
 identity and level, no prompt is active, the identity is compatible with the
 goal's target, and the action is not `<` on (0, 1). Level memory must also
-hold a staircase of that direction under the hero with the recorded
-identity. Otherwise the refusal pauses the run like any gate rejection. `<` on
+hold a staircase of that direction under the hero with the recorded identity
+and staircase-pair evidence. Otherwise the refusal pauses the run like any gate
+rejection. `<` on
 dungeon level 1 asks to leave the dungeon; NLE's default prompt handling
 declines that question (see ADR 0004), and the predicate still refuses it. A
 recorded level-change step must satisfy the selection part of the same
@@ -245,7 +266,9 @@ coordinates, and an optional `attack_target` cell; at least one is present:
   routes to, steps onto, waits on, uses, or keeps while it first fights an
   adjacent hostile. A stair destination also records the `stair` identity the
   skill believed (`main`, `branch` with a dungeon number, `exit`, or
-  `unknown`, with `traversed`, `arrival`, `elimination`, or `rule` evidence);
+  `unknown`, with `traversed`, `arrival`, `elimination`, or `rule` evidence)
+  and `pair_known`, whether memory held two staircases of that direction, the
+  evidence that lets an unknown staircase be probed as a branch;
 - `frontier`: exploration's route goal next to never-observed space, including
   when the route first opens a door or waits for or attacks a blocking monster;
 - `search_spot`: the committed spot exploration walks to and searches from;
@@ -335,10 +358,17 @@ its version in every run; packaged wheels include the same directory. Explicit
 scripted development runs record the service's bundle version for comparable
 metadata but do not consume its prompt context.
 
-The current `staircase-reviewed-v2` bundle makes scenario `autoopen` explicit,
-records that NLE's one displayed glyph does not reveal stairs under a covering
-object or monster, and documents the additional same-direction stairs at the
-Gnomish Mines and Sokoban branch entrances from local-wiki evidence.
+The current `staircase-reviewed-v3` bundle makes scenario `autoopen` explicit
+and replaces the milestone staircase card with the direction- and
+identity-neutral `stairs-traversal` card. That card distinguishes standing on
+a staircase from using it, documents the additional same-direction stairs at
+the Gnomish Mines and Sokoban branch entrances, the dungeon exit from the
+level-1 upstairs, and that NLE's one displayed glyph does not reveal stairs
+under a covering object or monster except through the look-here message. It
+states no stand-or-use policy: the goal-derived prompt text says whether the
+current goal stands on or uses a staircase, and model fallbacks are never
+offered `<` or `>`. The earlier `staircase-reviewed-v1` and `-v2` bundles
+remain the knowledge of the accepted milestone 1 reports.
 
 ### Persistence and replay
 
@@ -349,7 +379,9 @@ foreign keys enabled). Every per-operation SQLite connection is explicitly
 closed. The `runs` table holds scenario configuration, derived seeds,
 environment, character, model, policy, knowledge, NLE and Ollama versions, the
 Ollama `num_ctx` (`ollama_num_ctx`; stores created before it existed gain the
-column with `NULL` for older runs),
+column with `NULL` for older runs), the canonical `TaskSpec` JSON (`task`; its
+`environment` must equal the `environment` column, and runs stored before it
+existed read `None`, never an inferred staircase task),
 state, outcome, last error, and the ttyrec path. The `events` table holds
 per-run JSON payloads with contiguous sequence numbers starting at 0. State
 updates and their corresponding events commit in one transaction with
@@ -380,8 +412,8 @@ through the store, HTTP API, browser UI, and evaluation audit: pet evidence is
 unknown, as described under the observation projector, an absent `intent`
 reads as JSON `null` (no intent recorded), and an absent intent `path` reads as
 `null` (no route recorded), never as an inferred target or route. Intents
-recorded before levels and stair identities read with `level: null` and
-`stair: null` (not recorded), and the goal string `stand_on_downstairs` reads
+recorded before levels, stair identities, and staircase-pair evidence read
+with `level: null`, `stair: null`, and `pair_known: null` (not recorded), and the goal string `stand_on_downstairs` reads
 as the typed goal it meant. A step's `outcome` is required exactly when NLE
 terminated or truncated the episode, except `objective_complete`, which the
 coordinator records when it ends a run whose NLE episode continues.
@@ -404,12 +436,15 @@ can therefore launch the service, start a run for a specific task and seed,
 observe it, pause or single-step it, and stop it after collecting evidence.
 
 Run creation accepts validated run execution parameters (`seed`,
-`max_episode_steps`, and `auto_start`) with strict types (`StrictInt` and
-`StrictBool`, with `extra="forbid"`) rather than arbitrary command lines. The
-environment (`NetHackStaircase-v0`), character (`val-dwa-law`), model
-(`gemma4-nethack:latest`), policy, and knowledge settings are fixed by the
-service configuration (environment variables and process defaults) rather than
-accepted per request, ensuring uniform evaluation conditions across runs.
+`max_episode_steps`, `auto_start`, and an optional `task`) with strict types
+(`StrictInt` and `StrictBool`, with `extra="forbid"`, and the `TaskSpec` domain
+parser for `task`) rather than arbitrary command lines. The character
+(`val-dwa-law`), model (`gemma4-nethack:latest`), policy
+(`hierarchical-traversal-v1`), and knowledge settings are fixed by the service
+configuration (environment variables and process defaults) rather than
+accepted per request, ensuring uniform evaluation conditions across runs; a
+run without `task` executes the staircase task, and a traversal task's
+objective drives the coordinator's planner.
 Lifecycle commands are serialized through the coordinator state machine. Stop
 is idempotent and graceful: close NLE, flush SQLite events, finalize the ttyrec
 reference, and report the terminal state without duplicating stop events on
@@ -425,10 +460,12 @@ that at most one worker advances it at a time.
 
 - `GET /api/health`;
 - `POST /api/runs` with strict typed payload (`seed` as `StrictInt`, optional
-  `max_episode_steps` as `StrictInt` default 5000, and optional `auto_start` as
-  `StrictBool` default false);
+  `max_episode_steps` as `StrictInt` default 5000, optional `auto_start` as
+  `StrictBool` default false, and optional `task` as a `TaskSpec` object
+  defaulting to the staircase task; an invalid spec returns 422);
 - `GET /api/runs/{id}` for the typed run record, coordinator snapshot with
-  current observation, current goal and skill, and legal actions;
+  current observation, current goal and skill, objective leg, last live level,
+  and legal actions;
 - `GET /api/runs/{id}/events?after=N&limit=M`, where `after` is an exclusive
   sequence cursor, `limit` is 1-1000 (default 100), and the response returns
   `events`, `next_after`, `has_more`, and `limit`;
@@ -443,8 +480,8 @@ that at most one worker advances it at a time.
 Unknown HTTP runs return 404 and unknown WebSocket runs close with code 4404.
 Invalid lifecycle transitions and a second active run return 409; model
 decision and action-gate failures return 503; coordinator invariant failures
-return 500. The environment, character, model, policy, and knowledge versions
-are fixed by the service configuration rather than per request. Run control
+return 500. The character, model, policy, and knowledge versions are fixed by
+the service configuration rather than per request. Run control
 lives in memory: after a service restart, earlier runs remain readable but
 cannot be controlled, and their stored state is not reconciled.
 `ControlClient` and
@@ -609,9 +646,9 @@ is ready. Before that, and before creating any run store, report, or episode,
 it refuses a schema-1 suite (`staircase-v1`) unless the checkout's policy is
 `hierarchical-explore-v1` (`evaluation.SCHEMA_1_POLICY_VERSION`), the policy
 the suite was fixed for. Typed goals changed the model prompts and output
-contract (ADR 0004), so the current interim policy
-`hierarchical-traversal-v1-dev` cannot produce staircase-v1 evidence; commit
-`3211405` is the last with the bound policy. Stored reports remain readable
+contract (ADR 0004), so the current policy `hierarchical-traversal-v1`
+cannot produce staircase-v1 evidence; commit `3211405` is the last with the
+bound policy. Stored reports remain readable
 and renderable.
 
 After each seed the evaluator reads the complete event log back from SQLite. It

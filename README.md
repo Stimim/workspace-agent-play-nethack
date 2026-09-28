@@ -86,6 +86,15 @@ model again passed 10/10 with trajectories identical to the accepted run
 (`nethack-agent/evaluation/reports/staircase-v1-20260927T065500Z.md`;
 [note 0013](docs/notes/0013-review-feedback-resolutions.md)).
 
+Milestone A of the traversal roadmap
+([note 0015](docs/notes/0015-typed-traversal-goals.md)) then replaced the
+fixed goal with typed traversal goals, per-level dungeon memory with stair
+identities, permit-gated level changes, and the `staircase-reviewed-v3`
+bundle, under policy `hierarchical-traversal-v1`. That policy's prompts and
+model output contract differ, so `staircase-v1` evidence is reproducible only
+from commit `3211405` (policy `hierarchical-explore-v1`) in a fresh data
+directory; the current checkout refuses to evaluate it.
+
 ## Documentation
 
 Start with [`docs/README.md`](docs/README.md). Architecture documents describe

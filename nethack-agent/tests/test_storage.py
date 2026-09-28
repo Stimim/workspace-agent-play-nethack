@@ -315,7 +315,7 @@ def test_stair_intents_record_identity_and_level(tmp_path: Path) -> None:
     assert isinstance(step, StepPayload)
     stair = StairIdentity(StairIdentityKind.MAIN, 0, IdentityEvidence.ARRIVAL)
     intent = ActionIntent(
-        IntentDestination(DestinationKind.UPSTAIRS, 7, 4, stair),
+        IntentDestination(DestinationKind.UPSTAIRS, 7, 4, stair, False),
         None,
         None,
         LevelKey(0, 2),
@@ -328,6 +328,7 @@ def test_stair_intents_record_identity_and_level(tmp_path: Path) -> None:
             "x": 7,
             "y": 4,
             "stair": {"kind": "main", "dungeon_number": 0, "evidence": "arrival"},
+            "pair_known": False,
         },
         "attack_target": None,
         "path": None,
@@ -335,16 +336,19 @@ def test_stair_intents_record_identity_and_level(tmp_path: Path) -> None:
     }
     assert StepPayload.from_json(json.loads(json.dumps(serialized))) == recorded
 
-    # Stair intents stored before identities were recorded read as unknown
-    # (null), never as an inferred identity.
+    # Stair intents stored before identities or pair evidence were recorded
+    # read as unknown (null), never as an inferred identity or pair.
     legacy = recorded.to_json()
     del legacy["selection"]["intent"]["destination"]["stair"]  # type: ignore[index]
+    del legacy["selection"]["intent"]["destination"]["pair_known"]  # type: ignore[index]
     restored = StepPayload.from_json(legacy)
     assert restored.selection.intent is not None
     assert restored.selection.intent.destination == IntentDestination(
         DestinationKind.UPSTAIRS, 7, 4
     )
-    assert restored.to_json()["selection"]["intent"]["destination"]["stair"] is None  # type: ignore[index]
+    destination = restored.to_json()["selection"]["intent"]["destination"]  # type: ignore[index]
+    assert destination["stair"] is None  # type: ignore[index]
+    assert destination["pair_known"] is None  # type: ignore[index]
 
 
 _DESTINATION = {"kind": "frontier", "x": 3, "y": 1}
@@ -437,6 +441,16 @@ def _routed(
                 stair={"kind": "unknown", "dungeon_number": 0, "evidence": None},
             ),
             "no evidence or dungeon_number",
+        ),
+        (
+            "intent",
+            _destination(pair_known=True),
+            "only a stair destination records pair_known",
+        ),
+        (
+            "intent",
+            _destination(kind="upstairs", pair_known=1),
+            "pair_known must be a boolean",
         ),
         (
             "intent",

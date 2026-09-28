@@ -360,12 +360,17 @@ def describe_goal(goal: Goal) -> str:
     return f"reach {stairs} and use it"
 
 
+def _needed_stairs(goals: tuple[Goal, ...]) -> str:
+    """The staircase names the offered goals need, such as `downstairs`."""
+    return " or ".join(
+        dict.fromkeys(_STAIR_NAMES[goal.target.direction][0] for goal in goals)
+    )
+
+
 def _skill_description(skill: Skill, goals: tuple[Goal, ...]) -> str:
     if skill is Skill.EXPLORE_LEVEL:
         return _EXPLORE_DESCRIPTION
-    staircases = " or ".join(
-        dict.fromkeys(_STAIR_NAMES[goal.target.direction][0] for goal in goals)
-    )
+    staircases = _needed_stairs(goals)
     return (
         f"route over known terrain to a remembered {staircases} matching the "
         "goal, then stand on it or use it as the goal says; it can act only while "
@@ -392,9 +397,10 @@ def _skill_prompt(
         map_section = ""
     else:
         map_text = "\n".join(observation.map.rows)
+        needed = _needed_stairs(available_goals)
         situation = (
             f"Deterministic exploration is stuck: {_STUCK_DESCRIPTIONS[stuck]}. "
-            "staircase_navigation cannot act now: no staircase matching the goal "
+            f"staircase_navigation cannot act now: no {needed} matching the goal "
             "is known and reachable. Choose explore_level to grant exploration one "
             "more bounded search round for hidden doors and corridors; that is "
             "normally right. Choose staircase_navigation only to pick each action "
@@ -447,7 +453,8 @@ def _action_prompt(
     return f"""You control a lawful dwarven Valkyrie in NetHack.
 The deterministic {skill.value} skill cannot select an unambiguous routine action.
 Choose exactly one supplied fallback action for goal {goal.token}
-({describe_goal(goal)}). Never change level.
+({describe_goal(goal)}). A fallback never changes level: `<` and `>` are not
+offered, and only deterministic staircase navigation uses a staircase.
 Return only one JSON object with exactly candidates, action_index, and rationale.
 Supply 1-{MAX_FALLBACK_CANDIDATES} candidate objects with exactly action_index,
 score, and reason. Candidate indices must be unique legal JSON integers; scores must
