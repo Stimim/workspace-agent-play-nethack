@@ -1,0 +1,992 @@
+{
+  "acceptance": {
+    "checks": {
+      "all_seeds_evaluated": true,
+      "complete_records": true,
+      "fixed_configuration": true,
+      "gate_rejections": true,
+      "inputs_unchanged": true,
+      "invalid_actions": true,
+      "staircase:min_successes": true,
+      "staircase:required_success_seeds": true
+    },
+    "development_model": false,
+    "milestone_accepted": true,
+    "passed": true,
+    "reasons": []
+  },
+  "aggregate": {
+    "decision_failures": 0,
+    "decisions": {
+      "failed_decisions": 0,
+      "latency_max_ms": 1497.04,
+      "latency_p50_ms": 1219.6,
+      "latency_p95_ms": 1497.04,
+      "latency_samples": 10,
+      "model_decisions": 10,
+      "output_tokens": 502,
+      "prompt_tokens": 12764,
+      "repaired_decisions": 0
+    },
+    "evaluated_seeds": 10,
+    "gate_rejections": 0,
+    "integrity_failures": [],
+    "invalid_actions": 0,
+    "outcomes": {
+      "task_success": 10
+    },
+    "selection_sources": {
+      "deterministic_prompt": 0,
+      "deterministic_skill": 1868,
+      "model_fallback": 0
+    },
+    "steps": 1868,
+    "task_successes": 10,
+    "total_wall_seconds": 40.685
+  },
+  "case_results": [
+    {
+      "acceptance": {
+        "criteria": {
+          "min_successes": 6,
+          "required_success_seeds": [
+            6
+          ]
+        },
+        "passed": true,
+        "successes": 10
+      },
+      "aggregate": {
+        "decision_failures": 0,
+        "decisions": {
+          "failed_decisions": 0,
+          "latency_max_ms": 1497.04,
+          "latency_p50_ms": 1219.6,
+          "latency_p95_ms": 1497.04,
+          "latency_samples": 10,
+          "model_decisions": 10,
+          "output_tokens": 502,
+          "prompt_tokens": 12764,
+          "repaired_decisions": 0
+        },
+        "evaluated_seeds": 10,
+        "gate_rejections": 0,
+        "integrity_failures": [],
+        "invalid_actions": 0,
+        "outcomes": {
+          "task_success": 10
+        },
+        "selection_sources": {
+          "deterministic_prompt": 0,
+          "deterministic_skill": 1868,
+          "model_fallback": 0
+        },
+        "steps": 1868,
+        "task_successes": 10,
+        "total_wall_seconds": 40.685
+      },
+      "case_id": "staircase",
+      "max_episode_steps": 1000,
+      "requested_seeds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "results": [
+        {
+          "case_id": "staircase",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackStaircase-v0",
+            "knowledge_version": "staircase-reviewed-v3+sha256:410a76f351d072f29b15b42d90af7dbedb07f3e7641af295150db8840d0f0f4e",
+            "max_episode_steps": 1000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-task-progression-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 1497.04,
+            "latency_p50_ms": 1497.04,
+            "latency_p95_ms": 1497.04,
+            "latency_samples": 1,
+            "model_decisions": 1,
+            "output_tokens": 49,
+            "prompt_tokens": 1271,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 219,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "unknown",
+            "deepest_level": {
+              "dungeon_level": 1,
+              "dungeon_number": 0
+            },
+            "down_stair_traversals": 0,
+            "explored_cells": 353,
+            "final_experience_level": 1,
+            "final_gold": 2,
+            "final_hit_points": 18,
+            "final_score": 26,
+            "game_turns": 217,
+            "hunger_states": [
+              "not_hungry"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              }
+            ],
+            "max_depth": 1,
+            "objective_legs_completed": 1,
+            "probe_misses": 0,
+            "steps": 217,
+            "task_return": 1.0,
+            "unknown_stair_probes": 0,
+            "up_stair_traversals": 0,
+            "worst_hunger_state": "not_hungry"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "task_success",
+          "run_id": "faf57861-dd18-4f36-b4ab-e8acd8a250dc",
+          "seed": 1,
+          "selection_sources": {
+            "deterministic_prompt": 0,
+            "deterministic_skill": 217,
+            "model_fallback": 0
+          },
+          "steps": 217,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/faf57861-dd18-4f36-b4ab-e8acd8a250dc/episode-oaa2dafs/nle.545742.0.ttyrec3.bz2",
+          "wall_seconds": 4.606
+        },
+        {
+          "case_id": "staircase",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackStaircase-v0",
+            "knowledge_version": "staircase-reviewed-v3+sha256:410a76f351d072f29b15b42d90af7dbedb07f3e7641af295150db8840d0f0f4e",
+            "max_episode_steps": 1000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-task-progression-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 1299.361,
+            "latency_p50_ms": 1299.361,
+            "latency_p95_ms": 1299.361,
+            "latency_samples": 1,
+            "model_decisions": 1,
+            "output_tokens": 52,
+            "prompt_tokens": 1282,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 46,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "unknown",
+            "deepest_level": {
+              "dungeon_level": 1,
+              "dungeon_number": 0
+            },
+            "down_stair_traversals": 0,
+            "explored_cells": 262,
+            "final_experience_level": 1,
+            "final_gold": 0,
+            "final_hit_points": 18,
+            "final_score": 0,
+            "game_turns": 44,
+            "hunger_states": [
+              "not_hungry"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              }
+            ],
+            "max_depth": 1,
+            "objective_legs_completed": 1,
+            "probe_misses": 0,
+            "steps": 44,
+            "task_return": 1.0,
+            "unknown_stair_probes": 0,
+            "up_stair_traversals": 0,
+            "worst_hunger_state": "not_hungry"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "task_success",
+          "run_id": "6b2e3b70-f070-4941-bd97-5e3cdce06ab1",
+          "seed": 2,
+          "selection_sources": {
+            "deterministic_prompt": 0,
+            "deterministic_skill": 44,
+            "model_fallback": 0
+          },
+          "steps": 44,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/6b2e3b70-f070-4941-bd97-5e3cdce06ab1/episode-w3gp2knh/nle.545742.0.ttyrec3.bz2",
+          "wall_seconds": 2.066
+        },
+        {
+          "case_id": "staircase",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackStaircase-v0",
+            "knowledge_version": "staircase-reviewed-v3+sha256:410a76f351d072f29b15b42d90af7dbedb07f3e7641af295150db8840d0f0f4e",
+            "max_episode_steps": 1000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-task-progression-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 1033.645,
+            "latency_p50_ms": 1033.645,
+            "latency_p95_ms": 1033.645,
+            "latency_samples": 1,
+            "model_decisions": 1,
+            "output_tokens": 52,
+            "prompt_tokens": 1282,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 224,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "unknown",
+            "deepest_level": {
+              "dungeon_level": 1,
+              "dungeon_number": 0
+            },
+            "down_stair_traversals": 0,
+            "explored_cells": 537,
+            "final_experience_level": 2,
+            "final_gold": 0,
+            "final_hit_points": 31,
+            "final_score": 80,
+            "game_turns": 221,
+            "hunger_states": [
+              "not_hungry"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              }
+            ],
+            "max_depth": 1,
+            "objective_legs_completed": 1,
+            "probe_misses": 0,
+            "steps": 222,
+            "task_return": 0.99,
+            "unknown_stair_probes": 0,
+            "up_stair_traversals": 0,
+            "worst_hunger_state": "not_hungry"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "task_success",
+          "run_id": "86a15051-94de-4322-bf40-52c064601c82",
+          "seed": 3,
+          "selection_sources": {
+            "deterministic_prompt": 0,
+            "deterministic_skill": 222,
+            "model_fallback": 0
+          },
+          "steps": 222,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/86a15051-94de-4322-bf40-52c064601c82/episode-57k0ni6q/nle.545742.0.ttyrec3.bz2",
+          "wall_seconds": 4.328
+        },
+        {
+          "case_id": "staircase",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackStaircase-v0",
+            "knowledge_version": "staircase-reviewed-v3+sha256:410a76f351d072f29b15b42d90af7dbedb07f3e7641af295150db8840d0f0f4e",
+            "max_episode_steps": 1000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-task-progression-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 1358.792,
+            "latency_p50_ms": 1358.792,
+            "latency_p95_ms": 1358.792,
+            "latency_samples": 1,
+            "model_decisions": 1,
+            "output_tokens": 52,
+            "prompt_tokens": 1282,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 49,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "unknown",
+            "deepest_level": {
+              "dungeon_level": 1,
+              "dungeon_number": 0
+            },
+            "down_stair_traversals": 0,
+            "explored_cells": 220,
+            "final_experience_level": 1,
+            "final_gold": 0,
+            "final_hit_points": 17,
+            "final_score": 20,
+            "game_turns": 47,
+            "hunger_states": [
+              "not_hungry"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              }
+            ],
+            "max_depth": 1,
+            "objective_legs_completed": 1,
+            "probe_misses": 0,
+            "steps": 47,
+            "task_return": 1.0,
+            "unknown_stair_probes": 0,
+            "up_stair_traversals": 0,
+            "worst_hunger_state": "not_hungry"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "task_success",
+          "run_id": "35b2c322-2536-49c4-beb2-42b11e06e3c4",
+          "seed": 4,
+          "selection_sources": {
+            "deterministic_prompt": 0,
+            "deterministic_skill": 47,
+            "model_fallback": 0
+          },
+          "steps": 47,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/35b2c322-2536-49c4-beb2-42b11e06e3c4/episode-fhrxfek5/nle.545742.0.ttyrec3.bz2",
+          "wall_seconds": 2.326
+        },
+        {
+          "case_id": "staircase",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackStaircase-v0",
+            "knowledge_version": "staircase-reviewed-v3+sha256:410a76f351d072f29b15b42d90af7dbedb07f3e7641af295150db8840d0f0f4e",
+            "max_episode_steps": 1000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-task-progression-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 1055.436,
+            "latency_p50_ms": 1055.436,
+            "latency_p95_ms": 1055.436,
+            "latency_samples": 1,
+            "model_decisions": 1,
+            "output_tokens": 49,
+            "prompt_tokens": 1271,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 149,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "unknown",
+            "deepest_level": {
+              "dungeon_level": 1,
+              "dungeon_number": 0
+            },
+            "down_stair_traversals": 0,
+            "explored_cells": 354,
+            "final_experience_level": 1,
+            "final_gold": 6,
+            "final_hit_points": 18,
+            "final_score": 18,
+            "game_turns": 146,
+            "hunger_states": [
+              "not_hungry"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              }
+            ],
+            "max_depth": 1,
+            "objective_legs_completed": 1,
+            "probe_misses": 0,
+            "steps": 147,
+            "task_return": 0.99,
+            "unknown_stair_probes": 0,
+            "up_stair_traversals": 0,
+            "worst_hunger_state": "not_hungry"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "task_success",
+          "run_id": "f30d92d8-d709-45db-b011-cde668d30f26",
+          "seed": 5,
+          "selection_sources": {
+            "deterministic_prompt": 0,
+            "deterministic_skill": 147,
+            "model_fallback": 0
+          },
+          "steps": 147,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/f30d92d8-d709-45db-b011-cde668d30f26/episode-aaagv90g/nle.545742.0.ttyrec3.bz2",
+          "wall_seconds": 3.08
+        },
+        {
+          "case_id": "staircase",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackStaircase-v0",
+            "knowledge_version": "staircase-reviewed-v3+sha256:410a76f351d072f29b15b42d90af7dbedb07f3e7641af295150db8840d0f0f4e",
+            "max_episode_steps": 1000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-task-progression-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 1078.208,
+            "latency_p50_ms": 1078.208,
+            "latency_p95_ms": 1078.208,
+            "latency_samples": 1,
+            "model_decisions": 1,
+            "output_tokens": 49,
+            "prompt_tokens": 1271,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 153,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "unknown",
+            "deepest_level": {
+              "dungeon_level": 1,
+              "dungeon_number": 0
+            },
+            "down_stair_traversals": 0,
+            "explored_cells": 528,
+            "final_experience_level": 1,
+            "final_gold": 0,
+            "final_hit_points": 16,
+            "final_score": 12,
+            "game_turns": 151,
+            "hunger_states": [
+              "not_hungry"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              }
+            ],
+            "max_depth": 1,
+            "objective_legs_completed": 1,
+            "probe_misses": 0,
+            "steps": 151,
+            "task_return": 1.0,
+            "unknown_stair_probes": 0,
+            "up_stair_traversals": 0,
+            "worst_hunger_state": "not_hungry"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "task_success",
+          "run_id": "e229c379-3787-474b-80eb-b5a36a954892",
+          "seed": 6,
+          "selection_sources": {
+            "deterministic_prompt": 0,
+            "deterministic_skill": 151,
+            "model_fallback": 0
+          },
+          "steps": 151,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/e229c379-3787-474b-80eb-b5a36a954892/episode-bg0kpbgc/nle.545742.0.ttyrec3.bz2",
+          "wall_seconds": 3.336
+        },
+        {
+          "case_id": "staircase",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackStaircase-v0",
+            "knowledge_version": "staircase-reviewed-v3+sha256:410a76f351d072f29b15b42d90af7dbedb07f3e7641af295150db8840d0f0f4e",
+            "max_episode_steps": 1000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-task-progression-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 1279.415,
+            "latency_p50_ms": 1279.415,
+            "latency_p95_ms": 1279.415,
+            "latency_samples": 1,
+            "model_decisions": 1,
+            "output_tokens": 52,
+            "prompt_tokens": 1282,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 288,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "unknown",
+            "deepest_level": {
+              "dungeon_level": 1,
+              "dungeon_number": 0
+            },
+            "down_stair_traversals": 0,
+            "explored_cells": 484,
+            "final_experience_level": 1,
+            "final_gold": 3,
+            "final_hit_points": 18,
+            "final_score": 23,
+            "game_turns": 286,
+            "hunger_states": [
+              "not_hungry"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              }
+            ],
+            "max_depth": 1,
+            "objective_legs_completed": 1,
+            "probe_misses": 0,
+            "steps": 286,
+            "task_return": 1.0,
+            "unknown_stair_probes": 0,
+            "up_stair_traversals": 0,
+            "worst_hunger_state": "not_hungry"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "task_success",
+          "run_id": "042a14ea-8be2-4dc7-bb01-42dd2df209b0",
+          "seed": 7,
+          "selection_sources": {
+            "deterministic_prompt": 0,
+            "deterministic_skill": 286,
+            "model_fallback": 0
+          },
+          "steps": 286,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/042a14ea-8be2-4dc7-bb01-42dd2df209b0/episode-0_zvqe5z/nle.545742.0.ttyrec3.bz2",
+          "wall_seconds": 5.595
+        },
+        {
+          "case_id": "staircase",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackStaircase-v0",
+            "knowledge_version": "staircase-reviewed-v3+sha256:410a76f351d072f29b15b42d90af7dbedb07f3e7641af295150db8840d0f0f4e",
+            "max_episode_steps": 1000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-task-progression-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 1231.573,
+            "latency_p50_ms": 1231.573,
+            "latency_p95_ms": 1231.573,
+            "latency_samples": 1,
+            "model_decisions": 1,
+            "output_tokens": 49,
+            "prompt_tokens": 1271,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 224,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "unknown",
+            "deepest_level": {
+              "dungeon_level": 3,
+              "dungeon_number": 0
+            },
+            "down_stair_traversals": 0,
+            "explored_cells": 570,
+            "final_experience_level": 1,
+            "final_gold": 0,
+            "final_hit_points": 18,
+            "final_score": 100,
+            "game_turns": 222,
+            "hunger_states": [
+              "not_hungry"
+            ],
+            "level_changes_without_stair_action": 1,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 3,
+                "dungeon_number": 0
+              }
+            ],
+            "max_depth": 3,
+            "objective_legs_completed": 1,
+            "probe_misses": 0,
+            "steps": 222,
+            "task_return": 1.0,
+            "unknown_stair_probes": 0,
+            "up_stair_traversals": 0,
+            "worst_hunger_state": "not_hungry"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "task_success",
+          "run_id": "010e66b2-fcd2-4cc8-901a-e36d830ed6b6",
+          "seed": 8,
+          "selection_sources": {
+            "deterministic_prompt": 0,
+            "deterministic_skill": 222,
+            "model_fallback": 0
+          },
+          "steps": 222,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/010e66b2-fcd2-4cc8-901a-e36d830ed6b6/episode-9fyzfp1k/nle.545742.0.ttyrec3.bz2",
+          "wall_seconds": 4.336
+        },
+        {
+          "case_id": "staircase",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackStaircase-v0",
+            "knowledge_version": "staircase-reviewed-v3+sha256:410a76f351d072f29b15b42d90af7dbedb07f3e7641af295150db8840d0f0f4e",
+            "max_episode_steps": 1000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-task-progression-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 1219.6,
+            "latency_p50_ms": 1219.6,
+            "latency_p95_ms": 1219.6,
+            "latency_samples": 1,
+            "model_decisions": 1,
+            "output_tokens": 52,
+            "prompt_tokens": 1282,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 104,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "unknown",
+            "deepest_level": {
+              "dungeon_level": 1,
+              "dungeon_number": 0
+            },
+            "down_stair_traversals": 0,
+            "explored_cells": 224,
+            "final_experience_level": 1,
+            "final_gold": 0,
+            "final_hit_points": 18,
+            "final_score": 8,
+            "game_turns": 102,
+            "hunger_states": [
+              "not_hungry"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              }
+            ],
+            "max_depth": 1,
+            "objective_legs_completed": 1,
+            "probe_misses": 0,
+            "steps": 102,
+            "task_return": 1.0,
+            "unknown_stair_probes": 0,
+            "up_stair_traversals": 0,
+            "worst_hunger_state": "not_hungry"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "task_success",
+          "run_id": "a8d39020-3ddd-41d1-9ae8-a87d42c16959",
+          "seed": 9,
+          "selection_sources": {
+            "deterministic_prompt": 0,
+            "deterministic_skill": 102,
+            "model_fallback": 0
+          },
+          "steps": 102,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/a8d39020-3ddd-41d1-9ae8-a87d42c16959/episode-tky5b25j/nle.545742.0.ttyrec3.bz2",
+          "wall_seconds": 2.831
+        },
+        {
+          "case_id": "staircase",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackStaircase-v0",
+            "knowledge_version": "staircase-reviewed-v3+sha256:410a76f351d072f29b15b42d90af7dbedb07f3e7641af295150db8840d0f0f4e",
+            "max_episode_steps": 1000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-task-progression-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 893.737,
+            "latency_p50_ms": 893.737,
+            "latency_p95_ms": 893.737,
+            "latency_samples": 1,
+            "model_decisions": 1,
+            "output_tokens": 46,
+            "prompt_tokens": 1270,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 432,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "unknown",
+            "deepest_level": {
+              "dungeon_level": 1,
+              "dungeon_number": 0
+            },
+            "down_stair_traversals": 0,
+            "explored_cells": 684,
+            "final_experience_level": 2,
+            "final_gold": 3,
+            "final_hit_points": 28,
+            "final_score": 91,
+            "game_turns": 430,
+            "hunger_states": [
+              "not_hungry"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              }
+            ],
+            "max_depth": 1,
+            "objective_legs_completed": 1,
+            "probe_misses": 0,
+            "steps": 430,
+            "task_return": 1.0,
+            "unknown_stair_probes": 0,
+            "up_stair_traversals": 0,
+            "worst_hunger_state": "not_hungry"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "task_success",
+          "run_id": "49ba1fbf-0aec-4087-aba9-31ec3a419ec0",
+          "seed": 10,
+          "selection_sources": {
+            "deterministic_prompt": 0,
+            "deterministic_skill": 430,
+            "model_fallback": 0
+          },
+          "steps": 430,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/49ba1fbf-0aec-4087-aba9-31ec3a419ec0/episode-rqi5c6d5/nle.545742.0.ttyrec3.bz2",
+          "wall_seconds": 8.18
+        }
+      ],
+      "task": {
+        "action_profile": "nle-task-actions",
+        "environment": "NetHackStaircase-v0",
+        "objective": {
+          "legs": [
+            {
+              "kind": "stand_on_stairs",
+              "target": {
+                "connection": "any",
+                "direction": "down",
+                "dungeon_number": null
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration": {
+    "data_directory": "data/evaluations/staircase-v3",
+    "knowledge_version": "staircase-reviewed-v3+sha256:410a76f351d072f29b15b42d90af7dbedb07f3e7641af295150db8840d0f0f4e",
+    "model": "gemma4-nethack:latest",
+    "model_mode": "ollama",
+    "ollama_num_ctx": 8192,
+    "policy_version": "hierarchical-task-progression-v1"
+  },
+  "finished_at": "2026-09-28T09:14:46+00:00",
+  "report_schema_version": 3,
+  "requested_cases": [
+    {
+      "case_id": "staircase",
+      "seeds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ]
+    }
+  ],
+  "started_at": "2026-09-28T09:14:04+00:00",
+  "status": "complete",
+  "status_reason": null,
+  "suite": {
+    "acceptance": {
+      "max_gate_rejections": 0,
+      "max_invalid_actions": 0,
+      "require_complete_records": true
+    },
+    "cases": [
+      {
+        "acceptance": {
+          "min_successes": 6,
+          "required_success_seeds": [
+            6
+          ]
+        },
+        "case_id": "staircase",
+        "max_episode_steps": 1000,
+        "seeds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ],
+        "task": {
+          "action_profile": "nle-task-actions",
+          "environment": "NetHackStaircase-v0",
+          "objective": {
+            "legs": [
+              {
+                "kind": "stand_on_stairs",
+                "target": {
+                  "connection": "any",
+                  "direction": "down",
+                  "dungeon_number": null
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "character": "val-dwa-law",
+    "knowledge_bundle_id": "staircase-reviewed-v3",
+    "path": "evaluation/staircase-v3.json",
+    "policy_version": "hierarchical-task-progression-v1",
+    "schema_version": 2,
+    "seed_selection": "This regression case deliberately reuses the staircase-v1 and staircase-v2 seeds 1 through 10, in their original order and including reference seed 6, so policy hierarchical-task-progression-v1 can be compared with the accepted milestone and traversal-policy trajectories. staircase-v2 stays pinned to its own policy; this suite id exists because a new policy requires a new suite.",
+    "sha256": "cb50a22798955afe7bff33fd5882950c7cbe9c8102eecb9439cae7cd476c2b99",
+    "step_cap_rationale": "The 1000-step cap and the acceptance of at least six successes including seed 6 are reused unchanged from staircase-v1 and staircase-v2. They were fixed before any staircase-v3 episode ran.",
+    "suite_id": "staircase-v3"
+  }
+}

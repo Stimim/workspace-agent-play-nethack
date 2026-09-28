@@ -102,7 +102,11 @@ policy, `hierarchical-task-progression-v1` (same bundle), adds the
 evaluator-replayed exhaustion markers, and typed metric thresholds, with the
 `staircase-v3` and `traversal-v2` regression suites. The checkout refuses all
 older policy-pinned suites before creating an episode; they must not be
-relabeled or rerun as later-policy evidence.
+relabeled or rerun as later-policy evidence. Its single real-model runs:
+`staircase-v3` passed 10/10, `traversal-v2` again missed its Mines threshold
+(1/5), and the `scout-v1` and `eat-v1` baselines passed their metric gates with
+no completed objective, because exhaustive search outlasts the hunger horizon
+([note 0017](docs/notes/0017-scout-and-eat-task-suites.md)).
 
 ## Documentation
 

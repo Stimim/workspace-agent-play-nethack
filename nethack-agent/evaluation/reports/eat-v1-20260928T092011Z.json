@@ -1,0 +1,693 @@
+{
+  "acceptance": {
+    "checks": {
+      "all_seeds_evaluated": true,
+      "complete_records": true,
+      "explore-d1-d5:explored_cells:median:at_least": true,
+      "explore-d1-d5:min_successes": true,
+      "explore-d1-d5:required_success_seeds": true,
+      "explore-d1-d5:starvation_death:sum:at_most": true,
+      "explore-d1-d5:task_return:median:at_least": true,
+      "fixed_configuration": true,
+      "gate_rejections": true,
+      "inputs_unchanged": true,
+      "invalid_actions": true
+    },
+    "development_model": false,
+    "milestone_accepted": true,
+    "passed": true,
+    "reasons": []
+  },
+  "aggregate": {
+    "decision_failures": 0,
+    "decisions": {
+      "failed_decisions": 0,
+      "latency_max_ms": 1145.299,
+      "latency_p50_ms": 970.429,
+      "latency_p95_ms": 1145.299,
+      "latency_samples": 5,
+      "model_decisions": 5,
+      "output_tokens": 215,
+      "prompt_tokens": 6187,
+      "repaired_decisions": 0
+    },
+    "evaluated_seeds": 5,
+    "gate_rejections": 0,
+    "integrity_failures": [],
+    "invalid_actions": 0,
+    "outcomes": {
+      "death": 5
+    },
+    "selection_sources": {
+      "deterministic_prompt": 8,
+      "deterministic_skill": 8332,
+      "model_fallback": 0
+    },
+    "steps": 8340,
+    "task_successes": 0,
+    "total_wall_seconds": 149.713
+  },
+  "case_results": [
+    {
+      "acceptance": {
+        "criteria": {
+          "metric_thresholds": [
+            {
+              "bound": {
+                "comparison": "at_least",
+                "value": 700
+              },
+              "metric": "task_return",
+              "statistic": "median"
+            },
+            {
+              "bound": {
+                "comparison": "at_least",
+                "value": 450
+              },
+              "metric": "explored_cells",
+              "statistic": "median"
+            },
+            {
+              "bound": {
+                "comparison": "at_most",
+                "value": 1
+              },
+              "metric": "starvation_death",
+              "statistic": "sum"
+            }
+          ],
+          "min_successes": 0,
+          "required_success_seeds": []
+        },
+        "metrics": [
+          {
+            "bound": {
+              "comparison": "at_least",
+              "value": 700
+            },
+            "metric": "task_return",
+            "passed": true,
+            "statistic": "median",
+            "value": 793.96
+          },
+          {
+            "bound": {
+              "comparison": "at_least",
+              "value": 450
+            },
+            "metric": "explored_cells",
+            "passed": true,
+            "statistic": "median",
+            "value": 848
+          },
+          {
+            "bound": {
+              "comparison": "at_most",
+              "value": 1
+            },
+            "metric": "starvation_death",
+            "passed": true,
+            "statistic": "sum",
+            "value": 0
+          }
+        ],
+        "passed": true,
+        "successes": 0
+      },
+      "aggregate": {
+        "decision_failures": 0,
+        "decisions": {
+          "failed_decisions": 0,
+          "latency_max_ms": 1145.299,
+          "latency_p50_ms": 970.429,
+          "latency_p95_ms": 1145.299,
+          "latency_samples": 5,
+          "model_decisions": 5,
+          "output_tokens": 215,
+          "prompt_tokens": 6187,
+          "repaired_decisions": 0
+        },
+        "evaluated_seeds": 5,
+        "gate_rejections": 0,
+        "integrity_failures": [],
+        "invalid_actions": 0,
+        "outcomes": {
+          "death": 5
+        },
+        "selection_sources": {
+          "deterministic_prompt": 8,
+          "deterministic_skill": 8332,
+          "model_fallback": 0
+        },
+        "steps": 8340,
+        "task_successes": 0,
+        "total_wall_seconds": 149.713
+      },
+      "case_id": "explore-d1-d5",
+      "max_episode_steps": 2000,
+      "requested_seeds": [
+        920,
+        921,
+        922,
+        923,
+        924
+      ],
+      "results": [
+        {
+          "case_id": "explore-d1-d5",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackEat-v0",
+            "knowledge_version": "staircase-reviewed-v3+sha256:410a76f351d072f29b15b42d90af7dbedb07f3e7641af295150db8840d0f0f4e",
+            "max_episode_steps": 2000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-task-progression-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 942.09,
+            "latency_p50_ms": 942.09,
+            "latency_p95_ms": 942.09,
+            "latency_samples": 1,
+            "model_decisions": 1,
+            "output_tokens": 43,
+            "prompt_tokens": 1242,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 1382,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "killed by a sewer rat",
+            "deepest_level": {
+              "dungeon_level": 1,
+              "dungeon_number": 0
+            },
+            "down_stair_traversals": 0,
+            "explored_cells": 524,
+            "final_experience_level": 2,
+            "final_gold": 5,
+            "final_hit_points": 32,
+            "final_score": 133,
+            "game_turns": 2025,
+            "hunger_states": [
+              "not_hungry",
+              "hungry",
+              "weak",
+              "fainting"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              }
+            ],
+            "max_depth": 1,
+            "objective_legs_completed": 0,
+            "probe_misses": 0,
+            "steps": 1380,
+            "task_return": 394.95,
+            "unknown_stair_probes": 0,
+            "up_stair_traversals": 0,
+            "worst_hunger_state": "fainting"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "death",
+          "run_id": "ed8fcb2f-7d35-427a-8834-8c5936fd46ce",
+          "seed": 920,
+          "selection_sources": {
+            "deterministic_prompt": 1,
+            "deterministic_skill": 1379,
+            "model_fallback": 0
+          },
+          "steps": 1380,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/ed8fcb2f-7d35-427a-8834-8c5936fd46ce/episode-op6mvw5z/nle.548323.0.ttyrec3.bz2",
+          "wall_seconds": 26.045
+        },
+        {
+          "case_id": "explore-d1-d5",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackEat-v0",
+            "knowledge_version": "staircase-reviewed-v3+sha256:410a76f351d072f29b15b42d90af7dbedb07f3e7641af295150db8840d0f0f4e",
+            "max_episode_steps": 2000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-task-progression-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 1138.188,
+            "latency_p50_ms": 1138.188,
+            "latency_p95_ms": 1138.188,
+            "latency_samples": 1,
+            "model_decisions": 1,
+            "output_tokens": 43,
+            "prompt_tokens": 1242,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 1776,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "killed by a goblin",
+            "deepest_level": {
+              "dungeon_level": 1,
+              "dungeon_number": 0
+            },
+            "down_stair_traversals": 0,
+            "explored_cells": 553,
+            "final_experience_level": 2,
+            "final_gold": 3,
+            "final_hit_points": 28,
+            "final_score": 131,
+            "game_turns": 2395,
+            "hunger_states": [
+              "not_hungry",
+              "hungry",
+              "weak",
+              "fainting"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              }
+            ],
+            "max_depth": 1,
+            "objective_legs_completed": 0,
+            "probe_misses": 0,
+            "steps": 1774,
+            "task_return": 793.99,
+            "unknown_stair_probes": 0,
+            "up_stair_traversals": 0,
+            "worst_hunger_state": "fainting"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "death",
+          "run_id": "a75fd381-1a18-46c7-a30e-771eb2732634",
+          "seed": 921,
+          "selection_sources": {
+            "deterministic_prompt": 1,
+            "deterministic_skill": 1773,
+            "model_fallback": 0
+          },
+          "steps": 1774,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/a75fd381-1a18-46c7-a30e-771eb2732634/episode-3f73tnum/nle.548323.0.ttyrec3.bz2",
+          "wall_seconds": 33.962
+        },
+        {
+          "case_id": "explore-d1-d5",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackEat-v0",
+            "knowledge_version": "staircase-reviewed-v3+sha256:410a76f351d072f29b15b42d90af7dbedb07f3e7641af295150db8840d0f0f4e",
+            "max_episode_steps": 2000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-task-progression-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 918.204,
+            "latency_p50_ms": 918.204,
+            "latency_p95_ms": 918.204,
+            "latency_samples": 1,
+            "model_decisions": 1,
+            "output_tokens": 43,
+            "prompt_tokens": 1242,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 1701,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "killed by a grid bug",
+            "deepest_level": {
+              "dungeon_level": 2,
+              "dungeon_number": 0
+            },
+            "down_stair_traversals": 1,
+            "explored_cells": 848,
+            "final_experience_level": 3,
+            "final_gold": 7,
+            "final_hit_points": 9,
+            "final_score": 357,
+            "game_turns": 1774,
+            "hunger_states": [
+              "not_hungry",
+              "hungry",
+              "weak",
+              "fainting"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 2,
+                "dungeon_number": 0
+              }
+            ],
+            "max_depth": 2,
+            "objective_legs_completed": 0,
+            "probe_misses": 0,
+            "steps": 1699,
+            "task_return": 793.96,
+            "unknown_stair_probes": 1,
+            "up_stair_traversals": 0,
+            "worst_hunger_state": "fainting"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "death",
+          "run_id": "ebd0995f-837a-4254-8000-2c7a06f0e41f",
+          "seed": 922,
+          "selection_sources": {
+            "deterministic_prompt": 2,
+            "deterministic_skill": 1697,
+            "model_fallback": 0
+          },
+          "steps": 1699,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/ebd0995f-837a-4254-8000-2c7a06f0e41f/episode-qwnbwqbb/nle.548323.0.ttyrec3.bz2",
+          "wall_seconds": 29.769
+        },
+        {
+          "case_id": "explore-d1-d5",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackEat-v0",
+            "knowledge_version": "staircase-reviewed-v3+sha256:410a76f351d072f29b15b42d90af7dbedb07f3e7641af295150db8840d0f0f4e",
+            "max_episode_steps": 2000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-task-progression-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 1145.299,
+            "latency_p50_ms": 1145.299,
+            "latency_p95_ms": 1145.299,
+            "latency_samples": 1,
+            "model_decisions": 1,
+            "output_tokens": 43,
+            "prompt_tokens": 1230,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 1713,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "killed by a sewer rat",
+            "deepest_level": {
+              "dungeon_level": 2,
+              "dungeon_number": 0
+            },
+            "down_stair_traversals": 1,
+            "explored_cells": 1033,
+            "final_experience_level": 3,
+            "final_gold": 15,
+            "final_hit_points": 13,
+            "final_score": 309,
+            "game_turns": 1803,
+            "hunger_states": [
+              "not_hungry",
+              "hungry",
+              "weak",
+              "fainting"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 2,
+                "dungeon_number": 0
+              }
+            ],
+            "max_depth": 2,
+            "objective_legs_completed": 0,
+            "probe_misses": 0,
+            "steps": 1711,
+            "task_return": 793.96,
+            "unknown_stair_probes": 1,
+            "up_stair_traversals": 0,
+            "worst_hunger_state": "fainting"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "death",
+          "run_id": "f88dc223-f7d8-4266-a624-996661fead29",
+          "seed": 923,
+          "selection_sources": {
+            "deterministic_prompt": 1,
+            "deterministic_skill": 1710,
+            "model_fallback": 0
+          },
+          "steps": 1711,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/f88dc223-f7d8-4266-a624-996661fead29/episode-zi0n4esn/nle.548323.0.ttyrec3.bz2",
+          "wall_seconds": 30.402
+        },
+        {
+          "case_id": "explore-d1-d5",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackEat-v0",
+            "knowledge_version": "staircase-reviewed-v3+sha256:410a76f351d072f29b15b42d90af7dbedb07f3e7641af295150db8840d0f0f4e",
+            "max_episode_steps": 2000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-task-progression-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 970.429,
+            "latency_p50_ms": 970.429,
+            "latency_p95_ms": 970.429,
+            "latency_samples": 1,
+            "model_decisions": 1,
+            "output_tokens": 43,
+            "prompt_tokens": 1231,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 1778,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "killed by a garter snake",
+            "deepest_level": {
+              "dungeon_level": 1,
+              "dungeon_number": 2
+            },
+            "down_stair_traversals": 3,
+            "explored_cells": 1564,
+            "final_experience_level": 4,
+            "final_gold": 7,
+            "final_hit_points": 19,
+            "final_score": 515,
+            "game_turns": 2388,
+            "hunger_states": [
+              "not_hungry",
+              "hungry",
+              "weak",
+              "fainting"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 2,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 2
+              },
+              {
+                "dungeon_level": 3,
+                "dungeon_number": 0
+              }
+            ],
+            "max_depth": 3,
+            "objective_legs_completed": 0,
+            "probe_misses": 0,
+            "steps": 1776,
+            "task_return": 793.91,
+            "unknown_stair_probes": 2,
+            "up_stair_traversals": 1,
+            "worst_hunger_state": "fainting"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "death",
+          "run_id": "d2407d0b-395c-472b-8985-8e0593d6b833",
+          "seed": 924,
+          "selection_sources": {
+            "deterministic_prompt": 3,
+            "deterministic_skill": 1773,
+            "model_fallback": 0
+          },
+          "steps": 1776,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/d2407d0b-395c-472b-8985-8e0593d6b833/episode-swdhkceh/nle.548323.0.ttyrec3.bz2",
+          "wall_seconds": 29.535
+        }
+      ],
+      "task": {
+        "action_profile": "nle-hunger-actions",
+        "environment": "NetHackEat-v0",
+        "objective": {
+          "legs": [
+            {
+              "kind": "explore_dungeon",
+              "max_level": 5
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration": {
+    "data_directory": "data/evaluations/eat-v1",
+    "knowledge_version": "staircase-reviewed-v3+sha256:410a76f351d072f29b15b42d90af7dbedb07f3e7641af295150db8840d0f0f4e",
+    "model": "gemma4-nethack:latest",
+    "model_mode": "ollama",
+    "ollama_num_ctx": 8192,
+    "policy_version": "hierarchical-task-progression-v1"
+  },
+  "finished_at": "2026-09-28T09:22:59+00:00",
+  "report_schema_version": 3,
+  "requested_cases": [
+    {
+      "case_id": "explore-d1-d5",
+      "seeds": [
+        920,
+        921,
+        922,
+        923,
+        924
+      ]
+    }
+  ],
+  "started_at": "2026-09-28T09:20:11+00:00",
+  "status": "complete",
+  "status_reason": null,
+  "suite": {
+    "acceptance": {
+      "max_gate_rejections": 0,
+      "max_invalid_actions": 0,
+      "require_complete_records": true
+    },
+    "cases": [
+      {
+        "acceptance": {
+          "metric_thresholds": [
+            {
+              "bound": {
+                "comparison": "at_least",
+                "value": 700
+              },
+              "metric": "task_return",
+              "statistic": "median"
+            },
+            {
+              "bound": {
+                "comparison": "at_least",
+                "value": 450
+              },
+              "metric": "explored_cells",
+              "statistic": "median"
+            },
+            {
+              "bound": {
+                "comparison": "at_most",
+                "value": 1
+              },
+              "metric": "starvation_death",
+              "statistic": "sum"
+            }
+          ],
+          "min_successes": 0,
+          "required_success_seeds": []
+        },
+        "case_id": "explore-d1-d5",
+        "max_episode_steps": 2000,
+        "seeds": [
+          920,
+          921,
+          922,
+          923,
+          924
+        ],
+        "task": {
+          "action_profile": "nle-hunger-actions",
+          "environment": "NetHackEat-v0",
+          "objective": {
+            "legs": [
+              {
+                "kind": "explore_dungeon",
+                "max_level": 5
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "character": "val-dwa-law",
+    "knowledge_bundle_id": "staircase-reviewed-v3",
+    "path": "evaluation/eat-v1.json",
+    "policy_version": "hierarchical-task-progression-v1",
+    "schema_version": 2,
+    "seed_selection": "Seeds 920 through 924 are a contiguous held-out range not used by any committed suite, development example, probe, or persisted run inspected before selection. This is the Eat baseline (ADR 0004 section 8): Eat has no NLE success state, so the case is gated by metric thresholds and requires no objective success. The thresholds were fixed before any eat-v1 episode ran, from development-only scripted-model probes of the same case on seeds 820 through 824: 0/5 explore_dungeon(5) completions; Eat return 793.97, 793.97, 793.96, 793.94, 1587.98 (median 793.97; every episode ate at least one known ration); explored cells 669, 753, 1060, 583, 462 (median 669); four deaths while Fainting after the ration was spent and one live truncation, with no starvation death. The return bound requires the median episode to eat a ration; the explored-cell bound is the probe median times 0.7 rounded down to a multiple of 50; at most one starvation death is allowed.",
+    "sha256": "ac5a8bc6b91c8ec8a11acb8c6e55225bdb60ddd16b6a910817bd67cc8c511108",
+    "step_cap_rationale": "The 2000-step cap bounds a surviving episode. One ration extends the hunger horizon: four probes died between 1691 and 1748 steps and one was truncated at 2000 after eating two rations. Exhaustive exploration took 245 to 1511 steps on the three probe first levels it completed, so deeper required levels are not expected within the cap.",
+    "suite_id": "eat-v1"
+  }
+}

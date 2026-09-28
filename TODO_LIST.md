@@ -53,7 +53,8 @@ Dependency order for the four capability items below: traversal goals, then NLE 
   - [ ] Paired arbiter versus model arms on the same committed seeds (model three times), pre-registered primary metric, bootstrap intervals, latency and token costs; the model owns a decision class only if it wins without more deaths.
 - [ ] Progress through NLE tasks that exercise exploration, gold, food, and the Oracle.
   - [x] Policy `hierarchical-task-progression-v1`: `explore_dungeon(max_level)` objectives for Scout and Eat, `explore_level` goals, evaluator-replayed `exhausted_level` markers, and the `staircase-v3`/`traversal-v2` regression suites ([note 0017](docs/notes/0017-scout-and-eat-task-suites.md)).
-  - [ ] `scout-v1` (Scout return, explored cells, depth, deaths), then `gold-v1` (reproduce NLE's `pickup_types:$`), `eat-v1` (after hunger), and `oracle-v1` (NLE success; after traversal, combat risk, and hunger).
+  - [x] `scout-v1` and `eat-v1` baselines committed and run once with the local model: both passed their probe-derived metric gates with 0/5 objective completions; `staircase-v3` passed and `traversal-v2` failed enter-mines at 1/5 ([note 0017](docs/notes/0017-scout-and-eat-task-suites.md)).
+  - [ ] `gold-v1` (route to visible gold under NLE's `pickup_types:$`) and `oracle-v1` (NLE success; exact Oracle glyph, never attacked) with a new policy and its own regression suite ids.
   - [x] Typed episode metrics (gold, score, task return, hunger and worst hunger, explored cells, HP/XL, death cause) and typed metric thresholds fixed before each run; a metric-gated case may require no objective success.
   - [ ] Bounded search budget or exploration skill: exhaustive hidden-passage search costs more steps than the Scout and Eat hunger horizons (evidence in note 0017); not implemented until a later policy.
 

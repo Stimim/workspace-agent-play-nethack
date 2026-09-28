@@ -462,7 +462,10 @@ The first task baselines are `evaluation/scout-v1.json` (Scout, seeds 900-904,
 metric thresholds fixed from scripted probes on seeds 800-804 and 820-824
 before their first episode; the suites and
 [note 0017](notes/0017-scout-and-eat-task-suites.md) record the probe
-distributions and threshold rule.
+distributions and threshold rule. Their single real-model reports, and those of
+`staircase-v3` (PASS 10/10) and `traversal-v2` (FAIL, enter-mines 1/5), are in
+`nethack-agent/evaluation/reports/` with timestamps `20260928T0914*`,
+`20260928T091827Z`, and `20260928T092011Z`; do not rerun or retune them.
 
 `evaluation/staircase-v1.json` likewise remains the schema-1 milestone record
 bound to policy `hierarchical-explore-v1`. To reproduce that historical suite,

@@ -127,3 +127,46 @@ completed the objective, so both suites are ADR 0004 section 8 baselines:
   at least 700 (the median episode eats a ration), median `explored_cells` at
   least 450 (669 times 0.7, rounded down), and at most one starvation death
   (the probes had none).
+
+## Committed real-model runs
+
+After `nethack-agent doctor` passed (Ollama 0.34.4, `gemma4-nethack:latest`),
+each committed suite ran exactly once with the local model through loopback
+Ollama (`num_ctx` 8,192). Every report is complete, with zero invalid actions,
+gate rejections, integrity failures, decision failures, and model fallbacks.
+
+| Suite | Report | Result | Episodes/steps | Model decisions (p50) |
+| --- | --- | --- | --- | --- |
+| `staircase-v3` | `staircase-v3-20260928T091404Z` | PASS, 10/10 including seed 6 | 10 / 1,868 | 10 (1,220 ms) |
+| `traversal-v2` | `traversal-v2-20260928T091446Z` | FAIL: 3/5, 3/5, 1/5 (Mines needs 2/5) | 15 / 9,354 | 24 (1,185 ms) |
+| `scout-v1` | `scout-v1-20260928T091827Z` | PASS on metric gates, 0/5 objectives | 5 / 4,941 | 5 (1,109 ms) |
+| `eat-v1` | `eat-v1-20260928T092011Z` | PASS on metric gates, 0/5 objectives | 5 / 8,340 | 5 (970 ms) |
+
+- `staircase-v3` repeated the milestone trajectories: 1,868 steps, as in the
+  accepted milestone suite.
+- `traversal-v2` reproduced `traversal-v1`'s case counts (3/5, 3/5, 1/5), so
+  entering the Mines again missed its fixed 2/5 threshold. The failure stays a
+  failure; seeds 701 and 702 died or were truncated on levels 1-2 while
+  Fainting in every case.
+- `scout-v1`: explored cells 550, 575, 358, 463, 524 (median 524 against at
+  least 350) and the same Scout return median 524; every episode died on level
+  1 between 899 and 1,048 steps (two by starvation, three killed while
+  Fainting) without exhausting it.
+- `eat-v1`: Eat returns 394.95, 793.99, 793.96, 793.96, 793.91 (median 793.96
+  against at least 700), explored cells 524, 553, 848, 1,033, 1,564 (median
+  848 against at least 450), and no starvation death. Each episode ate one
+  verified ration; seed 924 exhausted levels 1 and 2 (steps 430 and 1,134) and
+  reached depth 3, and all five later died while Fainting.
+
+The baselines pass because they are gated on the probe-derived metrics, not on
+objective completion; the exhaustion-cost failure class above is unchanged.
+
+## Verification
+
+- `uv run pytest -q`: 431 passed. Ruff check and format check passed; `node
+  --check` passed on every browser module; the pinned MkDocs strict build,
+  `git diff --check`, and `verify network --timeout 20 --json` (nine loopback
+  destinations, proxy bypass verified) passed.
+- Every committed report, including the immutable `staircase-v1`,
+  `staircase-v2`, and `traversal-v1` reports, re-renders from its JSON
+  byte for byte, and every report file is mode 0644.

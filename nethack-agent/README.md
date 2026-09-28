@@ -81,7 +81,8 @@ is `hierarchical-task-progression-v1`, so this checkout intentionally refuses
 both suites before creating a run store or episode. Reproduce them only from
 their recorded traversal-policy commit and never relabel their reports.
 `staircase-v3` and `traversal-v2` repeat their cases, seeds, caps, and
-thresholds under the current policy:
+thresholds under the current policy, and `scout-v1` and `eat-v1` are the
+Scout and Eat metric baselines:
 
 ```bash
 uv run nethack-agent eval run --suite evaluation/staircase-v3.json \

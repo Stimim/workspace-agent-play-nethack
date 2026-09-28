@@ -730,6 +730,15 @@ from scripted probes on seeds 800-804 and 820-824 before either suite ran,
 where no episode completed its objective because exhaustive search outlasted
 the hunger horizon ([note 0017](docs/notes/0017-scout-and-eat-task-suites.md)).
 
+The first real-model runs under this policy are complete with zero invalid
+actions, gate rejections, integrity failures, and model fallbacks:
+`staircase-v3` passed 10/10; `traversal-v2` failed again at 3/5, 3/5, and 1/5
+(entering the Mines missed 2/5); `scout-v1` passed its metric gates (median
+explored cells and return 524) and `eat-v1` its gates (median return 793.96,
+median explored cells 848, no starvation death), each with 0/5 objective
+completions (reports `*-20260928T0914*`, `T091827Z`, and `T092011Z` in
+`nethack-agent/evaluation/reports/`).
+
 `nethack-agent eval run` drives every case/seed pair in-process through one
 `RunManager` with `create_run(auto_start=True)`: the same coordinator, worker
 loop, action gate, SQLite store, and ttyrec capture as the HTTP service, without
