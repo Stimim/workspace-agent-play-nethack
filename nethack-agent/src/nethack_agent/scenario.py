@@ -17,6 +17,7 @@ from nethack_agent.control_client import (
 )
 from nethack_agent.decision import RunState
 from nethack_agent.network import LoopbackUrlError, normalize_loopback_http_url
+from nethack_agent.tasks import TaskSpec
 
 _ACTIVE_STATES = frozenset({RunState.IDLE, RunState.RUNNING, RunState.PAUSED})
 
@@ -36,6 +37,8 @@ class ScenarioRunConfig:
     auto_run: bool = False
     steps: int | None = None
     development_scripted_model: bool = False
+    # None lets the service default to the staircase task.
+    task: TaskSpec | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.host, str):
@@ -44,6 +47,8 @@ class ScenarioRunConfig:
             raise TypeError("scenario auto_run must be a boolean")
         if not isinstance(self.development_scripted_model, bool):
             raise TypeError("scenario development model flag must be a boolean")
+        if self.task is not None and not isinstance(self.task, TaskSpec):
+            raise TypeError("scenario task must be a TaskSpec")
         if isinstance(self.seed, bool) or not isinstance(self.seed, int):
             raise TypeError("scenario seed must be an integer")
         if not 1 <= self.seed <= sys.maxsize:
@@ -233,6 +238,7 @@ def run_scenario(config: ScenarioRunConfig) -> ScenarioResult:
             seed=config.seed,
             max_episode_steps=config.max_episode_steps,
             auto_start=config.auto_run,
+            task=config.task,
         )
         run_id = _status_run_id(execution_status)
         if config.auto_run:

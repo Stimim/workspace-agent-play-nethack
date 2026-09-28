@@ -1,16 +1,19 @@
 from pathlib import Path
 
+import gymnasium as gym
 import numpy as np
 import pytest
+from nle import nethack
 
 from nethack_agent.environment import (
-    NLE_OPTIONS,
     EnvironmentState,
     EnvironmentStateError,
     LegalAction,
     NleEnvironment,
     ScenarioConfig,
+    make_nle_environment,
 )
+from nethack_agent.tasks import ActionProfile, NleTask
 
 
 def scenario(directory: Path, *, seed: int = 6, max_steps: int = 20) -> ScenarioConfig:
@@ -43,12 +46,51 @@ def test_episode_exposes_public_state_and_finalizes_ttyrec(tmp_path: Path) -> No
     assert len(environment.ttyrec_files) == 1
 
 
-def test_autoopen_is_an_explicit_scenario_option(tmp_path: Path) -> None:
-    assert NLE_OPTIONS.count("autoopen") == 1
+def _engine_options(environment: gym.Env) -> list[str]:  # type: ignore[type-arg]
+    options = environment.unwrapped.nethack.options  # type: ignore[attr-defined]
+    return [option for option in options if not option.startswith("name:")]
+
+
+@pytest.mark.parametrize("task", list(NleTask))
+def test_each_task_gets_nle_own_options_plus_autoopen(
+    tmp_path: Path, task: NleTask
+) -> None:
+    # NLE applies a task's own option choice only when no options are passed;
+    # the adapter must reproduce it, then pin `autoopen`. Both lists are read
+    # from the live engine.
+    default = gym.make(task.value)
+    try:
+        expected = [*_engine_options(default), "autoopen"]
+    finally:
+        default.close()
+    adapted = make_nle_environment(
+        task,
+        ActionProfile.NLE_TASK_ACTIONS,
+        max_episode_steps=5,
+        savedir=tmp_path / "episode",
+    )
+    try:
+        options = _engine_options(adapted)
+    finally:
+        adapted.close()
+
+    assert options == expected
+    if task is NleTask.GOLD:
+        assert "pickup_types:$" in options
+
+
+def test_legal_actions_are_the_profile_actions_nle_received(tmp_path: Path) -> None:
+    profile = ActionProfile.NLE_TASK_ACTIONS
     with NleEnvironment(scenario(tmp_path)) as environment:
-        # This is the option list handed through Gymnasium to the live NLE
-        # engine, not a re-statement of the adapter constant.
-        assert environment._raw_environment.nethack.options.count("autoopen") == 1
+        engine_actions = tuple(environment._raw_environment.actions)
+        table = [(action.command, action.name) for action in environment.legal_actions]
+
+    assert engine_actions == profile.actions
+    assert table == [
+        (int(action), f"{type(action).__name__}.{action.name}")
+        for action in profile.actions
+    ]
+    assert nethack.Command.EAT in profile.actions
 
 
 def test_same_suite_seed_reproduces_initial_observation(tmp_path: Path) -> None:
@@ -92,6 +134,21 @@ def test_step_cap_terminates_adapter_lifecycle(tmp_path: Path) -> None:
         assert environment.state is EnvironmentState.TERMINAL
         with pytest.raises(EnvironmentStateError, match="terminal"):
             environment.step(0)
+
+
+def test_step_cap_above_nle_default_ends_as_truncation(tmp_path: Path) -> None:
+    # NLE's own abort fires at 5,000 steps unless it receives the cap, and it
+    # reports its cap as a terminated ABORTED (-1) episode, not a truncation.
+    with NleEnvironment(scenario(tmp_path, max_steps=5_001)) as environment:
+        environment.reset()
+        transition = environment.step(0)  # MiscAction.MORE: no game time passes
+        while not transition.is_terminal:
+            transition = environment.step(0)
+
+    assert transition.step_index == 5_001
+    assert transition.truncated
+    assert not transition.terminated
+    assert transition.end_status == 0
 
 
 def test_running_episode_cannot_be_reset(tmp_path: Path) -> None:

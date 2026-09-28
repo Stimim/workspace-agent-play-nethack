@@ -34,7 +34,7 @@ from nethack_agent.decision import (
     RunOutcome,
     RunState,
 )
-from nethack_agent.environment import STAIRCASE_CHARACTER, STAIRCASE_ENVIRONMENT
+from nethack_agent.environment import STAIRCASE_CHARACTER
 from nethack_agent.events import (
     AgentErrorPayload,
     EventKind,
@@ -47,6 +47,7 @@ from nethack_agent.model import ScriptedDevelopmentModel
 from nethack_agent.ollama import OllamaClient, OllamaConfig, OllamaError
 from nethack_agent.run_manager import POLICY_VERSION, ModelFactory, RunManager
 from nethack_agent.storage import MAX_EVENT_PAGE_LIMIT, RunRecord, RunStore
+from nethack_agent.tasks import STAIRCASE_TASK
 
 SUITE_SCHEMA_VERSION: Final = 1
 REPORT_SCHEMA_VERSION: Final = 2
@@ -166,8 +167,10 @@ def _parse_suite(
     if not _IDENTIFIER.fullmatch(suite_id):
         raise ContractError("suite_id must be a lowercase hyphenated identifier")
     environment = string_value(payload["environment"], "suite environment")
-    if environment != STAIRCASE_ENVIRONMENT:
-        raise ContractError(f"suite environment must be {STAIRCASE_ENVIRONMENT}")
+    if environment != STAIRCASE_TASK.environment.value:
+        raise ContractError(
+            f"suite environment must be {STAIRCASE_TASK.environment.value}"
+        )
     character = string_value(payload["character"], "suite character")
     if character != STAIRCASE_CHARACTER:
         raise ContractError(f"suite character must be {STAIRCASE_CHARACTER}")

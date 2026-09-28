@@ -20,6 +20,7 @@ from nethack_agent.events import (
     event_kind,
     event_payload_from_json,
 )
+from nethack_agent.tasks import TaskSpec
 
 _SCHEMA = """
 PRAGMA journal_mode = WAL;
@@ -44,7 +45,8 @@ CREATE TABLE IF NOT EXISTS runs (
     ollama_num_ctx INTEGER,
     ollama_version TEXT,
     ttyrec_path TEXT,
-    error TEXT
+    error TEXT,
+    task TEXT
 );
 CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -102,11 +104,15 @@ class RunRecord:
     ollama_version: str | None
     ttyrec_path: str | None
     error: str | None
+    # The canonical TaskSpec JSON; runs stored before tasks existed read None
+    # (not recorded), never an inferred staircase task.
+    task: TaskSpec | None
 
     def to_json(self) -> dict[str, object]:
         result = asdict(self)
         result["state"] = self.state.value
         result["outcome"] = self.outcome.value if self.outcome else None
+        result["task"] = self.task.to_json() if self.task else None
         return result
 
 
@@ -122,13 +128,14 @@ class RunStore:
             }
             if "ollama_num_ctx" not in columns:
                 connection.execute("ALTER TABLE runs ADD COLUMN ollama_num_ctx INTEGER")
+            if "task" not in columns:
+                connection.execute("ALTER TABLE runs ADD COLUMN task TEXT")
 
     def create_run(
         self,
         config: ScenarioConfig,
         seeds: SeedSet,
         *,
-        environment: str,
         character: str,
         model: str,
         policy_version: str,
@@ -146,15 +153,15 @@ class RunStore:
                     id, created_at, updated_at, state, environment, character,
                     suite_seed, core_seed, display_seed, level_seed,
                     max_episode_steps, model, policy_version, knowledge_version,
-                    nle_version, ollama_num_ctx
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    nle_version, ollama_num_ctx, task
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     run_id,
                     now,
                     now,
                     RunState.IDLE.value,
-                    environment,
+                    config.task.environment.value,
                     character,
                     config.seed,
                     seeds.core,
@@ -166,6 +173,7 @@ class RunStore:
                     knowledge_version,
                     nle_version,
                     ollama_num_ctx,
+                    config.task.canonical_json(),
                 ),
             )
             record = self._get_run(connection, run_id)
@@ -395,6 +403,12 @@ class RunStore:
             )
         except ValueError as error:
             raise ContractError(f"run {run_id} has invalid lifecycle state") from error
+        if values["task"] is not None:
+            name = f"run {run_id} task"
+            task = TaskSpec.from_json(load_json_object(str(values["task"]), name))
+            if task.environment.value != values["environment"]:
+                raise ContractError(f"{name} does not match the run environment")
+            values["task"] = task
         return RunRecord(**values)
 
     @contextmanager

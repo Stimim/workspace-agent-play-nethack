@@ -23,7 +23,21 @@ from nethack_agent.decision import (
 from nethack_agent.model import DecisionFailure
 from nethack_agent.ollama import OllamaConfig
 from nethack_agent.run_manager import RunManager
+from nethack_agent.tasks import STAIRCASE_TASK
 from nethack_agent.traversal import STAND_ON_DOWNSTAIRS
+
+_DESCEND_TASK = {
+    "environment": "NetHackScore-v0",
+    "action_profile": "nle-task-actions",
+    "objective": {
+        "legs": [
+            {
+                "kind": "reach_level",
+                "level": {"dungeon_number": 0, "dungeon_level": 3},
+            }
+        ]
+    },
+}
 
 _METRICS = DecisionMetrics(1, 1, 1.0, False)
 
@@ -143,6 +157,23 @@ def test_api_rejects_second_active_run(tmp_path: Path) -> None:
     api.post(f"/api/runs/{first.json()['run']['id']}/stop")
 
 
+def test_runs_record_the_requested_task_or_the_staircase_default(
+    tmp_path: Path,
+) -> None:
+    api = client(tmp_path)
+    default = api.post("/api/runs", json={"seed": 6}).json()["run"]
+    api.post(f"/api/runs/{default['id']}/stop")
+    created = api.post("/api/runs", json={"seed": 6, "task": _DESCEND_TASK})
+    run = created.json()["run"]
+    api.post(f"/api/runs/{run['id']}/stop")
+
+    assert default["task"] == STAIRCASE_TASK.to_json()
+    assert default["environment"] == "NetHackStaircase-v0"
+    assert created.status_code == 201
+    assert run["task"] == _DESCEND_TASK
+    assert run["environment"] == "NetHackScore-v0"
+
+
 @pytest.mark.parametrize(
     "payload",
     [
@@ -151,6 +182,10 @@ def test_api_rejects_second_active_run(tmp_path: Path) -> None:
         {"seed": sys.maxsize + 1},
         {"seed": 6, "max_episode_steps": True},
         {"seed": 6, "auto_start": 1},
+        {"seed": 6, "task": "NetHackScore-v0"},
+        {"seed": 6, "task": {**_DESCEND_TASK, "environment": "NetHackStaircase-v0"}},
+        {"seed": 6, "task": {**_DESCEND_TASK, "environment": "NetHackGold-v0"}},
+        {"seed": 6, "task": {**_DESCEND_TASK, "character": "val-dwa-law"}},
     ],
 )
 def test_create_request_uses_strict_domain_validation(

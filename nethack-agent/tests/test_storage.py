@@ -38,15 +38,24 @@ from nethack_agent.storage import (
     RunStore,
     StoredEventError,
 )
-from nethack_agent.traversal import STAND_ON_DOWNSTAIRS
+from nethack_agent.tasks import STAIRCASE_TASK, ActionProfile, NleTask, TaskSpec
+from nethack_agent.traversal import (
+    STAND_ON_DOWNSTAIRS,
+    LevelKey,
+    Objective,
+    ReachLevelLeg,
+)
 
 
-def create_stored_run(store: RunStore, tmp_path: Path):  # type: ignore[no-untyped-def]
-    config = ScenarioConfig(seed=6, artifact_directory=tmp_path / "artifacts")
+def create_stored_run(  # type: ignore[no-untyped-def]
+    store: RunStore, tmp_path: Path, task: TaskSpec = STAIRCASE_TASK
+):
+    config = ScenarioConfig(
+        seed=6, artifact_directory=tmp_path / "artifacts", task=task
+    )
     return store.create_run(
         config,
         SeedSet.derive(config.seed),
-        environment="NetHackStaircase-v0",
         character="val-dwa-law",
         model="test-model",
         policy_version="test-policy",
@@ -417,3 +426,44 @@ def test_existing_store_gains_num_ctx_metadata_without_losing_runs(
     assert reopened.get_run(old_run.id).ollama_num_ctx is None
     assert reopened.get_run(old_run.id).model == "test-model"
     assert reopened.get_run(new_run.id).ollama_num_ctx == 8192
+
+
+def test_existing_store_gains_task_column_and_legacy_runs_read_no_task(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "runs.sqlite3"
+    legacy = RunStore(database)
+    old_run = create_stored_run(legacy, tmp_path)
+    with sqlite3.connect(database) as connection:
+        connection.execute("ALTER TABLE runs DROP COLUMN task")
+
+    reopened = RunStore(database)
+    descend = TaskSpec(
+        NleTask.SCORE,
+        ActionProfile.NLE_TASK_ACTIONS,
+        Objective((ReachLevelLeg(LevelKey(0, 3)),)),
+    )
+    new_run = create_stored_run(reopened, tmp_path, descend)
+
+    # A run stored before tasks existed recorded none; it is not assumed to be
+    # the staircase task.
+    old = reopened.get_run(old_run.id)
+    assert old.task is None
+    assert old.to_json()["task"] is None
+    stored = reopened.get_run(new_run.id)
+    assert stored.task == descend
+    assert stored.environment == "NetHackScore-v0"
+    assert stored.to_json()["task"] == descend.to_json()
+
+
+def test_stored_task_must_match_the_run_environment(tmp_path: Path) -> None:
+    database = tmp_path / "runs.sqlite3"
+    store = RunStore(database)
+    run = create_stored_run(store, tmp_path)
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "UPDATE runs SET environment = 'NetHackScore-v0' WHERE id = ?", (run.id,)
+        )
+
+    with pytest.raises(ContractError, match="does not match the run environment"):
+        store.get_run(run.id)

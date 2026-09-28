@@ -4,7 +4,7 @@ import random
 import sys
 import tempfile
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from pathlib import Path
 from typing import Any, Final, Self
@@ -12,17 +12,12 @@ from typing import Any, Final, Self
 import gymnasium as gym
 import nle  # noqa: F401  # Registers the NLE Gymnasium environments.
 import numpy as np
-from nle import nethack
 from numpy.typing import NDArray
 
 from nethack_agent.contracts import integer_value, object_value, string_value
+from nethack_agent.tasks import STAIRCASE_TASK, ActionProfile, NleTask, TaskSpec
 
-STAIRCASE_ENVIRONMENT: Final = "NetHackStaircase-v0"
 STAIRCASE_CHARACTER: Final = "val-dwa-law"
-# NLE's default option tuple does not name `autoopen`, even though vanilla
-# NetHack currently defaults it on. Pin it so navigation does not depend on an
-# upstream default.
-NLE_OPTIONS: Final = (*nethack.NETHACKOPTIONS, "autoopen")
 PUBLIC_OBSERVATION_KEYS: Final = (
     "glyphs",
     "chars",
@@ -55,13 +50,18 @@ class EnvironmentStateError(RuntimeError):
     """The requested operation is invalid for the environment lifecycle."""
 
 
+class EnvironmentConfigurationError(RuntimeError):
+    """NLE did not build the environment the task spec requested."""
+
+
 @dataclass(frozen=True, slots=True)
 class ScenarioConfig:
-    """Configuration fixed for one deterministic Staircase episode."""
+    """Configuration fixed for one deterministic episode."""
 
     seed: int
     artifact_directory: Path
     max_episode_steps: int = 5_000
+    task: TaskSpec = STAIRCASE_TASK
 
     def __post_init__(self) -> None:
         if isinstance(self.seed, bool) or not isinstance(self.seed, int):
@@ -74,6 +74,8 @@ class ScenarioConfig:
             raise TypeError("max_episode_steps must be an integer")
         if self.max_episode_steps <= 0:
             raise ValueError("max_episode_steps must be greater than zero")
+        if not isinstance(self.task, TaskSpec):
+            raise TypeError("task must be a TaskSpec")
         artifact_directory = Path(self.artifact_directory).expanduser().resolve()
         if artifact_directory.exists() and not artifact_directory.is_dir():
             raise ValueError("artifact_directory must be a directory")
@@ -176,24 +178,62 @@ class StepTransition:
         return self.terminated or self.truncated
 
 
+def make_nle_environment(
+    task: NleTask,
+    action_profile: ActionProfile,
+    *,
+    max_episode_steps: int,
+    savedir: Path,
+) -> gym.Env[Any, Any]:
+    """Build one NLE task with the profile's actions and the run's step cap.
+
+    `TimeLimit` enforces the run cap and reports it as truncation. NLE's own
+    abort reports its cap as a terminated `ABORTED` episode (`end_status` -1),
+    so NLE receives `cap + 1` through the registered spec's kwargs and never
+    fires first; `gym.make` would otherwise consume the cap itself and leave
+    NLE's default of 5,000 in place.
+    """
+    spec = gym.spec(task.value)
+    spec = replace(
+        spec, kwargs={**spec.kwargs, "max_episode_steps": max_episode_steps + 1}
+    )
+    actions = action_profile.actions
+    environment = gym.make(
+        spec,
+        max_episode_steps=max_episode_steps,
+        character=STAIRCASE_CHARACTER,
+        actions=actions,
+        observation_keys=PUBLIC_OBSERVATION_KEYS,
+        options=task.options,
+        save_ttyrec_every=1,
+        savedir=str(savedir),
+        render_mode="ansi",
+        fix_moon_phase=True,
+    )
+    built = tuple(
+        (type(action), int(action)) for action in environment.unwrapped.actions
+    )
+    if built != tuple((type(action), int(action)) for action in actions):
+        environment.close()
+        raise EnvironmentConfigurationError(
+            f"{task.value} did not adopt action profile {action_profile.value}"
+        )
+    return environment
+
+
 class NleEnvironment:
-    """Validated lifecycle and action boundary around NLE's Staircase task."""
+    """Validated lifecycle and action boundary around one NLE task."""
 
     def __init__(self, config: ScenarioConfig) -> None:
         config.artifact_directory.mkdir(parents=True, exist_ok=True)
         self._artifact_directory = Path(
             tempfile.mkdtemp(prefix="episode-", dir=config.artifact_directory)
         )
-        environment = gym.make(
-            STAIRCASE_ENVIRONMENT,
-            character=STAIRCASE_CHARACTER,
-            observation_keys=PUBLIC_OBSERVATION_KEYS,
-            options=NLE_OPTIONS,
-            save_ttyrec_every=1,
-            savedir=str(self._artifact_directory),
+        environment = make_nle_environment(
+            config.task.environment,
+            config.task.action_profile,
             max_episode_steps=config.max_episode_steps,
-            render_mode="ansi",
-            fix_moon_phase=True,
+            savedir=self._artifact_directory,
         )
         raw_environment = environment.unwrapped
         self._config = config
@@ -214,6 +254,10 @@ class NleEnvironment:
     @property
     def config(self) -> ScenarioConfig:
         return self._config
+
+    @property
+    def task(self) -> TaskSpec:
+        return self._config.task
 
     @property
     def state(self) -> EnvironmentState:

@@ -1,0 +1,141 @@
+"""Typed task specifications: the NLE task, action profile, and objective of a run.
+
+A run executes one `TaskSpec` (ADR 0004). The NLE task decides the reward,
+NLE's own end states, and NLE's option choice; the action profile is the
+code-defined action tuple handed to NLE's `actions=` argument; the objective
+(`traversal.Objective`) is what the coordinator pursues.
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from enum import Enum, IntEnum
+from pathlib import Path
+from typing import Final, Self
+
+from nle import nethack
+from nle.env.tasks import TASK_ACTIONS
+
+from nethack_agent.contracts import (
+    ContractError,
+    enum_value,
+    load_json_object,
+    object_value,
+)
+from nethack_agent.traversal import STAIRCASE_OBJECTIVE, Objective
+
+
+class NleTask(Enum):
+    """NLE 1.3.0 Gymnasium task ids a run may execute."""
+
+    STAIRCASE = "NetHackStaircase-v0"
+    SCORE = "NetHackScore-v0"
+    SCOUT = "NetHackScout-v0"
+    GOLD = "NetHackGold-v0"
+    EAT = "NetHackEat-v0"
+    ORACLE = "NetHackOracle-v0"
+
+    @property
+    def options(self) -> tuple[str, ...]:
+        """NLE's own option choice for this task, plus an explicit `autoopen`.
+
+        NLE applies a task's option choice only when `options` is None, and the
+        adapter always passes options, so the choice is reproduced here.
+        `NetHackGold.__init__` swaps `pickup_types` to `$`. NLE's default tuple
+        does not name `autoopen`, although vanilla NetHack defaults it on; it is
+        pinned so navigation does not depend on an upstream default.
+        """
+        options = nethack.NETHACKOPTIONS
+        if self is NleTask.GOLD:
+            options = tuple(
+                "pickup_types:$" if option.startswith("pickup_types") else option
+                for option in options
+            )
+        return (*options, "autoopen")
+
+
+class ActionProfile(Enum):
+    """A named, code-defined tuple of NLE action members."""
+
+    # NLE's `TASK_ACTIONS`: the 23 actions every task except Challenge uses.
+    NLE_TASK_ACTIONS = "nle-task-actions"
+
+    @property
+    def actions(self) -> tuple[IntEnum, ...]:
+        return _PROFILE_ACTIONS[self]
+
+
+_PROFILE_ACTIONS: Final[dict[ActionProfile, tuple[IntEnum, ...]]] = {
+    ActionProfile.NLE_TASK_ACTIONS: tuple(TASK_ACTIONS),
+}
+
+# Tasks whose objectives are defined. ADR 0004 section 8 adds Scout, Gold, Eat
+# and Oracle together with the objective legs they need.
+_SUPPORTED_TASKS: Final = frozenset({NleTask.STAIRCASE, NleTask.SCORE})
+
+
+@dataclass(frozen=True, slots=True)
+class TaskSpec:
+    environment: NleTask
+    action_profile: ActionProfile
+    objective: Objective
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.environment, NleTask):
+            raise TypeError("task environment must be an NleTask")
+        if not isinstance(self.action_profile, ActionProfile):
+            raise TypeError("task action_profile must be an ActionProfile")
+        if not isinstance(self.objective, Objective):
+            raise TypeError("task objective must be an Objective")
+        if self.environment not in _SUPPORTED_TASKS:
+            raise ContractError(
+                f"{self.environment.value} objectives are not supported yet"
+            )
+        if (
+            self.environment is NleTask.STAIRCASE
+            and self.objective != STAIRCASE_OBJECTIVE
+        ):
+            raise ContractError(
+                f"{NleTask.STAIRCASE.value} allows only the single objective leg "
+                "stand_on_stairs(down, any)"
+            )
+
+    def to_json(self) -> dict[str, object]:
+        return {
+            "environment": self.environment.value,
+            "action_profile": self.action_profile.value,
+            "objective": self.objective.to_json(),
+        }
+
+    def canonical_json(self) -> str:
+        """The stored form: sorted keys, no insignificant whitespace."""
+        return json.dumps(self.to_json(), sort_keys=True, separators=(",", ":"))
+
+    @classmethod
+    def from_json(cls, value: object, name: str = "task") -> Self:
+        payload = object_value(
+            value, name, {"environment", "action_profile", "objective"}
+        )
+        return cls(
+            environment=enum_value(
+                payload["environment"], f"{name} environment", NleTask
+            ),
+            action_profile=enum_value(
+                payload["action_profile"], f"{name} action_profile", ActionProfile
+            ),
+            objective=Objective.from_json(payload["objective"], f"{name} objective"),
+        )
+
+
+# Milestone 1's task: stand on any `>` on NetHackStaircase-v0, never changing
+# level.
+STAIRCASE_TASK: Final = TaskSpec(
+    NleTask.STAIRCASE, ActionProfile.NLE_TASK_ACTIONS, STAIRCASE_OBJECTIVE
+)
+
+
+def load_task_file(path: Path) -> TaskSpec:
+    """Read one strict task-spec JSON object from `path`."""
+    text = Path(path).read_text(encoding="utf-8")
+    return TaskSpec.from_json(load_json_object(text, f"task file {path}"))

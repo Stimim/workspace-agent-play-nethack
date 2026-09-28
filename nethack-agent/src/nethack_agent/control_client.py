@@ -17,6 +17,7 @@ from nethack_agent.network import (
     loopback_http_opener,
     normalize_loopback_http_url,
 )
+from nethack_agent.tasks import TaskSpec
 
 DEFAULT_API_URL: Final = "http://127.0.0.1:8000"
 DEFAULT_API_TIMEOUT_SECONDS: Final = 300.0
@@ -116,17 +117,22 @@ class ControlClient:
             time.sleep(min(poll_interval, max(0.0, deadline - time.monotonic())))
 
     def create_run(
-        self, *, seed: int, max_episode_steps: int, auto_start: bool
+        self,
+        *,
+        seed: int,
+        max_episode_steps: int,
+        auto_start: bool,
+        task: TaskSpec | None = None,
     ) -> dict[str, Any]:
-        response = self._request(
-            "POST",
-            "/api/runs",
-            {
-                "seed": seed,
-                "max_episode_steps": max_episode_steps,
-                "auto_start": auto_start,
-            },
-        )
+        """Create a run; without `task` the service runs the staircase task."""
+        payload: dict[str, object] = {
+            "seed": seed,
+            "max_episode_steps": max_episode_steps,
+            "auto_start": auto_start,
+        }
+        if task is not None:
+            payload["task"] = task.to_json()
+        response = self._request("POST", "/api/runs", payload)
         self.status_state(response)
         return response
 

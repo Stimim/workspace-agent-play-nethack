@@ -17,7 +17,6 @@ from nethack_agent.coordinator import (
 from nethack_agent.decision import RunOutcome, RunState
 from nethack_agent.environment import (
     STAIRCASE_CHARACTER,
-    STAIRCASE_ENVIRONMENT,
     NleEnvironment,
     ScenarioConfig,
 )
@@ -48,6 +47,7 @@ from nethack_agent.storage import (
     RunStateConflictError,
     RunStore,
 )
+from nethack_agent.tasks import STAIRCASE_TASK, TaskSpec
 
 POLICY_VERSION: Final = "hierarchical-explore-v1"
 _ACTIVE_STATES: Final = frozenset({RunState.IDLE, RunState.RUNNING, RunState.PAUSED})
@@ -92,7 +92,12 @@ class RunManager:
         self._closed = False
 
     def create_run(
-        self, *, seed: int, max_episode_steps: int = 5_000, auto_start: bool = False
+        self,
+        *,
+        seed: int,
+        max_episode_steps: int = 5_000,
+        auto_start: bool = False,
+        task: TaskSpec = STAIRCASE_TASK,
     ) -> RunRecord:
         with self._lock:
             self._require_open()
@@ -106,6 +111,7 @@ class RunManager:
                     seed=seed,
                     artifact_directory=self.data_directory / "runs" / run_id,
                     max_episode_steps=max_episode_steps,
+                    task=task,
                 )
                 environment = NleEnvironment(config)
                 client = OllamaClient(self._ollama_config)
@@ -117,7 +123,6 @@ class RunManager:
                 self.store.create_run(
                     config,
                     environment.seed_set,
-                    environment=STAIRCASE_ENVIRONMENT,
                     character=STAIRCASE_CHARACTER,
                     model=self._ollama_config.model,
                     policy_version=POLICY_VERSION,

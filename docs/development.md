@@ -191,6 +191,39 @@ and exit nonzero on HTTP or connection errors. The service allows one active
 run per process; runs cannot be controlled after a service restart. The API
 and WebSocket endpoints are listed in `ARCHITECTURE.md`.
 
+Without `--task`, a run executes the staircase task. `run start --task FILE`
+and `scenario run --task FILE` instead send the strict `TaskSpec` JSON object
+in `FILE` ([ADR 0004](decisions/0004-traversal-goals-and-task-progression.md)):
+
+```json
+{
+  "environment": "NetHackScore-v0",
+  "action_profile": "nle-task-actions",
+  "objective": {
+    "legs": [
+      {"kind": "reach_level", "level": {"dungeon_number": 0, "dungeon_level": 3}}
+    ]
+  }
+}
+```
+
+`environment` is the NLE task id and `action_profile` names the code-defined
+action tuple handed to NLE (only `nle-task-actions`, NLE's `TASK_ACTIONS`,
+exists). `NetHackStaircase-v0` accepts only its single
+`stand_on_stairs(down, any)` leg; `NetHackScore-v0` accepts any 1-8 legs of
+`stand_on_stairs`, `reach_level`, and `enter_dungeon`. Scout, Gold, Eat, and
+Oracle are rejected until their objectives exist. Unknown or duplicate keys
+and invalid values fail before the service is contacted. The run record
+stores the spec in `runs.task` and returns it as `run.task`; runs stored
+before tasks existed return `null`. Until the coordinator is wired to
+objectives (ADR 0004 step 4), a run still pursues the staircase goal and never
+changes level whatever objective it records.
+
+Every task receives NLE's own option choice plus `autoopen` (Gold's is
+`pickup_types:$`). The episode cap is enforced by Gymnasium's `TimeLimit` and
+always ends as `truncated`; NLE's own abort is set one step later so it never
+fires first, including above NLE's 5,000-step default.
+
 ### Browser UI
 
 While `serve` is running, open <http://127.0.0.1:8000/> (or the chosen loopback

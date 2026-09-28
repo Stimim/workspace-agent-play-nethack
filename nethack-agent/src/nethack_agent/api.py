@@ -4,7 +4,7 @@ import asyncio
 import sys
 from contextlib import asynccontextmanager, suppress
 from importlib.resources import files
-from typing import Annotated, Final
+from typing import Annotated, Any, Final
 
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import Response
@@ -22,6 +22,7 @@ from nethack_agent.storage import (
     MAX_EVENT_PAGE_LIMIT,
     RunNotFoundError,
 )
+from nethack_agent.tasks import STAIRCASE_TASK, TaskSpec
 
 _TERMINAL_STATES = {"terminal", "stopped", "error"}
 _UI_ASSETS: Final = {
@@ -52,6 +53,8 @@ class CreateRunRequest(BaseModel):
     seed: Annotated[StrictInt, Field(ge=1, le=sys.maxsize)]
     max_episode_steps: Annotated[StrictInt, Field(ge=1, le=100_000)] = 5_000
     auto_start: StrictBool = False
+    # A strict `TaskSpec` JSON object, parsed by the domain contract.
+    task: dict[str, Any] | None = None
 
 
 def create_app(manager: RunManager) -> FastAPI:
@@ -99,10 +102,16 @@ def create_app(manager: RunManager) -> FastAPI:
     @app.post("/api/runs", status_code=201)
     def create_run(request: CreateRunRequest) -> dict[str, object]:
         try:
+            task = (
+                STAIRCASE_TASK
+                if request.task is None
+                else TaskSpec.from_json(request.task)
+            )
             record = manager.create_run(
                 seed=request.seed,
                 max_episode_steps=request.max_episode_steps,
                 auto_start=request.auto_start,
+                task=task,
             )
         except (TypeError, ValueError) as error:
             raise HTTPException(status_code=422, detail=str(error)) from error

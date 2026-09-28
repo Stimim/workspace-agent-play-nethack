@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from nethack_agent.api import create_app
+from nethack_agent.contracts import ContractError
 from nethack_agent.control_client import ControlClient, ControlClientError
 from nethack_agent.coordinator import AgentCoordinator
 from nethack_agent.environment import NleEnvironment, ScenarioConfig
@@ -28,6 +29,7 @@ from nethack_agent.observation import ObservationProjector
 from nethack_agent.ollama import OllamaClient, OllamaConfig, OllamaError
 from nethack_agent.run_manager import RunManager
 from nethack_agent.scenario import ScenarioRunConfig, run_scenario
+from nethack_agent.tasks import TaskSpec, load_task_file
 from nethack_agent.verification import verify_network_boundary
 
 
@@ -179,6 +181,13 @@ def _seed_list(value: str) -> tuple[int, ...]:
     return seeds
 
 
+def _task_file(value: str) -> TaskSpec:
+    try:
+        return load_task_file(Path(value))
+    except (OSError, ContractError) as error:
+        raise argparse.ArgumentTypeError(str(error)) from error
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="nethack-agent", description="NetHack agent developer diagnostics"
@@ -206,6 +215,11 @@ def _build_parser() -> argparse.ArgumentParser:
     start_parser.add_argument("--seed", type=int, required=True)
     start_parser.add_argument("--max-steps", type=int, default=5_000)
     start_parser.add_argument("--auto", action="store_true")
+    start_parser.add_argument(
+        "--task",
+        type=_task_file,
+        help="TaskSpec JSON file (default: the staircase task)",
+    )
     for operation in ("status", "pause", "resume", "step", "stop", "events"):
         operation_parser = run_commands.add_parser(operation)
         operation_parser.add_argument("run_id")
@@ -234,6 +248,11 @@ def _build_parser() -> argparse.ArgumentParser:
     scenario_mode.add_argument("--auto", action="store_true")
     scenario_mode.add_argument("--steps", type=_positive_int)
     scenario_run_parser.add_argument("--json", action="store_true")
+    scenario_run_parser.add_argument(
+        "--task",
+        type=_task_file,
+        help="TaskSpec JSON file (default: the staircase task)",
+    )
     scenario_run_parser.add_argument(
         "--development-scripted-model",
         action="store_true",
@@ -296,6 +315,7 @@ def _run_control_command(arguments: argparse.Namespace) -> int:
                 seed=arguments.seed,
                 max_episode_steps=arguments.max_steps,
                 auto_start=arguments.auto,
+                task=arguments.task,
             )
         elif arguments.run_command == "status":
             response = client.status(arguments.run_id)
@@ -325,6 +345,7 @@ def _run_scenario_command(arguments: argparse.Namespace) -> int:
                 auto_run=arguments.auto,
                 steps=arguments.steps,
                 development_scripted_model=arguments.development_scripted_model,
+                task=arguments.task,
             )
         )
     except KeyboardInterrupt:
