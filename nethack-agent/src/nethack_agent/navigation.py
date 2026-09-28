@@ -30,6 +30,17 @@ from typing import Final
 from nle import nethack
 
 from nethack_agent.observation import ProjectedObservation
+from nethack_agent.traversal import (
+    BRANCH_STAIRS,
+    DUNGEON_EXIT,
+    DUNGEON_EXIT_LEVEL,
+    UNKNOWN_STAIR,
+    IdentityEvidence,
+    LevelKey,
+    StairDirection,
+    StairIdentity,
+    StairIdentityKind,
+)
 
 type Point = tuple[int, int]
 type Edge = tuple[Point, Point]
@@ -79,6 +90,21 @@ _DOOR_OPEN_ATTEMPT_LIMIT: Final = 5
 # dokick.c messages for a kicked door that broke ("crashes open") or was
 # destroyed ("shatters to pieces").
 _DOOR_BROKEN_MESSAGES: Final = ("crashes open", "shatters")
+# NetHack 3.6.7 `defsym.h` S_upstair and S_dnstair. Ladders (S_upladder and
+# S_dnladder, Gehennom and Vlad's Tower only) are not modelled as stairs.
+_STAIR_CMAPS: Final = {
+    StairDirection.UP: 23,
+    StairDirection.DOWN: 24,
+}
+_STAIR_DIRECTIONS: Final = {
+    index: direction for direction, index in _STAIR_CMAPS.items()
+}
+# NetHack's look-here text for the staircase under the hero; it is the only
+# evidence of a staircase covered by an object.
+_STAIR_HERE_MESSAGES: Final = {
+    "staircase down here": StairDirection.DOWN,
+    "staircase up here": StairDirection.UP,
+}
 
 
 class CellKind(Enum):
@@ -162,6 +188,8 @@ class ActionKind(Enum):
     KICK_DIRECTION = "kick_direction"
     SEARCH = "search"
     WAIT = "wait"
+    # Use the staircase under the hero (`<` or `>`) to change level.
+    TRAVERSE = "traverse"
     OTHER = "other"
 
 
@@ -183,6 +211,14 @@ class ActionRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class StairLink:
+    """Where a remembered staircase leads: a level and its arrival cell."""
+
+    level: LevelKey
+    cell: Point
+
+
+@dataclass(frozen=True, slots=True)
 class Monster:
     glyph: int
     name: str
@@ -194,44 +230,52 @@ class Monster:
 
 
 class LevelMemory:
-    """Bounded per-level knowledge owned by the coordinator.
+    """Bounded knowledge of one level, owned by the coordinator's dungeon memory.
 
     Every structure is keyed by map cells or cell pairs of one level, so its
-    size is bounded by the 21x79 map. The memory resets on episode start and
-    whenever the dungeon level changes.
+    size is bounded by the 21x79 map. Terrain, search coverage, learned walls
+    and doors, peaceful monsters, and stair identities and links persist for
+    the level's lifetime; `enter` clears the state of one visit.
     """
 
     def __init__(self) -> None:
         self.reset()
 
     def reset(self) -> None:
-        self.level: tuple[int, int] | None = None
+        self.level: LevelKey | None = None
         self.width = 0
         self.height = 0
-        self.step_index = -1
-        self.position: Point = (0, 0)
         self._cmap: list[list[int]] = []
         self._observed: list[bytearray] = []
         self.visited: set[Point] = set()
-        self.monsters: dict[Point, Monster] = {}
-        self.boulders: frozenset[Point] = frozenset()
-        self.objects: frozenset[Point] = frozenset()
         self.search_coverage: dict[Point, int] = {}
-        self.edge_failures: dict[Edge, int] = {}
         # Explicit terrain refusals hold for the level; generic repeated failures
         # are only suspected and are forgiven when exploration is re-armed.
         self.blocked_edges: set[Edge] = set()
-        self.suspect_edges: set[Edge] = set()
         self.locked_doors: set[Point] = set()
         self.door_attempts: dict[Point, int] = {}
         self.kicks: dict[Point, int] = {}
         self.peaceful_glyphs: set[int] = set()
+        self.knowledge = 0
+        self.search_round = 0
+        self.stair_identities: dict[Point, StairIdentity] = {}
+        self.links: dict[Point, StairLink] = {}
+        self._exhausted_knowledge: int | None = None
+        self.enter()
+
+    def enter(self) -> None:
+        """Forget what held only for the previous visit to this level."""
+        self.step_index = -1
+        self.position: Point = (0, 0)
+        self.monsters: dict[Point, Monster] = {}
+        self.boulders: frozenset[Point] = frozenset()
+        self.objects: frozenset[Point] = frozenset()
+        self.edge_failures: dict[Edge, int] = {}
+        self.suspect_edges: set[Edge] = set()
         self.abandoned_goals: set[Point] = set()
         self.search_goal: Point | None = None
         self.history: deque[tuple[Point, int, bool]] = deque(maxlen=HISTORY_LENGTH)
         self.stale_moves = 0
-        self.knowledge = 0
-        self.search_round = 0
         self.monster_waits = 0
         self.stuck_consult_step: int | None = None
         self.pending_kick: Point | None = None
@@ -240,18 +284,25 @@ class LevelMemory:
     # -- observation updates -------------------------------------------------
 
     def observe(self, observation: ProjectedObservation) -> None:
-        """Fold one observation into memory; repeated calls are idempotent."""
+        """Fold one observation of this level into memory; idempotent per step.
+
+        The first observation fixes the level; `DungeonMemory` routes every
+        other level to its own memory.
+        """
         if observation.step_index == self.step_index and self.level is not None:
             return
         player = observation.player
-        level = (player.dungeon_number, player.dungeon_level)
-        if level != self.level:
-            self.reset()
+        level = LevelKey(player.dungeon_number, player.dungeon_level)
+        if self.level is None:
             self.level = level
             self.height = len(observation.map.glyph_rows)
             self.width = len(observation.map.glyph_rows[0])
             self._cmap = [[-1] * self.width for _ in range(self.height)]
             self._observed = [bytearray(self.width) for _ in range(self.height)]
+        elif level != self.level:
+            raise ValueError(
+                f"memory of level {self.level} cannot observe level {level}"
+            )
         self.step_index = observation.step_index
         self.position = (player.x, player.y)
         self._update_cells(observation)
@@ -304,13 +355,18 @@ class LevelMemory:
         self.stale_moves = 0
 
     def _correct_terrain_here(self, message: str) -> None:
-        """Fix a remembered closed door the hero is evidently standing in.
+        """Fix the remembered terrain under the hero from the look-here message.
 
-        An object or monster drawn over a door hides its later state, so a door
-        last seen closed can be open or broken once the hero stands in it. The
-        look-here message names the doorway state when there is one.
+        An object or monster drawn over a door or staircase hides it: a door
+        last seen closed can be open or broken once the hero stands in it, and
+        a staircase under an object is never displayed. The look-here message
+        names the doorway state or staircase when there is one.
         """
         x, y = self.position
+        for text, direction in _STAIR_HERE_MESSAGES.items():
+            if text in message:
+                self._cmap[y][x] = _STAIR_CMAPS[direction]
+                return
         if "broken door here" in message or "doorway here" in message:
             self._cmap[y][x] = _DOORWAY_CMAP
         elif (
@@ -465,13 +521,81 @@ class LevelMemory:
             and point not in self.locked_doors
         )
 
-    def downstairs(self) -> tuple[Point, ...]:
+    def stair_direction(self, point: Point) -> StairDirection | None:
+        """The direction of the remembered staircase at `point`, if any."""
+        return _STAIR_DIRECTIONS.get(self._cmap[point[1]][point[0]])
+
+    def stairs(self, direction: StairDirection) -> tuple[Point, ...]:
+        """Remembered staircases of one direction, in map row order."""
+        index = _STAIR_CMAPS[direction]
         return tuple(
             (x, y)
             for y, row in enumerate(self._cmap)
-            for x, index in enumerate(row)
-            if index >= 0 and _CMAP_KINDS[index] is CellKind.DOWNSTAIRS
+            for x, cell in enumerate(row)
+            if cell == index
         )
+
+    def pair_known(self, direction: StairDirection) -> bool:
+        """Two staircases of one direction prove this is a branch level."""
+        return len(self.stairs(direction)) >= 2
+
+    def identity(self, point: Point) -> StairIdentity:
+        """What the remembered staircase at `point` is known to connect to.
+
+        Established identities come from traversal and arrival. Otherwise the
+        `dungeon.def` rules apply: `<` on (0, 1) is the dungeon exit, and on a
+        level with two staircases of one direction the complement of an
+        established one is known by elimination.
+        """
+        established = self.stair_identities.get(point)
+        if established is not None:
+            return established
+        direction = self.stair_direction(point)
+        if direction is None or self.level is None:
+            return UNKNOWN_STAIR
+        if direction is StairDirection.UP and self.level == DUNGEON_EXIT_LEVEL:
+            return DUNGEON_EXIT
+        others = [other for other in self.stairs(direction) if other != point]
+        if len(others) != 1:
+            return UNKNOWN_STAIR
+        other = self.stair_identities.get(others[0])
+        if other is None:
+            return UNKNOWN_STAIR
+        if other.kind is StairIdentityKind.MAIN:
+            branch = BRANCH_STAIRS[direction]
+            return StairIdentity(
+                StairIdentityKind.BRANCH,
+                branch.dungeon_number if branch.contains(self.level) else None,
+                IdentityEvidence.ELIMINATION,
+            )
+        if other.kind is StairIdentityKind.BRANCH:
+            return StairIdentity(
+                StairIdentityKind.MAIN,
+                self.level.dungeon_number,
+                IdentityEvidence.ELIMINATION,
+            )
+        return UNKNOWN_STAIR
+
+    def set_stair(self, point: Point, direction: StairDirection) -> None:
+        """Remember a staircase the hero stands on and so cannot see."""
+        self._cmap[point[1]][point[0]] = _STAIR_CMAPS[direction]
+
+    @property
+    def exhausted(self) -> bool:
+        """Exploration found nothing more to do since knowledge last grew."""
+        return self._exhausted_knowledge == self.knowledge
+
+    def mark_exhausted(self) -> None:
+        self._exhausted_knowledge = self.knowledge
+
+    def take_traversal(self) -> tuple[Point, StairDirection] | None:
+        """The staircase the last executed action used, consuming that record."""
+        record = self._pending
+        if record is None or record.kind is not ActionKind.TRAVERSE:
+            return None
+        self._pending = None
+        direction = self.stair_direction(record.origin)
+        return None if direction is None else (record.origin, direction)
 
     def cells(self) -> Iterator[Point]:
         for y in range(self.height):
@@ -519,6 +643,82 @@ class LevelMemory:
             and len({position for position, _, _ in recent}) <= OSCILLATION_MAX_CELLS
             and len({knowledge for _, knowledge, _ in recent}) == 1
         )
+
+
+class DungeonMemory:
+    """Per-level memories keyed by `(dungeon_number, dungeon_level)`.
+
+    Leaving a level keeps its memory; returning restores it and clears only the
+    previous visit's state. A stair action followed by a level change links
+    the used staircase and the arrival cell both ways and establishes their
+    identities; a level change without one (a trap door, hole, or level
+    teleport) records no link. Size is bounded by the levels visited.
+    """
+
+    def __init__(self) -> None:
+        self.reset()
+
+    def reset(self) -> None:
+        self.levels: dict[LevelKey, LevelMemory] = {}
+        self._current: LevelMemory | None = None
+
+    @property
+    def current(self) -> LevelMemory:
+        if self._current is None:
+            raise ValueError("dungeon memory has observed no level")
+        return self._current
+
+    def observe(self, observation: ProjectedObservation) -> LevelMemory:
+        """Fold one observation into its level's memory and return that memory."""
+        player = observation.player
+        key = LevelKey(player.dungeon_number, player.dungeon_level)
+        previous = self._current
+        if previous is not None and previous.level == key:
+            previous.observe(observation)
+            return previous
+        memory = self.levels.get(key)
+        if memory is None:
+            memory = LevelMemory()
+            self.levels[key] = memory
+        else:
+            memory.enter()
+        memory.observe(observation)
+        traversal = None if previous is None else previous.take_traversal()
+        if previous is not None and traversal is not None:
+            _link(previous, traversal, memory)
+        self._current = memory
+        return memory
+
+
+def _link(
+    origin_memory: LevelMemory,
+    traversal: tuple[Point, StairDirection],
+    arrival_memory: LevelMemory,
+) -> None:
+    """Record a stair traversal on both levels.
+
+    NetHack puts the hero on the staircase that leads back, so the arrival
+    cell is the opposite staircase even though the hero hides it.
+    """
+    origin, direction = traversal
+    source = origin_memory.level
+    destination = arrival_memory.level
+    assert source is not None and destination is not None
+    arrival = arrival_memory.position
+    kind = (
+        StairIdentityKind.MAIN
+        if source.dungeon_number == destination.dungeon_number
+        else StairIdentityKind.BRANCH
+    )
+    origin_memory.stair_identities[origin] = StairIdentity(
+        kind, destination.dungeon_number, IdentityEvidence.TRAVERSED
+    )
+    origin_memory.links[origin] = StairLink(destination, arrival)
+    arrival_memory.set_stair(arrival, direction.opposite)
+    arrival_memory.stair_identities[arrival] = StairIdentity(
+        kind, source.dungeon_number, IdentityEvidence.ARRIVAL
+    )
+    arrival_memory.links[arrival] = StairLink(source, origin)
 
 
 @dataclass(frozen=True, slots=True)

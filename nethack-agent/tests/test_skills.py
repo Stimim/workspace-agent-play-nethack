@@ -24,7 +24,9 @@ from nethack_agent.navigation import (
     ActionKind,
     ActionRecord,
     CellKind,
+    DungeonMemory,
     LevelMemory,
+    StairLink,
     route_tree,
 )
 from nethack_agent.observation import (
@@ -40,6 +42,15 @@ from nethack_agent.skills import (
     SkillAction,
     StaircaseNavigationSkill,
     _past_monster,
+)
+from nethack_agent.traversal import (
+    DUNGEON_EXIT,
+    UNKNOWN_STAIR,
+    IdentityEvidence,
+    LevelKey,
+    StairDirection,
+    StairIdentity,
+    StairIdentityKind,
 )
 
 _CMAP = nethack.GLYPH_CMAP_OFF
@@ -63,6 +74,7 @@ _GLYPHS = {
     "+": _CMAP + 15,  # closed door
     ".": _CMAP + 19,
     "#": _CMAP + 21,
+    "<": _CMAP + 23,
     ">": _CMAP + 24,
     "0": nethack.GLYPH_OBJ_OFF + _BOULDER,
     "%": nethack.GLYPH_OBJ_OFF + _FOOD,
@@ -107,6 +119,7 @@ def sketch(
     message: str = "",
     prompt: PromptState | None = None,
     dungeon_level: int = 1,
+    dungeon_number: int = 0,
 ) -> ProjectedObservation:
     """Build an observation from an ASCII map; `@` marks the hero."""
     width = max(len(line) for line in lines)
@@ -131,7 +144,11 @@ def sketch(
         ),
         changed_cells=(),
         player=replace(
-            template.player, x=hero[0], y=hero[1], dungeon_level=dungeon_level
+            template.player,
+            x=hero[0],
+            y=hero[1],
+            dungeon_number=dungeon_number,
+            dungeon_level=dungeon_level,
         ),
         message=message,
         prompt=prompt or PromptState(False, False, False),
@@ -641,17 +658,138 @@ def test_learned_edges_and_oscillation_abandon_goals(
     assert step == OSCILLATION_WINDOW
 
 
-def test_memory_resets_on_level_change(template: ProjectedObservation) -> None:
+def test_dungeon_memory_restores_levels_and_clears_only_the_previous_visit(
+    template: ProjectedObservation,
+) -> None:
+    dungeon = DungeonMemory()
+    first = dungeon.observe(sketch(template, ("|@..|",), step=0))
+    first.record(ActionRecord(ActionKind.SEARCH, (1, 0)))
+    first.blocked_edges.add(((1, 0), (2, 0)))
+    first.suspect_edges.add(((2, 0), (3, 0)))
+    first.abandoned_goals.add((3, 0))
+    first.stuck_consult_step = 0
+
+    # A level change with no stair action (a trap door, hole, or teleport)
+    # gets its own memory and records no link.
+    second = dungeon.observe(sketch(template, ("|.@|",), step=1, dungeon_level=2))
+    assert second is not first
+    assert second.level == LevelKey(0, 2)
+    assert second.visited == {(2, 0)}
+    assert not second.search_coverage
+    assert not first.links and not second.links
+
+    back = dungeon.observe(sketch(template, ("|.@.|",), step=2))
+    assert back is first
+    assert dungeon.levels.keys() == {LevelKey(0, 1), LevelKey(0, 2)}
+    # Persistent level knowledge survives the visit to another level...
+    assert back.search_coverage
+    assert back.visited == {(1, 0), (2, 0)}
+    assert ((1, 0), (2, 0)) in back.blocked_edges
+    # ...while the previous visit's routing state is gone.
+    assert not back.suspect_edges
+    assert not back.abandoned_goals
+    assert back.stuck_consult_step is None
+    assert back.position == (2, 0)
+
+
+def test_stair_traversal_links_both_levels_and_establishes_identities(
+    template: ProjectedObservation,
+) -> None:
+    dungeon = DungeonMemory()
+    doom = dungeon.observe(sketch(template, ("|.>.@>|",), step=0, dungeon_level=2))
+    down = doom.stairs(StairDirection.DOWN)
+    assert down == ((2, 0), (5, 0))
+    assert doom.pair_known(StairDirection.DOWN)
+    assert {doom.identity(stair) for stair in down} == {UNKNOWN_STAIR}
+
+    doom = dungeon.observe(sketch(template, ("|.>..@|",), step=1, dungeon_level=2))
+    doom.record(ActionRecord(ActionKind.TRAVERSE, (5, 0)))
+    # NLE shows the hero on the arrival staircase, never the staircase itself.
+    mines = dungeon.observe(
+        sketch(template, ("|..@.|",), step=2, dungeon_number=2, dungeon_level=1)
+    )
+
+    assert mines.level == LevelKey(2, 1)
+    assert mines.stairs(StairDirection.UP) == ((3, 0),)
+    assert mines.identity((3, 0)) == StairIdentity(
+        StairIdentityKind.BRANCH, 0, IdentityEvidence.ARRIVAL
+    )
+    assert mines.links[(3, 0)] == StairLink(LevelKey(0, 2), (5, 0))
+    assert doom.identity((5, 0)) == StairIdentity(
+        StairIdentityKind.BRANCH, 2, IdentityEvidence.TRAVERSED
+    )
+    assert doom.links[(5, 0)] == StairLink(LevelKey(2, 1), (3, 0))
+    # The other `>` on this Mines-entrance level is the main staircase.
+    assert doom.identity((2, 0)) == StairIdentity(
+        StairIdentityKind.MAIN, 0, IdentityEvidence.ELIMINATION
+    )
+
+    mines.record(ActionRecord(ActionKind.TRAVERSE, (3, 0)))
+    doom = dungeon.observe(sketch(template, ("|.>..@|",), step=3, dungeon_level=2))
+    assert doom.position == (5, 0)
+    assert dungeon.current is doom
+
+
+def test_main_traversal_and_rules_identify_the_remaining_stairs(
+    template: ProjectedObservation,
+) -> None:
+    dungeon = DungeonMemory()
+    top = dungeon.observe(sketch(template, ("|<.@>.|",), step=0))
+    # `dungeon.def` places the one-way exit branch on `<` of (0, 1).
+    assert top.identity((1, 0)) == DUNGEON_EXIT
+    assert top.identity((4, 0)) == UNKNOWN_STAIR
+
+    top = dungeon.observe(sketch(template, ("|<..@.|",), step=1))
+    top.record(ActionRecord(ActionKind.TRAVERSE, (4, 0)))
+    level_two = dungeon.observe(sketch(template, ("|>.@>|",), step=2, dungeon_level=2))
+    assert top.identity((4, 0)) == StairIdentity(
+        StairIdentityKind.MAIN, 0, IdentityEvidence.TRAVERSED
+    )
+    assert level_two.identity((3, 0)) == StairIdentity(
+        StairIdentityKind.MAIN, 0, IdentityEvidence.ARRIVAL
+    )
+    # Two unknown `>` on DL2: neither is established until one is used.
+    assert level_two.identity((1, 0)) == UNKNOWN_STAIR
+    assert level_two.identity((4, 0)) == UNKNOWN_STAIR
+
+    # A non-stair action followed by a level change links nothing.
+    level_two.record(ActionRecord(ActionKind.WAIT, (3, 0)))
+    fallen = dungeon.observe(sketch(template, ("|.@|",), step=3, dungeon_level=3))
+    assert not fallen.links
+    assert fallen.stairs(StairDirection.UP) == ()
+
+
+def test_look_here_message_reveals_a_staircase_under_an_object(
+    template: ProjectedObservation,
+) -> None:
+    memory = LevelMemory()
+    memory.observe(sketch(template, ("|@%.|",), step=0))
+    assert memory.stairs(StairDirection.DOWN) == ()
+    memory.observe(
+        sketch(
+            template,
+            ("|.@.|",),
+            step=1,
+            message="There is a staircase down here.  You see here 2 food rations.",
+        )
+    )
+    assert memory.stairs(StairDirection.DOWN) == ((2, 0),)
+    assert memory.kind((2, 0)) is CellKind.DOWNSTAIRS
+
+    memory.observe(
+        sketch(template, ("|@..|",), step=2, message="There is a staircase up here.")
+    )
+    assert memory.stairs(StairDirection.UP) == ((1, 0),)
+    assert memory.stair_direction((1, 0)) is StairDirection.UP
+
+
+def test_level_memory_observes_only_its_own_level(
+    template: ProjectedObservation,
+) -> None:
     memory = LevelMemory()
     memory.observe(sketch(template, ("|@.|",), step=0))
-    memory.record(ActionRecord(ActionKind.SEARCH, (1, 0)))
-    assert memory.search_coverage
-
-    memory.observe(sketch(template, ("|.@|",), step=1, dungeon_level=2))
-
-    assert memory.level == (template.player.dungeon_number, 2)
-    assert memory.visited == {(2, 0)}
-    assert not memory.search_coverage
+    with pytest.raises(ValueError, match="cannot observe level"):
+        memory.observe(sketch(template, ("|.@|",), step=1, dungeon_level=2))
 
 
 @pytest.mark.parametrize("seed", [2, 4, 58])

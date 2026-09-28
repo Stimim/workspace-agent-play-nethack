@@ -23,6 +23,7 @@ from nethack_agent.navigation import (
     route_tree,
 )
 from nethack_agent.observation import ProjectedObservation
+from nethack_agent.traversal import DUNGEONS_OF_DOOM, LevelKey, StairDirection
 
 # Each search finds an adjacent hidden door or corridor with probability 1/7
 # at Luck 0 (NetHackWiki "Search"); ten searches find it about 79% of the time.
@@ -34,7 +35,7 @@ MIN_SEARCH_SCORE: Final = 20
 SEARCH_DISTANCE_WEIGHT: Final = 2
 # Kicking doors is safe only where no shopkeeper or town watch can exist:
 # shops are generated below dungeon level 1 and Minetown is in the Mines.
-KICK_SAFE_LEVEL: Final = (0, 1)
+KICK_SAFE_LEVEL: Final = LevelKey(DUNGEONS_OF_DOOM, 1)
 _FRONTIER_PASSAGES: Final = frozenset(
     {
         CellKind.DOORWAY,
@@ -73,7 +74,7 @@ class StaircaseNavigationSkill:
     def select_action(
         self, memory: LevelMemory, actions_by_name: dict[str, LegalAction]
     ) -> SkillAction | None:
-        stairs = memory.downstairs()
+        stairs = memory.stairs(StairDirection.DOWN)
         if not stairs:
             return None
         origin = memory.position
@@ -157,7 +158,7 @@ class ExploreLevelSkill:
         defense = _attack_adjacent_hostile(memory, actions_by_name, None)
         if defense is not None:
             return ExploreResult(defense, None)
-        stairs = memory.downstairs()
+        stairs = memory.stairs(StairDirection.DOWN)
         tree = route_tree(memory)
         goal = _frontier_goal(memory, tree, stairs)
         if goal is not None:

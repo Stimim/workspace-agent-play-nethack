@@ -21,7 +21,7 @@ from nethack_agent.decision import (
 )
 from nethack_agent.environment import LegalAction, NleEnvironment, StepTransition
 from nethack_agent.model import DecisionFailure, HierarchicalDecisionModel
-from nethack_agent.navigation import ActionKind, ActionRecord, LevelMemory
+from nethack_agent.navigation import ActionKind, ActionRecord, DungeonMemory
 from nethack_agent.observation import ObservationProjector, ProjectedObservation
 from nethack_agent.skills import (
     ExploreLevelSkill,
@@ -153,7 +153,7 @@ class AgentCoordinator:
         self._navigation = StaircaseNavigationSkill()
         self._exploration = ExploreLevelSkill()
         self._prompt_handler = SafePromptHandler()
-        self._memory = LevelMemory()
+        self._dungeon = DungeonMemory()
         self._lock = threading.RLock()
         self._state = RunState.IDLE
         self._outcome: RunOutcome | None = None
@@ -186,7 +186,7 @@ class AgentCoordinator:
             if self._state is not RunState.IDLE:
                 raise CoordinatorLifecycleError("coordinator can only start from idle")
             self._projector.reset()
-            self._memory.reset()
+            self._dungeon.reset()
             try:
                 raw = self._environment.reset()
                 self._observation = self._projector.project(raw, step_index=0)
@@ -328,8 +328,7 @@ class AgentCoordinator:
         triggers a model skill consultation (rate-limited) and otherwise a
         model fallback action.
         """
-        memory = self._memory
-        memory.observe(before)
+        memory = self._dungeon.observe(before)
         skill_model_decision: ModelSkillDecision | None = None
         if model_skill is None:
             skill_model_decision = self._select_skill(before, None)
@@ -485,7 +484,7 @@ class AgentCoordinator:
             ),
             skill_model_decision=skill_model_decision,
             action_model_decision=action_model_decision,
-            record=ActionRecord(ActionKind.OTHER, self._memory.position),
+            record=ActionRecord(ActionKind.OTHER, self._dungeon.current.position),
             stuck_consulted=stuck_consulted,
         )
 
@@ -494,7 +493,7 @@ class AgentCoordinator:
         if plan.skill_model_decision is not None:
             self._skill_decision = plan.skill_model_decision.decision
         self._current_skill = selection.skill
-        memory = self._memory
+        memory = self._dungeon.current
         if plan.stuck_consulted:
             memory.stuck_consult_step = before.step_index
         elif (
