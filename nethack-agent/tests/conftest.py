@@ -61,7 +61,12 @@ def _pathless_intent_event(payload: dict[str, object]) -> bool:
     if intent is None:
         return False
     _legacy_goals(payload)
+    # Levels and stair identities were recorded even later than routes.
     del intent["path"]
+    del intent["level"]
+    destination = intent["destination"]
+    if destination is not None:
+        destination.pop("stair", None)
     return True
 
 
@@ -78,7 +83,8 @@ def _to_milestone_1_shape(database: Path) -> int:
 def _to_pathless_intent_shape(database: Path) -> int:
     """Rewrite step intents to the shape recorded before routes existed.
 
-    Those intents had `destination` and `attack_target` but no `path` key;
+    Those intents had `destination` and `attack_target` but no `path`,
+    `level`, or destination `stair` key;
     returns the number of rewritten step events.
     """
     return _rewrite_events(database, _pathless_intent_event)

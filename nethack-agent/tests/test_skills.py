@@ -188,7 +188,7 @@ def test_staircase_skill_routes_multiple_steps_then_waits_on_target(
     template: ProjectedObservation, actions: dict[str, LegalAction]
 ) -> None:
     skill = StaircaseNavigationSkill()
-    downstairs = IntentDestination(DestinationKind.DOWNSTAIRS, 5, 1)
+    downstairs = IntentDestination(DestinationKind.DOWNSTAIRS, 5, 1, UNKNOWN_STAIR)
     names = []
     for hero, row in ((2, "|.@..>|"), (3, "|..@.>|"), (4, "|...@>|")):
         memory = remembered(template, ("-------", row, "-------"))
@@ -239,7 +239,7 @@ def test_staircase_skill_uses_route_distance_then_row_and_column_for_multiple_st
     assert proposal is not None
     assert action_name(actions, proposal.action_index) == "CompassDirection.W"
     assert proposal.intent == ActionIntent(
-        IntentDestination(DestinationKind.DOWNSTAIRS, 1, 1),
+        IntentDestination(DestinationKind.DOWNSTAIRS, 1, 1, UNKNOWN_STAIR),
         None,
         cells((3, 2), (2, 2), (1, 1)),
     )
@@ -256,7 +256,9 @@ def test_staircase_defense_keeps_the_chosen_downstairs_as_destination(
     assert action_name(actions, proposal.action_index) == "CompassDirection.NE"
     # The attack leaves the route, so no path is recorded for this step.
     assert proposal.intent == ActionIntent(
-        IntentDestination(DestinationKind.DOWNSTAIRS, 5, 2), MapCell(2, 1), None
+        IntentDestination(DestinationKind.DOWNSTAIRS, 5, 2, UNKNOWN_STAIR),
+        MapCell(2, 1),
+        None,
     )
 
 
@@ -308,7 +310,7 @@ def test_monster_blocked_route_is_recorded_while_approaching_not_waiting(
     template: ProjectedObservation, actions: dict[str, LegalAction]
 ) -> None:
     skill = StaircaseNavigationSkill()
-    downstairs = IntentDestination(DestinationKind.DOWNSTAIRS, 5, 1)
+    downstairs = IntentDestination(DestinationKind.DOWNSTAIRS, 5, 1, UNKNOWN_STAIR)
 
     # Memory keeps the floor a monster later stands on.
     seen = ("-------", "|@...>|", "-------")

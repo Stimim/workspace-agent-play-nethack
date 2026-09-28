@@ -200,8 +200,11 @@ own routing data, never from the action direction or rationale text. It has an
 optional `destination` with a `DestinationKind` and zero-based map
 coordinates, and an optional `attack_target` cell; at least one is present:
 
-- `downstairs`: the remembered `>` staircase navigation routes to, steps onto,
-  waits on, or keeps while it first fights an adjacent hostile;
+- `downstairs` and `upstairs`: the remembered `>` or `<` staircase navigation
+  routes to, steps onto, waits on, uses, or keeps while it first fights an
+  adjacent hostile. A stair destination also records the `stair` identity the
+  skill believed (`main`, `branch` with a dungeon number, `exit`, or
+  `unknown`, with `traversed`, `arrival`, `elimination`, or `rule` evidence);
 - `frontier`: exploration's route goal next to never-observed space, including
   when the route first opens a door or waits for or attacks a blocking monster;
 - `search_spot`: the committed spot exploration walks to and searches from;
@@ -211,7 +214,11 @@ coordinates, and an optional `attack_target` cell; at least one is present:
   into it. Exploration fights before choosing a frontier, so its attacks carry
   no destination.
 
-The destination is usually not the adjacent cell the action steps into.
+The destination is usually not the adjacent cell the action steps into. The
+coordinator stamps every skill intent with the `level` (dungeon number and
+dungeon level) its cells belong to. The browser draws an intent only on that
+level's map, so the step that uses a staircase shows its intent only in the
+Events row.
 
 The intent's optional `path` is the route the action follows, as computed by
 the skill's breadth-first `RouteTree` for this step: the ordered cells after
@@ -331,7 +338,12 @@ paths existed, which include the accepted milestone 1 suite, remain readable
 through the store, HTTP API, browser UI, and evaluation audit: pet evidence is
 unknown, as described under the observation projector, an absent `intent`
 reads as JSON `null` (no intent recorded), and an absent intent `path` reads as
-`null` (no route recorded), never as an inferred target or route.
+`null` (no route recorded), never as an inferred target or route. Intents
+recorded before levels and stair identities read with `level: null` and
+`stair: null` (not recorded), and the goal string `stand_on_downstairs` reads
+as the typed goal it meant. A step's `outcome` is required exactly when NLE
+terminated or truncated the episode, except `objective_complete`, which the
+coordinator records when it ends a run whose NLE episode continues.
 Inventory records written before typed BUC evidence remain readable in the
 same way: absent `buc` becomes `unknown`, never a description-derived claim.
 

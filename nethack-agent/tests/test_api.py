@@ -138,6 +138,7 @@ def test_api_controls_run_and_persists_step_and_ttyrec(tmp_path: Path) -> None:
         "destination": {"kind": "frontier", "x": 57, "y": 11},
         "attack_target": None,
         "path": [{"x": 58, "y": 12}, {"x": 57, "y": 11}],
+        "level": {"dungeon_number": 0, "dungeon_level": 1},
     }
     player = step["observation"]["player"]
     assert (player["x"], player["y"]) == (58, 12)
@@ -335,4 +336,5 @@ def test_intents_stored_without_a_path_are_served_with_an_unknown_path(
         "destination": {"kind": "frontier", "x": 57, "y": 11},
         "attack_target": None,
         "path": None,
+        "level": None,
     }

@@ -16,7 +16,14 @@ from nethack_agent.contracts import (
     optional_enum_value,
     string_value,
 )
-from nethack_agent.traversal import GOAL_TYPES, Goal, goal_from_json
+from nethack_agent.traversal import (
+    GOAL_TYPES,
+    Goal,
+    LevelKey,
+    StairDirection,
+    StairIdentity,
+    goal_from_json,
+)
 
 # Level changes are never part of the staircase task. `<` on dungeon level 1
 # leaves the dungeon and ends the game; `>` descends instead of standing on `>`.
@@ -48,14 +55,22 @@ class StuckReason(Enum):
 class DestinationKind(Enum):
     """What the map cell a deterministic skill works toward is."""
 
-    # A remembered `>` that staircase navigation routes to or stands on.
+    # A remembered `>` that staircase navigation routes to, stands on, or uses.
     DOWNSTAIRS = "downstairs"
+    # A remembered `<` that staircase navigation routes to, stands on, or uses.
+    UPSTAIRS = "upstairs"
     # The known cell next to never-observed space that exploration routes to.
     FRONTIER = "frontier"
     # The committed spot exploration walks to and searches from.
     SEARCH_SPOT = "search_spot"
     # A known-locked door exploration walks beside, kicks, and aims a kick at.
     LOCKED_DOOR = "locked_door"
+
+
+STAIR_DESTINATIONS: Final = {
+    StairDirection.DOWN: DestinationKind.DOWNSTAIRS,
+    StairDirection.UP: DestinationKind.UPSTAIRS,
+}
 
 
 MAX_FALLBACK_CANDIDATES: Final = 3
@@ -140,6 +155,9 @@ class RunState(Enum):
 
 class RunOutcome(Enum):
     TASK_SUCCESS = "task_success"
+    # The coordinator completed the last objective leg on a task without an
+    # NLE success state; NLE neither terminated nor truncated the episode.
+    OBJECTIVE_COMPLETE = "objective_complete"
     DEATH = "death"
     TRUNCATED = "truncated"
     STOPPED = "stopped"
@@ -407,25 +425,46 @@ class IntentDestination:
     kind: DestinationKind
     x: int
     y: int
+    # What a stair destination was believed to connect to when chosen. None
+    # for other kinds and for stair intents recorded before identities were.
+    stair: StairIdentity | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.kind, DestinationKind):
             raise TypeError("destination kind must be a DestinationKind")
         integer_value(self.x, "intent destination x", minimum=0)
         integer_value(self.y, "intent destination y", minimum=0)
+        if self.stair is not None:
+            if not isinstance(self.stair, StairIdentity):
+                raise TypeError("intent destination stair must be a StairIdentity")
+            if self.kind not in STAIR_DESTINATIONS.values():
+                raise ContractError("only a stair destination has a stair identity")
 
     def to_json(self) -> dict[str, object]:
-        return {"kind": self.kind.value, "x": self.x, "y": self.y}
+        result: dict[str, object] = {"kind": self.kind.value, "x": self.x, "y": self.y}
+        if self.kind in STAIR_DESTINATIONS.values():
+            result["stair"] = self.stair.to_json() if self.stair else None
+        return result
 
     @classmethod
     def from_json(cls, value: object) -> Self:
-        payload = object_value(value, "intent destination", {"kind", "x", "y"})
+        # `stair` is absent from stair intents recorded before identities were;
+        # absent and null both mean not recorded.
+        payload = object_value(
+            value, "intent destination", {"kind", "x", "y"}, optional={"stair"}
+        )
+        stair = payload.get("stair")
         return cls(
             kind=enum_value(
                 payload["kind"], "intent destination kind", DestinationKind
             ),
             x=integer_value(payload["x"], "intent destination x", minimum=0),
             y=integer_value(payload["y"], "intent destination y", minimum=0),
+            stair=(
+                None
+                if stair is None
+                else StairIdentity.from_json(stair, "intent destination stair")
+            ),
         )
 
 
@@ -447,6 +486,9 @@ class ActionIntent:
     destination: IntentDestination | None
     attack_target: MapCell | None
     path: tuple[MapCell, ...] | None
+    # The level the cells belong to; the coordinator stamps it. None for
+    # intents recorded before levels were.
+    level: LevelKey | None = None
 
     def __post_init__(self) -> None:
         if self.destination is not None and not isinstance(
@@ -457,6 +499,8 @@ class ActionIntent:
             self.attack_target, MapCell
         ):
             raise TypeError("intent attack_target must be a MapCell")
+        if self.level is not None and not isinstance(self.level, LevelKey):
+            raise TypeError("intent level must be a LevelKey")
         if self.destination is None and self.attack_target is None:
             raise ContractError("intent requires a destination or an attack target")
         if self.path is not None:
@@ -478,18 +522,24 @@ class ActionIntent:
             "path": (
                 None if self.path is None else [cell.to_json() for cell in self.path]
             ),
+            "level": self.level.to_json() if self.level else None,
         }
 
     @classmethod
     def from_json(cls, value: object) -> Self:
-        # `path` is absent from intents persisted before routes were recorded;
-        # absent and null both mean no recorded route.
+        # `path` is absent from intents persisted before routes were recorded
+        # and `level` from intents persisted before levels were; absent and
+        # null both mean not recorded.
         payload = object_value(
-            value, "intent", {"destination", "attack_target"}, optional={"path"}
+            value,
+            "intent",
+            {"destination", "attack_target"},
+            optional={"path", "level"},
         )
         destination = payload["destination"]
         attack_target = payload["attack_target"]
         path = payload.get("path")
+        level = payload.get("level")
         if path is not None:
             path = array_value(path, "intent path")
             if len(path) > MAX_INTENT_PATH_LENGTH:
@@ -512,6 +562,7 @@ class ActionIntent:
                 if path is None
                 else tuple(MapCell.from_json(cell, "intent path cell") for cell in path)
             ),
+            level=None if level is None else LevelKey.from_json(level, "intent level"),
         )
 
 

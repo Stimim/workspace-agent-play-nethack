@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Final
 
@@ -446,7 +446,11 @@ class AgentCoordinator:
                 stuck_reason=stuck,
                 action_index=proposal.action_index,
                 rationale=proposal.rationale,
-                intent=proposal.intent,
+                intent=(
+                    None
+                    if proposal.intent is None
+                    else replace(proposal.intent, level=self._dungeon.current.level)
+                ),
             ),
             skill_model_decision=skill_model_decision,
             action_model_decision=None,

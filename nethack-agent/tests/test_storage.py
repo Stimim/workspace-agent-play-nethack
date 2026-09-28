@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -41,9 +42,12 @@ from nethack_agent.storage import (
 from nethack_agent.tasks import STAIRCASE_TASK, ActionProfile, NleTask, TaskSpec
 from nethack_agent.traversal import (
     STAND_ON_DOWNSTAIRS,
+    IdentityEvidence,
     LevelKey,
     Objective,
     ReachLevelLeg,
+    StairIdentity,
+    StairIdentityKind,
 )
 
 
@@ -184,6 +188,19 @@ def test_typed_event_payload_rejects_semantically_inconsistent_data(
     with pytest.raises(ContractError, match="terminal step must include an outcome"):
         StepPayload.from_json(serialized)
 
+    # Only an objective completed while NLE's episode continues is an outcome
+    # without termination; a terminal NLE step keeps NLE's outcome.
+    completed = step.to_json()
+    completed["outcome"] = "objective_complete"
+    assert StepPayload.from_json(completed).outcome is RunOutcome.OBJECTIVE_COMPLETE
+    completed["truncated"] = True
+    with pytest.raises(ContractError, match="only while NLE's episode continues"):
+        StepPayload.from_json(completed)
+    success = step.to_json()
+    success["outcome"] = "task_success"
+    with pytest.raises(ContractError, match="nonterminal step must not"):
+        StepPayload.from_json(success)
+
     # The arbiter may override the model's skill; a model-selected step may not.
     model_selected = step.to_json()
     model_selected["selection"]["skill_selection"] = "model"  # type: ignore[index]
@@ -210,6 +227,7 @@ def test_step_intent_and_path_are_optional_for_legacy_steps(tmp_path: Path) -> N
             {"x": 6, "y": 4},
             {"x": 7, "y": 4},
         ],
+        "level": None,
     }
     assert StepPayload.from_json(json.loads(json.dumps(serialized))) == step
 
@@ -232,6 +250,48 @@ def test_step_intent_and_path_are_optional_for_legacy_steps(tmp_path: Path) -> N
     )
     assert restored.to_json()["selection"]["intent"]["path"] is None  # type: ignore[index]
     assert StepPayload.from_json(restored.to_json()) == restored
+
+    # Intents persisted before levels were recorded read with an unknown level.
+    levelless = step.to_json()
+    del levelless["selection"]["intent"]["level"]  # type: ignore[index]
+    assert StepPayload.from_json(levelless) == step
+
+
+def test_stair_intents_record_identity_and_level(tmp_path: Path) -> None:
+    step = event_fixtures(tmp_path)[3]
+    assert isinstance(step, StepPayload)
+    stair = StairIdentity(StairIdentityKind.MAIN, 0, IdentityEvidence.ARRIVAL)
+    intent = ActionIntent(
+        IntentDestination(DestinationKind.UPSTAIRS, 7, 4, stair),
+        None,
+        None,
+        LevelKey(0, 2),
+    )
+    recorded = replace(step, selection=replace(step.selection, intent=intent))
+    serialized = recorded.to_json()
+    assert serialized["selection"]["intent"] == {  # type: ignore[index]
+        "destination": {
+            "kind": "upstairs",
+            "x": 7,
+            "y": 4,
+            "stair": {"kind": "main", "dungeon_number": 0, "evidence": "arrival"},
+        },
+        "attack_target": None,
+        "path": None,
+        "level": {"dungeon_number": 0, "dungeon_level": 2},
+    }
+    assert StepPayload.from_json(json.loads(json.dumps(serialized))) == recorded
+
+    # Stair intents stored before identities were recorded read as unknown
+    # (null), never as an inferred identity.
+    legacy = recorded.to_json()
+    del legacy["selection"]["intent"]["destination"]["stair"]  # type: ignore[index]
+    restored = StepPayload.from_json(legacy)
+    assert restored.selection.intent is not None
+    assert restored.selection.intent.destination == IntentDestination(
+        DestinationKind.UPSTAIRS, 7, 4
+    )
+    assert restored.to_json()["selection"]["intent"]["destination"]["stair"] is None  # type: ignore[index]
 
 
 _DESTINATION = {"kind": "frontier", "x": 3, "y": 1}
@@ -309,6 +369,26 @@ def _routed(
             "intent",
             _routed((2, 1), (3, 1), attack={"x": 2, "y": 2}),
             "must start at the attack target",
+        ),
+        (
+            "intent",
+            _destination(
+                stair={"kind": "main", "dungeon_number": 0, "evidence": "arrival"}
+            ),
+            "only a stair destination",
+        ),
+        (
+            "intent",
+            _destination(
+                kind="downstairs",
+                stair={"kind": "unknown", "dungeon_number": 0, "evidence": None},
+            ),
+            "no evidence or dungeon_number",
+        ),
+        (
+            "intent",
+            {**_destination(), "level": {"dungeon_number": 0, "dungeon_level": 0}},
+            "intent level dungeon_level must be at least 1",
         ),
         ("target", _DESTINATION, r"unexpected \['target'\]"),
         ("source", "deterministic_prompt", "only deterministic skill selections"),

@@ -244,9 +244,15 @@ class StepPayload:
         boolean_value(self.truncated, "step truncated")
         integer_value(self.end_status, "step end_status")
         boolean_value(self.is_ascended, "step is_ascended")
-        if self.outcome is None and (self.terminated or self.truncated):
+        nle_ended = self.terminated or self.truncated
+        if self.outcome is None and nle_ended:
             raise ContractError("terminal step must include an outcome")
-        if self.outcome is not None and not (self.terminated or self.truncated):
+        if self.outcome is RunOutcome.OBJECTIVE_COMPLETE:
+            if nle_ended:
+                raise ContractError(
+                    "an objective completes only while NLE's episode continues"
+                )
+        elif self.outcome is not None and not nle_ended:
             raise ContractError("nonterminal step must not include an outcome")
 
     def to_json(self) -> dict[str, object]:

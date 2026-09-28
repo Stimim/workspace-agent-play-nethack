@@ -86,7 +86,13 @@ class StaircaseNavigationSkill:
                 wait.index,
                 "Wait safely while already standing on the downstairs.",
                 ActionRecord(ActionKind.OTHER, origin),
-                _toward(DestinationKind.DOWNSTAIRS, origin),
+                ActionIntent(
+                    IntentDestination(
+                        DestinationKind.DOWNSTAIRS, *origin, memory.identity(origin)
+                    ),
+                    None,
+                    None,
+                ),
             )
         tree = route_tree(memory)
         target = _nearest(tree, stairs)
@@ -96,16 +102,18 @@ class StaircaseNavigationSkill:
             target = _nearest(blocked, stairs)
             if target is None:
                 return None
-        elif tree.distances[target] == 1:
+        destination = IntentDestination(
+            DestinationKind.DOWNSTAIRS, *target, memory.identity(target)
+        )
+        if blocked is None and tree.distances[target] == 1:
             # Stepping onto `>` ends the task at once; that beats any fight.
             return _route_step(
                 memory,
                 tree.route(target),
                 actions_by_name,
                 f"Step onto the downstairs at {_cell(target)}.",
-                IntentDestination(DestinationKind.DOWNSTAIRS, *target),
+                destination,
             )
-        destination = IntentDestination(DestinationKind.DOWNSTAIRS, *target)
         defense = _attack_adjacent_hostile(memory, actions_by_name, destination)
         if defense is not None:
             return defense

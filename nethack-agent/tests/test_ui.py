@@ -665,6 +665,58 @@ def test_map_intent_comes_only_from_the_step_that_produced_the_observation() -> 
 
 
 @pytest.mark.skipif(NODE is None, reason="Node.js is unavailable")
+def test_map_draws_an_intent_only_on_the_level_it_was_recorded_for() -> None:
+    result = _run_renderer_module(
+        """
+        const { intentFact, observationIntent } = await import("./render.js");
+        const intent = {
+          destination: {
+            kind: "downstairs",
+            x: 5,
+            y: 3,
+            stair: { kind: "branch", dungeon_number: 2, evidence: "elimination" },
+          },
+          attack_target: null,
+          path: null,
+          level: { dungeon_number: 0, dungeon_level: 2 },
+        };
+        const at = (dungeon_number, dungeon_level) => ({
+          step_index: 9,
+          player: { x: 5, y: 3, dungeon_number, dungeon_level },
+        });
+        const step = {
+          kind: "step",
+          payload: { selection: { intent }, observation: { step_index: 9 } },
+        };
+        const unleveled = {
+          kind: "step",
+          payload: {
+            selection: { intent: { ...intent, level: null } },
+            observation: { step_index: 9 },
+          },
+        };
+        console.log(JSON.stringify({
+          sameLevel: observationIntent(at(0, 2), step),
+          afterDescending: observationIntent(at(2, 1), step),
+          legacyLevel: observationIntent(at(2, 1), unleveled),
+          fact: intentFact(intent),
+        }));
+        """
+    )
+
+    assert result["sameLevel"]["destination"]["kind"] == "downstairs"  # type: ignore[index]
+    # The step that used the staircase recorded the previous level's cells.
+    assert result["afterDescending"] is None
+    # Intents recorded before levels were are drawn as before.
+    assert result["legacyLevel"] is not None
+    fact = result["fact"]
+    assert fact["text"] == (  # type: ignore[index]
+        "destination: downstairs (5, 3) [branch to 2 by elimination]; level (0, 2)"
+    )
+    assert "identity" in fact["help"]  # type: ignore[index]
+
+
+@pytest.mark.skipif(NODE is None, reason="Node.js is unavailable")
 def test_goal_text_is_the_token_the_model_is_offered() -> None:
     goals = [
         STAND_ON_DOWNSTAIRS,

@@ -68,13 +68,13 @@ const FIELD_HELP = Object.freeze({
   Evidence: "The exact typed event field that qualifies this row as deterministic execution.",
   Player: "The hero's cell from the projected player coordinates. This highlight wins over every other map highlight.",
   Pet: "A cell whose glyph NLE identifies as a pet (the observation's pet_rows). Observations recorded before pet evidence existed show none. The fill stays visible beneath a destination box, attack-target box, or path tint.",
-  Destination: "The cell the latest step's deterministic skill works toward: a frontier, remembered downstairs, search spot, or locked door. Usually not the adjacent cell stepped into; hidden when it is the player's own cell.",
+  Destination: "The cell the latest step's deterministic skill works toward: a frontier, remembered downstairs or upstairs, search spot, or locked door. Usually not the adjacent cell stepped into; hidden when it is the player's own cell. A step that used a staircase recorded its intent on the previous level, so the new level's map shows none.",
   "Attack target": "The displayed hostile monster the latest step's deterministic skill attacks by moving into it. Its box wins over a destination box on the same cell.",
   Path: "The breadth-first route a deterministic skill's step followed, in order from the cell it stepped into to its destination (for a locked door, the cell beside it where the hero kicks). The map tints it beneath the destination and attack-target boxes; the player's cell hides it. Show path turns the map tint off. Waiting, searching, kicking, adjacent-hostile defense, prompt answers, model fallbacks, and steps recorded before routes existed have none.",
 });
 
 const VALUE_HELP = Object.freeze({
-  staircase_navigation: "Skill.STAIRCASE_NAVIGATION: route to the nearest remembered reachable downstairs, handling an adjacent hostile first.",
+  staircase_navigation: "Skill.STAIRCASE_NAVIGATION: route to the nearest remembered reachable staircase that matches the goal, handling an adjacent hostile first, then wait on it or use it as the goal requires.",
   explore_level: "Skill.EXPLORE_LEVEL: explore unseen space, handle doors and adjacent hostiles, and search for hidden passages.",
   arbiter: "The deterministic arbiter selected the skill for this step.",
   model: "The model selected the skill after deterministic exploration reported that it was stuck.",
@@ -239,12 +239,24 @@ export function hexToBytes(hex) {
 // The typed intent of the step decision that produced `observation`: the
 // latest step event, when it carries that same observation. A status snapshot
 // newer than the latest received step shows no intent until its step arrives.
+// An intent recorded for another level (the step that used a staircase) is
+// not drawn on this level's map; intents recorded before levels were (null
+// level) are drawn as before.
 export function observationIntent(observation, stepEvent) {
   const payload = stepEvent?.payload;
   if (!observation || payload?.observation?.step_index !== observation.step_index) {
     return null;
   }
-  return payload.selection?.intent ?? null;
+  const intent = payload.selection?.intent ?? null;
+  const level = intent?.level;
+  const { player } = observation;
+  if (
+    level &&
+    (level.dungeon_number !== player?.dungeon_number || level.dungeon_level !== player?.dungeon_level)
+  ) {
+    return null;
+  }
+  return intent;
 }
 
 function atCell(cell, x, y) {
@@ -434,13 +446,15 @@ function formatMetrics(metrics) {
 
 const DESTINATION_LABELS = Object.freeze({
   downstairs: "downstairs",
+  upstairs: "upstairs",
   frontier: "frontier",
   search_spot: "search spot",
   locked_door: "locked door",
 });
 
 const DESTINATION_HELP = Object.freeze({
-  downstairs: "Destination downstairs: the remembered > that staircase navigation routes to or stands on.",
+  downstairs: "Destination downstairs: the remembered > that staircase navigation routes to, stands on, or uses.",
+  upstairs: "Destination upstairs: the remembered < that staircase navigation routes to, stands on, or uses.",
   frontier: "Destination frontier: the known cell next to never-observed space that exploration routes to.",
   search_spot: "Destination search spot: the committed cell exploration walks to and searches for hidden passages from.",
   locked_door: "Destination locked door: the known-locked door exploration walks beside, kicks, and aims its kick at.",
@@ -463,15 +477,38 @@ export function intentFact(intent) {
   const text = [];
   const help = [];
   if (intent.destination) {
-    const { kind } = intent.destination;
-    text.push(`destination: ${DESTINATION_LABELS[kind] ?? kind} ${cellText(intent.destination)}`);
+    const { kind, stair } = intent.destination;
+    const identity = stair ? ` [${stairText(stair)}]` : "";
+    text.push(`destination: ${DESTINATION_LABELS[kind] ?? kind} ${cellText(intent.destination)}${identity}`);
     help.push(DESTINATION_HELP[kind] ?? `Destination kind ${kind}.`);
+    if (stair) {
+      help.push(STAIR_HELP);
+    }
   }
   if (intent.attack_target) {
     text.push(`attack target: ${cellText(intent.attack_target)}`);
     help.push(ATTACK_HELP);
   }
+  if (intent.level) {
+    text.push(`level ${levelText(intent.level)}`);
+    help.push(LEVEL_HELP);
+  }
   return { text: text.join("; "), help: help.join(" ") };
+}
+
+const STAIR_HELP =
+  "The bracket is the staircase identity the skill believed when it chose this destination: main, branch (to a dungeon number), exit, or unknown, and the evidence (traversed, arrival, elimination, or rule).";
+const LEVEL_HELP =
+  "Level: the (dungeon number, dungeon level) the intent's cells belong to, from NLE's bottom-line statistics.";
+
+function stairText(stair) {
+  const target = stair.dungeon_number === null || stair.dungeon_number === undefined ? "" : ` to ${stair.dungeon_number}`;
+  const evidence = stair.evidence ? ` by ${stair.evidence}` : "";
+  return `${stair.kind}${target}${evidence}`;
+}
+
+function levelText(level) {
+  return `(${level.dungeon_number}, ${level.dungeon_level})`;
 }
 
 const NO_PATH_HELP =
