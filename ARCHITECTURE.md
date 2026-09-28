@@ -574,7 +574,14 @@ configuration, knowledge bundle, and policy version are created once for the
 suite. The evaluator never resumes or steers an episode. A run that pauses after
 a decision failure or gate rejection is stopped and scored by its recorded
 outcome. Production mode first verifies that the configured local Ollama model
-is ready.
+is ready. Before that, and before creating any run store, report, or episode,
+it refuses a schema-1 suite (`staircase-v1`) unless the checkout's policy is
+`hierarchical-explore-v1` (`evaluation.SCHEMA_1_POLICY_VERSION`), the policy
+the suite was fixed for. Typed goals changed the model prompts and output
+contract (ADR 0004), so the current interim policy
+`hierarchical-traversal-v1-dev` cannot produce staircase-v1 evidence; commit
+`3211405` is the last with the bound policy. Stored reports remain readable
+and renderable.
 
 After each seed the evaluator reads the complete event log back from SQLite. It
 audits contiguous sequences starting with `run_started`, contiguous step

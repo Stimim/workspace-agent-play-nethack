@@ -16,7 +16,7 @@ from nethack_agent.coordinator import (
 )
 from nethack_agent.decision import RunOutcome, RunState
 from nethack_agent.environment import (
-    STAIRCASE_CHARACTER,
+    CHARACTER,
     NleEnvironment,
     ScenarioConfig,
 )
@@ -49,7 +49,10 @@ from nethack_agent.storage import (
 )
 from nethack_agent.tasks import STAIRCASE_TASK, TaskSpec
 
-POLICY_VERSION: Final = "hierarchical-explore-v1"
+# Interim development id: typed goals changed the model prompts and output
+# contract after hierarchical-explore-v1 (ADR 0004). Committed suites for the
+# traversal policy will pin its final id.
+POLICY_VERSION: Final = "hierarchical-traversal-v1-dev"
 _ACTIVE_STATES: Final = frozenset({RunState.IDLE, RunState.RUNNING, RunState.PAUSED})
 
 
@@ -123,7 +126,7 @@ class RunManager:
                 self.store.create_run(
                     config,
                     environment.seed_set,
-                    character=STAIRCASE_CHARACTER,
+                    character=CHARACTER,
                     model=self._ollama_config.model,
                     policy_version=POLICY_VERSION,
                     knowledge_version=self.knowledge_bundle.version,

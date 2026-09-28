@@ -8,8 +8,10 @@ from pathlib import Path
 
 import pytest
 
+from nethack_agent import evaluation, run_manager
 from nethack_agent.decision import DecisionMetrics, RunOutcome, RunState
 from nethack_agent.evaluation import (
+    SCHEMA_1_POLICY_VERSION,
     DecisionStats,
     EvaluationError,
     EvaluationOptions,
@@ -31,6 +33,17 @@ from nethack_agent.events import StepPayload
 from nethack_agent.storage import RunStore
 
 SUITE_PATH = Path(__file__).resolve().parents[1] / "evaluation" / "staircase-v1.json"
+
+
+@pytest.fixture
+def bound_policy(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Run as a checkout of the policy schema-1 suites are bound to.
+
+    The harness mechanics under test do not depend on the policy; only the
+    recorded policy id and the refusal check read it.
+    """
+    monkeypatch.setattr(run_manager, "POLICY_VERSION", SCHEMA_1_POLICY_VERSION)
+    monkeypatch.setattr(evaluation, "POLICY_VERSION", SCHEMA_1_POLICY_VERSION)
 
 
 def suite_payload() -> dict[str, object]:
@@ -446,6 +459,26 @@ def test_abort_rejects_malformed_reports_without_writing(tmp_path: Path) -> None
     assert json.loads(writer.paths.json.read_text(encoding="utf-8")) == payload
 
 
+def test_schema_1_suite_is_refused_under_another_policy_before_any_episode(
+    tmp_path: Path,
+) -> None:
+    assert run_manager.POLICY_VERSION != SCHEMA_1_POLICY_VERSION
+    options = EvaluationOptions(
+        suite=load_suite(SUITE_PATH),
+        data_directory=tmp_path / "data",
+        report_directory=tmp_path / "reports",
+        development_scripted_model=True,
+    )
+
+    with pytest.raises(SuiteValidationError, match="bound to policy"):
+        run_evaluation(options, progress=None)
+
+    # Nothing was created: no run store, no episode, and no report.
+    assert not (tmp_path / "data").exists()
+    assert not (tmp_path / "reports").exists()
+
+
+@pytest.mark.usefixtures("bound_policy")
 def test_development_evaluator_runs_real_nle_and_audits_records(
     tmp_path: Path,
     to_milestone_1_shape: Callable[[Path], int],
@@ -572,6 +605,7 @@ def test_development_evaluator_runs_real_nle_and_audits_records(
     assert not missing.integrity_ok
 
 
+@pytest.mark.usefixtures("bound_policy")
 def test_subset_runs_are_partial_and_follow_requested_order(tmp_path: Path) -> None:
     payload = suite_payload()
     payload["max_episode_steps"] = 1

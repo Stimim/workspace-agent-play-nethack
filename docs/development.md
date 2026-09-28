@@ -398,8 +398,15 @@ The Ollama URL must resolve to a loopback hostname or address. Gameplay must rem
 ## Evaluation suite
 
 The committed milestone suite is `nethack-agent/evaluation/staircase-v1.json`
-(seeds 1–10, 1,000-step cap). Confirm Ollama first, then run the whole suite
-against the configured local model:
+(seeds 1–10, 1,000-step cap). It is bound to policy `hierarchical-explore-v1`.
+The current checkout runs the interim policy `hierarchical-traversal-v1-dev`,
+whose typed goals changed the model prompts and output contract (ADR 0004), so
+`eval run` refuses this suite with `FAIL evaluation: suite staircase-v1
+(schema 1) is bound to policy hierarchical-explore-v1 ...` before creating a
+run store, report, or episode. To reproduce milestone 1, check out commit
+`3211405` (the last with the bound policy) in a separate worktree. There,
+confirm Ollama first, then run the whole suite against the configured local
+model:
 
 ```bash
 cd nethack-agent

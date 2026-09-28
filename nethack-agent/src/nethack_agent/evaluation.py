@@ -35,7 +35,7 @@ from nethack_agent.decision import (
     RunState,
     level_change_error,
 )
-from nethack_agent.environment import STAIRCASE_CHARACTER
+from nethack_agent.environment import CHARACTER
 from nethack_agent.events import (
     AgentErrorPayload,
     EventKind,
@@ -53,6 +53,10 @@ from nethack_agent.tasks import STAIRCASE_TASK
 from nethack_agent.traversal import LevelKey
 
 SUITE_SCHEMA_VERSION: Final = 1
+# Schema-1 suites (staircase-v1) were fixed for this policy. Later policies
+# change prompts and the model output contract (ADR 0004), so only a checkout
+# with this policy can reproduce them; others are refused before any episode.
+SCHEMA_1_POLICY_VERSION: Final = "hierarchical-explore-v1"
 REPORT_SCHEMA_VERSION: Final = 2
 SUITE_SEED_COUNT: Final = 10
 MILESTONE_REFERENCE_SEED: Final = 6
@@ -175,8 +179,8 @@ def _parse_suite(
             f"suite environment must be {STAIRCASE_TASK.environment.value}"
         )
     character = string_value(payload["character"], "suite character")
-    if character != STAIRCASE_CHARACTER:
-        raise ContractError(f"suite character must be {STAIRCASE_CHARACTER}")
+    if character != CHARACTER:
+        raise ContractError(f"suite character must be {CHARACTER}")
     seeds = tuple(
         integer_value(seed, "suite seed", minimum=1, maximum=sys.maxsize)
         for seed in array_value(payload["seeds"], "suite seeds")
@@ -1251,6 +1255,17 @@ def _development_model(_client: OllamaClient) -> ScriptedDevelopmentModel:
     return ScriptedDevelopmentModel()
 
 
+def require_suite_policy(suite: EvaluationSuite, policy_version: str) -> None:
+    """Refuse to evaluate a suite under a policy it was not fixed for."""
+    if policy_version != SCHEMA_1_POLICY_VERSION:
+        raise SuiteValidationError(
+            f"suite {suite.suite_id} (schema {SUITE_SCHEMA_VERSION}) is bound to "
+            f"policy {SCHEMA_1_POLICY_VERSION}, but this checkout runs policy "
+            f"{policy_version}; check out a commit with policy "
+            f"{SCHEMA_1_POLICY_VERSION} to reproduce it"
+        )
+
+
 def run_evaluation(
     options: EvaluationOptions,
     *,
@@ -1258,6 +1273,7 @@ def run_evaluation(
     progress: TextIO | None = sys.stderr,
 ) -> EvaluationRun:
     suite = options.suite
+    require_suite_policy(suite, POLICY_VERSION)
     if options.development_scripted_model:
         config = OllamaConfig(model=DEVELOPMENT_MODEL_NAME)
         model_factory: ModelFactory | None = _development_model

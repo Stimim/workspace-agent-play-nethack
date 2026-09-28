@@ -17,7 +17,7 @@ from numpy.typing import NDArray
 from nethack_agent.contracts import integer_value, object_value, string_value
 from nethack_agent.tasks import STAIRCASE_TASK, ActionProfile, NleTask, TaskSpec
 
-STAIRCASE_CHARACTER: Final = "val-dwa-law"
+CHARACTER: Final = "val-dwa-law"
 PUBLIC_OBSERVATION_KEYS: Final = (
     "glyphs",
     "chars",
@@ -201,7 +201,7 @@ def make_nle_environment(
     environment = gym.make(
         spec,
         max_episode_steps=max_episode_steps,
-        character=STAIRCASE_CHARACTER,
+        character=CHARACTER,
         actions=actions,
         observation_keys=PUBLIC_OBSERVATION_KEYS,
         options=task.options,

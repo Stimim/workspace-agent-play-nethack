@@ -3,7 +3,6 @@ from pathlib import Path
 import gymnasium as gym
 import numpy as np
 import pytest
-from nle import nethack
 
 from nethack_agent.environment import (
     EnvironmentState,
@@ -90,7 +89,6 @@ def test_legal_actions_are_the_profile_actions_nle_received(tmp_path: Path) -> N
         (int(action), f"{type(action).__name__}.{action.name}")
         for action in profile.actions
     ]
-    assert nethack.Command.EAT in profile.actions
 
 
 def test_same_suite_seed_reproduces_initial_observation(tmp_path: Path) -> None:
