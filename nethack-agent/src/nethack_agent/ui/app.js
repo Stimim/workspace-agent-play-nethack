@@ -15,6 +15,7 @@ import {
   element,
   initializeView,
   repositionShownTooltip,
+  syncHeaderOffset,
   view,
 } from "./view.js";
 
@@ -51,11 +52,13 @@ const state = {
 function showError(error) {
   view.error.textContent = error instanceof Error ? error.message : String(error);
   view.error.hidden = false;
+  syncHeaderOffset();
 }
 
 function clearError() {
   view.error.hidden = true;
   view.error.textContent = "";
+  syncHeaderOffset();
 }
 
 function setActionNames(actions) {

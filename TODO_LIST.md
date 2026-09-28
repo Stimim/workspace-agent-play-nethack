@@ -91,7 +91,7 @@ Browser tooling for inspecting runs. Evidence, design, and the limitations behin
 - [ ] Make persisted events selectable so choosing an old event redraws that event's historical map, player state, inventory, related observation, recorded intent, and planned path; today the map shows only the latest step's intent and path.
 - [ ] Record real tool and script executions for the Tools tab; today it lists only step events whose selection source is `deterministic_skill` or `deterministic_prompt`.
 - [ ] Add automated browser tests for layout, overlay, focus, and tooltip behavior, which only recorded browser smokes cover today.
-- [ ] Keep the sticky agent column inside a 1920x1080 viewport before page scroll; it overflows by about 34 px.
+- [x] Keep the sticky agent column inside a 1920x1080 viewport before page scroll ([0018](docs/notes/0018-agent-column-viewport-fit.md)).
 - [ ] Mark an intent destination on the hero's own cell; the map leaves it unboxed and only the Events row names it.
 - [ ] Show where replanning diverges from a drawn path, and record routes that steps compute but do not follow (waiting for a blocker, staircase defense).
 

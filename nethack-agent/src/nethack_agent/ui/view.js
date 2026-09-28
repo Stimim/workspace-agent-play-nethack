@@ -17,6 +17,7 @@ export const view = {
   step: element("step"),
   stop: element("stop"),
   error: element("error"),
+  controlPanel: element("control-panel"),
   runId: element("run-id"),
   runState: element("run-state"),
   runOutcome: element("run-outcome"),
@@ -85,6 +86,11 @@ function syncAgentPanel() {
   if (hiddenFocus) {
     view.agentToggle.focus();
   }
+}
+
+export function syncHeaderOffset() {
+  const offset = view.controlPanel.offsetHeight + view.error.offsetHeight;
+  document.documentElement.style.setProperty("--header-offset", `${offset}px`);
 }
 
 function setAgentPanelOpen(open, restoreFocus = false) {
@@ -223,4 +229,6 @@ export function initializeView(onShowPathChange) {
 
   installFieldTooltips(document);
   syncAgentPanel();
+  syncHeaderOffset();
+  window.addEventListener("resize", syncHeaderOffset);
 }

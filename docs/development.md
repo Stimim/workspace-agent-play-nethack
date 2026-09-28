@@ -254,7 +254,11 @@ At viewport widths of 1520 CSS px or less, use **Agent info** to open that third
 column as an overlay instead of squeezing the map or inventory. The breakpoint
 is the 107rem three-column layout (columns, two gaps, and workspace padding) at
 the 14 px root font size plus 22 px for a vertical scrollbar; `app.css` and
-`NARROW_AGENT_QUERY` in `view.js` must change together. The overlay closes with
+`NARROW_AGENT_QUERY` in `view.js` must change together. Wider viewports keep the
+sticky agent column inside the viewport before page scroll: `syncHeaderOffset`
+in `view.js` publishes the control panel's height plus any shown error banner as
+`--header-offset` on load, on resize, and when the banner changes, and the
+column's height subtracts it. The overlay closes with
 its Close button, the dimmed background, or Escape. Its Events, Messages, Tools,
 and Verbose tabs support click and arrow-key navigation. Every tab has an
 independent auto-scroll checkbox. Messages lists each non-blank game message

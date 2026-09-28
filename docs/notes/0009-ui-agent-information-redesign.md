@@ -148,6 +148,7 @@ Verification:
 - At 1920x1080 before page scroll, the sticky agent column extends about 34 px
   below the viewport because it starts below the control panel. Scrolling the
   page by the panel's height brings it fully into view; no content is lost.
+  Fixed in [0018](0018-agent-column-viewport-fit.md).
 - Automated DOM behavior tests are limited to renderer functions that run in
   Node without a DOM. Layout, overlay, focus, and tooltip behavior are verified
   by the recorded browser smoke only.

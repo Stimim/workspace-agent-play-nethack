@@ -291,7 +291,7 @@ button:disabled { opacity: 0.45; cursor: default; }
   grid-template-rows: auto auto minmax(0, 1fr);
   gap: 0.75rem;
   min-width: 0;
-  height: calc(100vh - 1.5rem);
+  height: calc(100vh - var(--header-offset, 0px) - 1.5rem);
 }
 
 .agent-column-header {
