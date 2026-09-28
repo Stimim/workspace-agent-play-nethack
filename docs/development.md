@@ -408,37 +408,59 @@ way, restart it through that installation's service manager. Then rerun
 
 The Ollama URL must resolve to a loopback hostname or address. Gameplay must remain offline; online services are permitted only for development work performed outside an episode.
 
-## Evaluation suite
+## Evaluation suites
 
-The committed milestone suite is `nethack-agent/evaluation/staircase-v1.json`
-(seeds 1–10, 1,000-step cap). It is bound to policy `hierarchical-explore-v1`.
-The current checkout runs policy `hierarchical-traversal-v1`, whose typed
-goals changed the model prompts and output contract (ADR 0004), so `eval run`
-refuses this suite with `FAIL evaluation: suite staircase-v1 (schema 1) is
-bound to policy hierarchical-explore-v1 ...` before creating a run store,
-report, or episode. To reproduce milestone 1, check out commit `3211405` (the
-last with the bound policy) in a separate worktree and give it a fresh data
-directory that no newer checkout has written: that checkout's strict event
-reader rejects the typed goal objects, stair identities, and intent levels
-that later policies record, so runs a newer checkout wrote into a shared
-`runs.sqlite3` are unreadable there, and mixing policies in one data directory
-defeats per-policy evidence. There, confirm Ollama first, then run the whole suite against
-the configured local model:
+Suite schema 2 pins the policy version and reviewed knowledge-bundle id and
+contains one or more cases. Each case supplies a strict typed `TaskSpec`, its
+own seeds and step cap, and its success threshold. Suite-wide acceptance still
+requires the configured limits on invalid actions and gate rejections and, for
+the committed suites, complete SQLite and ttyrec records. A pin mismatch is
+rejected before the evaluator creates a run store, report, or episode.
+
+The current policy `hierarchical-traversal-v1` and knowledge bundle
+`staircase-reviewed-v3` have two committed suites:
+
+- `nethack-agent/evaluation/staircase-v2.json` reruns the milestone staircase
+  regression on seeds 1–10 at the established 1,000-step cap. It requires at
+  least six successes, including seed 6.
+- `nethack-agent/evaluation/traversal-v1.json` uses held-out seeds 700–704 and a
+  1,000-step cap for three `NetHackScore-v0` objectives: descend the main
+  dungeon to `(0, 3)` (at least 3/5), descend there and return to `(0, 1)` (at
+  least 3/5), and enter dungeon 2, the Gnomish Mines (at least 2/5). Those
+  thresholds were fixed from separate development-only probes on seeds
+  600–604 before any committed-suite episode ran; the suite file records the
+  observed probe counts and cap rationale.
+
+The first real-model reports are
+`nethack-agent/evaluation/reports/staircase-v2-20260928T013844Z.json` (10/10,
+accepted) and
+`nethack-agent/evaluation/reports/traversal-v1-20260928T013929Z.json` (complete
+but not accepted: 3/5, 3/5, and 1/5 by case). Both have zero invalid actions,
+gate rejections, and integrity failures. Preserve the failing traversal report;
+do not tune the fixed suite after observing it.
+
+Confirm local prerequisites, then run each whole suite against the configured
+local model with a fresh data directory:
 
 ```bash
 cd nethack-agent
 uv run nethack-agent doctor
 uv run nethack-agent eval run \
-  --suite evaluation/staircase-v1.json \
-  --data-dir data/evaluations/staircase-v1-reproduction \
+  --suite evaluation/staircase-v2.json \
+  --data-dir data/evaluations/staircase-v2 \
+  --report-dir evaluation/reports
+uv run nethack-agent eval run \
+  --suite evaluation/traversal-v1.json \
+  --data-dir data/evaluations/traversal-v1 \
   --report-dir evaluation/reports
 ```
 
-Use a fresh data directory per policy version: the strict event reader does not
-accept step events recorded before the `hierarchical-explore-v1` selection
-fields. Later optional additions (pet evidence, step intents, and intent paths)
-keep older `hierarchical-explore-v1` data, including the milestone 1 suite,
-readable.
+`evaluation/staircase-v1.json` remains the schema-1 milestone record bound to
+policy `hierarchical-explore-v1`. The current checkout refuses it because typed
+goals changed the prompt and model-output contract. To reproduce that historical
+suite, check out commit `3211405` in a separate worktree and use a fresh data
+directory: older strict readers cannot read newer typed traversal events, and
+mixing policies in one run store defeats per-policy evidence.
 
 Progress lines go to stderr every `--progress-interval` seconds (default 30).
 Each invocation reserves a new `<suite>-<UTC timestamp>.json` and `.md` pair in
@@ -449,6 +471,12 @@ including when acceptance fails; read `acceptance.passed` and
 `acceptance.milestone_accepted`. It exits 1 for configuration or Ollama
 readiness errors and 130 after `Ctrl+C`, which stops the active run and records
 an `interrupted` report.
+
+Report schema 3 groups results by case and records traversal metrics for every
+episode: turns, depths and exact levels, stair traversals and probes, objective
+legs, return, final character state, hunger states, and an xlog death cause
+when available. Markdown is rendered from the JSON; keep both files together.
+Historical schema-2 reports remain renderable without rewriting them.
 
 If an interrupted (or crashed, still `running`) suite will not be finished, for
 example because the policy changed, finalize its report instead of deleting it:

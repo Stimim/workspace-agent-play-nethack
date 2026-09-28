@@ -68,18 +68,20 @@ a non-loopback sentinel, runs a real NLE step through the HTTP control service
 with the explicit scripted development model, records actual destinations, and
 fails if any connection target is not loopback.
 
-Run the committed milestone suite (`evaluation/staircase-v1.json`) against the
-local model and write a new timestamped JSON and Markdown report:
+Run either policy-pinned committed suite against the local model to write a new
+timestamped JSON and Markdown report:
 
 ```bash
-uv run nethack-agent eval run --suite evaluation/staircase-v1.json \
-  --data-dir data/evaluations/staircase-v1-explore --report-dir evaluation/reports
+uv run nethack-agent eval run --suite evaluation/staircase-v2.json \
+  --data-dir data/evaluations/staircase-v2 --report-dir evaluation/reports
+uv run nethack-agent eval run --suite evaluation/traversal-v1.json \
+  --data-dir data/evaluations/traversal-v1 --report-dir evaluation/reports
 ```
 
 `--development-scripted-model` exercises the harness without Ollama; such
 reports are never milestone evidence. `eval abort --report <json> --reason
 <text>` finalizes an interrupted report that will not be completed. See
-[`../docs/development.md`](../docs/development.md#evaluation-suite).
+[`../docs/development.md`](../docs/development.md#evaluation-suites).
 
 Regression tests use real NLE environments and scripted models; they do not require Ollama:
 

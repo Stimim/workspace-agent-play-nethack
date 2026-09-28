@@ -626,66 +626,92 @@ A successful Staircase episode means the agent stands on a down staircase, match
 
 ### Evaluation harness
 
-`nethack-agent/evaluation/staircase-v1.json` is the committed milestone suite:
-suite seeds 1–10 (chosen before any suite episode ran), a 1,000-step episode
-cap, and acceptance of at least 6 task successes with seed 6 among them, zero
-invalid NLE actions, zero action-gate rejections, and complete SQLite and ttyrec
-records. `evaluation.load_suite` rejects unknown fields, any seed count other
-than 10, duplicate seeds, a suite without seed 6, and an environment or
-character other than the adapter's.
+`nethack-agent/evaluation/staircase-v1.json` remains the immutable schema-1
+milestone suite: seeds 1–10, a 1,000-step episode cap, and acceptance of at
+least six task successes including seed 6, with no invalid NLE actions or
+action-gate rejections and complete records. Its intentionally narrow loader
+still requires exactly ten unique seeds including seed 6 and binds the suite to
+policy `hierarchical-explore-v1`; commit `3211405` is the last checkout that can
+produce evidence for it.
 
-`nethack-agent eval run` drives each seed in-process through one `RunManager`
-with `create_run(auto_start=True)`: the same coordinator, worker loop, action
-gate, SQLite store, and ttyrec capture as the HTTP service, without HTTP or
-child-process failure modes during multi-hour runs. The manager, Ollama
-configuration, knowledge bundle, and policy version are created once for the
-suite. The evaluator never resumes or steers an episode. A run that pauses after
-a decision failure or gate rejection is stopped and scored by its recorded
-outcome. Production mode first verifies that the configured local Ollama model
-is ready. Before that, and before creating any run store, report, or episode,
-it refuses a schema-1 suite (`staircase-v1`) unless the checkout's policy is
-`hierarchical-explore-v1` (`evaluation.SCHEMA_1_POLICY_VERSION`), the policy
-the suite was fixed for. Typed goals changed the model prompts and output
-contract (ADR 0004), so the current policy `hierarchical-traversal-v1`
-cannot produce staircase-v1 evidence; commit `3211405` is the last with the
-bound policy. Stored reports remain readable
-and renderable.
+Suite schema 2 supports several named cases. It pins both `policy_version` and
+`knowledge_bundle_id` at suite level; each case carries a strict typed
+`TaskSpec`, seeds, episode cap, minimum successes, and any required successful
+seeds. Global acceptance sets the invalid-action and gate-rejection limits and
+whether complete records are required. Unknown fields, malformed task objects,
+duplicate case ids, duplicate seeds within a case, out-of-case required seeds,
+and invalid thresholds are rejected. Before creating a run store, report, or
+episode, the evaluator requires both pins to match the checkout's policy and
+loaded knowledge bundle.
 
-After each seed the evaluator reads the complete event log back from SQLite. It
-audits contiguous sequences starting with `run_started`, contiguous step
-indices, a final event that matches the final state, nothing after the terminal
-step, the suite seed and step cap, an existing nonempty ttyrec, and every
-stepped action against the recorded legal-action table and, for a level
-change, the same `level_change_error` predicate judged on the observation the
-step was decided on (events do not record whether a level had two known
-staircases of a direction, so an unknown branch probe is accepted). Runs
-stored before task specs are audited as the staircase task, which never
-changes level. It
-reports outcome, steps, wall time, model decisions (including failed and
-repaired decisions), nearest-rank p50/p95/max decision latency, token totals,
-selection-source counts, gate rejections, and invalid actions. Gate rejections
-are `agent_error` events in the `paused` state without a decision-failure trace;
-only decision failures and gate rejections pause the coordinator.
+Two schema-2 suites are fixed for policy `hierarchical-traversal-v1` and bundle
+`staircase-reviewed-v3`. `staircase-v2` repeats the milestone regression.
+`traversal-v1` runs three `NetHackScore-v0` objectives over held-out seeds
+700–704: descend through main stairs to `(0, 3)`, return from `(0, 3)` to
+`(0, 1)`, and enter dungeon 2 (the Gnomish Mines). Its acceptance thresholds
+are respectively 3/5, 3/5, and 2/5. They and the 1,000-step cap were recorded
+before committed-suite execution, using separate development-only probes on
+seeds 600–604; the suite embeds the seed-selection and cap rationale.
 
-Acceptance also requires every suite seed to be evaluated without
-interruption, an identical run configuration across seeds (model, policy,
-knowledge, NLE version, environment, character, step cap, and
-`ollama_num_ctx`), and unchanged suite and knowledge files at the end.
-`--seeds` may reorder execution; a subset
-produces a `partial` report that cannot pass. `--development-scripted-model`
-reports are never milestone evidence. Each invocation reserves a new
-timestamped JSON and Markdown report pair with exclusive creation and rewrites
-only that pair, world-readable (0644), after every seed.
+The first real-model `staircase-v2` report
+(`nethack-agent/evaluation/reports/staircase-v2-20260928T013844Z.json`) passed
+with 10/10 successes. The first `traversal-v1` report
+(`nethack-agent/evaluation/reports/traversal-v1-20260928T013929Z.json`) completed
+with zero invalid actions, gate rejections, or integrity failures but did not
+pass: the three cases achieved 3/5, 3/5, and 1/5, so entering the Mines missed
+its fixed 2/5 threshold. A completed failing suite is retained as evidence;
+thresholds and seeds are not rewritten after observing it.
 
-Report schema version 2 records a typed `status` (`running`, `complete`,
-`partial`, `failed`, `interrupted`, or `aborted`) and an optional
-`status_reason`. The Markdown is rendered purely from the JSON payload, so a
-stored report can be re-rendered. `nethack-agent eval abort --report <json>
---reason <text>` finalizes a `running` or `interrupted` report whose suite the
-operator will not finish, for example because the policy is being replaced:
-it keeps every recorded result, aggregate, and acceptance value verbatim, sets
-status `aborted` with the reason, rewrites both files in place, and never
-creates or deletes files. Aborted reports are never accepted.
+`nethack-agent eval run` drives every case/seed pair in-process through one
+`RunManager` with `create_run(auto_start=True)`: the same coordinator, worker
+loop, action gate, SQLite store, and ttyrec capture as the HTTP service, without
+HTTP or child-process failure modes. The manager, Ollama configuration,
+knowledge bundle, and policy version are created once for the suite; each case
+supplies only its declared task and cap. The evaluator never resumes or steers
+an episode. A run that pauses after a decision failure or gate rejection is
+stopped and scored by its stored evidence. Production mode first verifies that
+the configured local Ollama model is ready.
+
+After each episode the evaluator reads the complete event log back from
+SQLite. It audits contiguous sequences starting with `run_started`, contiguous
+step indices, a final event matching the final state, nothing after a terminal
+step, the case task, seed and cap, an existing nonempty ttyrec, and every
+stepped action against the recorded legal-action table. Level-change actions
+are checked by the coordinator's `level_change_error` predicate on the
+observation on which the action was decided. An unknown branch stair is valid
+only when the recorded intent has `pair_known: true`, preserving the
+coordinator's evidence that two stairs of that direction were known; false,
+null, and legacy-absent evidence never broaden permission. Runs stored before
+task specs are audited as the staircase task, which prohibits level changes.
+
+Report schema 3 groups results and acceptance by case and retains a global
+aggregate and gate. Each episode records steps, game turns, maximum depth,
+deepest `LevelKey`, ordered levels visited, up/down traversals, unknown-stair
+probes and misses, level changes without a stair action, completed objective
+legs, final gold/score/HP/XL, total task return, observed hunger states, and a
+death cause matched from NLE's xlog when available. Objective completion is
+rederived from stored public observations rather than trusted from the run
+outcome. A zeroed terminal NLE observation is not treated as final player state;
+the last live observation remains authoritative.
+
+Acceptance requires every requested case/seed pair without interruption,
+the per-case thresholds, fixed shared configuration across cases (model,
+policy, knowledge, NLE version, character, and `ollama_num_ctx`), the declared
+task and cap for each record, suite-wide integrity limits, and unchanged suite
+and knowledge files at the end. `--seeds` may reorder shared seed values; a
+subset produces a `partial` report that cannot pass.
+`--development-scripted-model` reports are never milestone evidence. Each
+invocation reserves a new timestamped JSON and Markdown report pair with
+exclusive creation and rewrites only that pair, world-readable (0644), after
+every episode.
+
+Markdown is rendered strictly from the JSON source of truth. Historical report
+schema 2 remains readable and renders byte-for-byte as before. Report schema 3
+has a typed `status` (`running`, `complete`, `partial`, `failed`, `interrupted`,
+or `aborted`) and an optional `status_reason`. `nethack-agent eval abort
+--report <json> --reason <text>` finalizes a `running` or `interrupted` report,
+keeps its recorded evidence, rewrites both files in place, and never creates or
+deletes report files. Aborted reports are never accepted.
 
 ## Deferred decisions
 

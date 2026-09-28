@@ -44,6 +44,9 @@ SUITE_PATH = Path(__file__).resolve().parents[1] / "evaluation" / "staircase-v1.
 STAIRCASE_V2_PATH = (
     Path(__file__).resolve().parents[1] / "evaluation" / "staircase-v2.json"
 )
+TRAVERSAL_V1_PATH = (
+    Path(__file__).resolve().parents[1] / "evaluation" / "traversal-v1.json"
+)
 REPORT_DIRECTORY = Path(__file__).resolve().parents[1] / "evaluation" / "reports"
 
 
@@ -151,6 +154,23 @@ def test_committed_schema_2_suite_pins_policy_knowledge_and_case_task() -> None:
     assert suite.cases[0].task.environment is NleTask.STAIRCASE
     assert suite.cases[0].acceptance.min_successes == 6
     assert suite.cases[0].acceptance.required_success_seeds == (6,)
+
+
+def test_committed_traversal_suite_fixes_cases_seeds_and_thresholds() -> None:
+    suite = load_suite(TRAVERSAL_V1_PATH)
+
+    assert [case.case_id for case in suite.cases] == [
+        "descend-main-d3",
+        "round-trip-d3-d1",
+        "enter-mines",
+    ]
+    assert [case.seeds for case in suite.cases] == [tuple(range(700, 705))] * 3
+    assert [case.max_episode_steps for case in suite.cases] == [1000, 1000, 1000]
+    assert [case.acceptance.min_successes for case in suite.cases] == [3, 3, 2]
+    assert all(case.task.environment is NleTask.SCORE for case in suite.cases)
+    assert [
+        [leg.kind.value for leg in case.task.objective.legs] for case in suite.cases
+    ] == [["reach_level"], ["reach_level", "reach_level"], ["enter_dungeon"]]
 
 
 @pytest.mark.parametrize("malformation", ["extra", "duplicate_case", "duplicate_seed"])
@@ -458,6 +478,29 @@ def test_committed_schema_2_reports_still_render_byte_for_byte() -> None:
     for path in reports:
         payload = json.loads(path.read_text(encoding="utf-8"))
         assert payload["report_schema_version"] == 2
+        assert render_report_markdown(payload) == path.with_suffix(".md").read_text(
+            encoding="utf-8"
+        )
+
+
+def test_committed_schema_3_reports_render_and_retain_fixed_results() -> None:
+    expected = {
+        "staircase-v2-20260928T013844Z.json": (True, [10]),
+        "traversal-v1-20260928T013929Z.json": (False, [3, 3, 1]),
+    }
+    for name, (accepted, successes) in expected.items():
+        path = REPORT_DIRECTORY / name
+        payload = json.loads(path.read_text(encoding="utf-8"))
+
+        assert payload["report_schema_version"] == 3
+        assert payload["status"] == "complete"
+        assert payload["acceptance"]["milestone_accepted"] is accepted
+        assert [
+            case["acceptance"]["successes"] for case in payload["case_results"]
+        ] == successes
+        assert payload["aggregate"]["invalid_actions"] == 0
+        assert payload["aggregate"]["gate_rejections"] == 0
+        assert payload["aggregate"]["integrity_failures"] == []
         assert render_report_markdown(payload) == path.with_suffix(".md").read_text(
             encoding="utf-8"
         )
