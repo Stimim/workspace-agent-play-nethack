@@ -26,6 +26,7 @@ from nethack_agent.traversal import (
     EnterDungeonLeg,
     ExploreDungeonLeg,
     ExploreLevelGoal,
+    FindOracleLeg,
     LevelKey,
     Objective,
     ReachLevelLeg,
@@ -277,3 +278,8 @@ def test_explore_dungeon_completes_when_every_required_level_is_explored(
     assert ObjectivePlanner(objective).advance(0, walk.dungeon) == 1
     with pytest.raises(ObjectivePlanningError, match="explored dungeon leg"):
         plan(objective, walk)
+
+
+def test_planner_refuses_find_oracle_objectives_until_they_have_behavior() -> None:
+    with pytest.raises(ObjectivePlanningError, match="find_oracle.*not supported yet"):
+        ObjectivePlanner(Objective((FindOracleLeg(),)))

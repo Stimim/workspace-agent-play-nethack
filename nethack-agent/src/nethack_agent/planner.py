@@ -17,6 +17,7 @@ from nethack_agent.traversal import (
     EnterDungeonLeg,
     ExploreDungeonLeg,
     ExploreLevelGoal,
+    FindOracleLeg,
     Goal,
     LevelKey,
     Objective,
@@ -67,6 +68,11 @@ class ObjectivePlanner:
     def __init__(self, objective: Objective) -> None:
         # Objective construction already rejects dungeons without a known
         # staircase branch.
+        for leg in objective.legs:
+            if isinstance(leg, FindOracleLeg):
+                raise ObjectivePlanningError(
+                    f"{leg.kind.value} objective legs are not supported yet"
+                )
         self.objective = objective
 
     @property

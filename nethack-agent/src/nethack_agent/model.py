@@ -40,6 +40,7 @@ from nethack_agent.ollama import (
 )
 from nethack_agent.traversal import (
     STAIR_GOAL_TYPES,
+    ApproachOracleGoal,
     ExploreLevelGoal,
     Goal,
     StairConnection,
@@ -355,6 +356,8 @@ def describe_goal(goal: Goal) -> str:
             f"explore level {level.dungeon_level} of dungeon {level.dungeon_number} "
             "until no unexplored space, locked door to kick, or search spot is left"
         )
+    if isinstance(goal, ApproachOracleGoal):
+        raise ValueError(f"{goal.kind.value} goals have no prompt text yet")
     target = goal.target
     name, glyph, verb = _STAIR_NAMES[target.direction]
     if target.connection is StairConnection.ANY:

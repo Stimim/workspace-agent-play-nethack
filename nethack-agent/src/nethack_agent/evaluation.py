@@ -56,6 +56,7 @@ from nethack_agent.tasks import STAIRCASE_TASK, NleTask, TaskSpec
 from nethack_agent.traversal import (
     EnterDungeonLeg,
     ExploreDungeonLeg,
+    FindOracleLeg,
     LevelKey,
     ObjectiveLeg,
     ReachLevelLeg,
@@ -1513,6 +1514,8 @@ def _observation_completes_leg(
         return level.dungeon_number == leg.dungeon_number
     if isinstance(leg, ExploreDungeonLeg):
         return set(leg.levels) <= explored
+    if isinstance(leg, FindOracleLeg):
+        raise ValueError(f"{leg.kind.value} legs have no evaluation yet")
     player = observation.player
     glyph = observation.map.glyph_rows[player.y][player.x]
     cmap = nethack.glyph_to_cmap(glyph) if nethack.glyph_is_cmap(glyph) else None

@@ -6,9 +6,11 @@ from nethack_agent.traversal import (
     STAIRCASE_OBJECTIVE,
     STAND_ON_DOWNSTAIRS,
     UNKNOWN_STAIR,
+    ApproachOracleGoal,
     EnterDungeonLeg,
     ExploreDungeonLeg,
     ExploreLevelGoal,
+    FindOracleLeg,
     IdentityEvidence,
     LevelKey,
     Objective,
@@ -41,28 +43,40 @@ def test_legacy_goal_string_reads_as_standing_on_any_downstairs() -> None:
     }
 
 
-@pytest.mark.parametrize(
-    "goal",
-    [
-        STAND_ON_DOWNSTAIRS,
-        TraverseStairsGoal(MAIN_DOWN),
-        TraverseStairsGoal(StairTarget(StairDirection.UP, StairConnection.MAIN, None)),
-        TraverseStairsGoal(MINES_DOWN),
-        ExploreLevelGoal(LevelKey(0, 2)),
-    ],
-)
+GOALS = [
+    STAND_ON_DOWNSTAIRS,
+    TraverseStairsGoal(MAIN_DOWN),
+    TraverseStairsGoal(StairTarget(StairDirection.UP, StairConnection.MAIN, None)),
+    TraverseStairsGoal(MINES_DOWN),
+    ExploreLevelGoal(LevelKey(0, 2)),
+    ApproachOracleGoal(LevelKey(0, 2)),
+]
+
+
+@pytest.mark.parametrize("goal", GOALS)
 def test_goals_round_trip_and_have_distinct_tokens(goal: object) -> None:
     assert goal_from_json(goal.to_json()) == goal  # type: ignore[attr-defined]
     assert goal.token.startswith(goal.kind.value)  # type: ignore[attr-defined]
+
+
+def test_goal_tokens_are_unique_across_kinds_on_the_same_level() -> None:
+    tokens = [goal.token for goal in GOALS]
+
+    assert len(set(tokens)) == len(tokens)
 
 
 def test_goal_tokens_name_direction_connection_and_branch() -> None:
     assert STAND_ON_DOWNSTAIRS.token == "stand_on_stairs:down:any"
     assert TraverseStairsGoal(MINES_DOWN).token == "traverse_stairs:down:branch:2"
     assert ExploreLevelGoal(LevelKey(2, 3)).token == "explore_level:2:3"
+    assert ApproachOracleGoal(LevelKey(0, 7)).token == "approach_oracle:0:7"
     assert ExploreLevelGoal(LevelKey(0, 2)).to_json() == {
         "kind": "explore_level",
         "level": {"dungeon_number": 0, "dungeon_level": 2},
+    }
+    assert ApproachOracleGoal(LevelKey(0, 7)).to_json() == {
+        "kind": "approach_oracle",
+        "level": {"dungeon_number": 0, "dungeon_level": 7},
     }
 
 
@@ -127,6 +141,15 @@ def test_goal_tokens_name_direction_connection_and_branch() -> None:
             {"kind": "explore_level", "level": {"dungeon_number": 0}},
             "missing",
         ),
+        (
+            {
+                "kind": "approach_oracle",
+                "level": {"dungeon_number": 0, "dungeon_level": 7},
+                "oracle": [5, 5],
+            },
+            "unexpected",
+        ),
+        ({"kind": "approach_oracle"}, "missing"),
         (
             {
                 "kind": "stand_on_stairs",
@@ -222,6 +245,15 @@ def test_explore_dungeon_legs_name_the_doom_levels_they_require() -> None:
 def test_explore_dungeon_legs_are_strict(leg: object, match: str) -> None:
     with pytest.raises(ContractError, match=match):
         Objective.from_json({"legs": [leg]})
+
+
+def test_find_oracle_legs_round_trip_strictly() -> None:
+    leg = FindOracleLeg()
+
+    assert leg.to_json() == {"kind": "find_oracle"}
+    assert Objective.from_json({"legs": [leg.to_json()]}).legs == (leg,)
+    with pytest.raises(ContractError, match="unexpected"):
+        Objective.from_json({"legs": [{"kind": "find_oracle", "max_level": 9}]})
 
 
 @pytest.mark.parametrize(

@@ -132,7 +132,10 @@ or `{"kind": "explore_level", "level": {"dungeon_number": 0, "dungeon_level": 2}
 the string `stand_on_downstairs` stored before typed goals reads as exactly that
 goal. The model is offered goals by token (`stand_on_stairs:down:any`,
 `explore_level:0:2`) through a per-call generation schema, and the parser maps
-a token back to the offered goal.
+a token back to the offered goal. `approach_oracle` (token
+`approach_oracle:<dnum>:<dlevel>`) is a typed, strictly parsed goal with no
+behavior yet: the planner never produces it, and prompt text and skill
+selection raise on it.
 
 Each run's `TaskSpec` objective (1-8 legs: `stand_on_stairs`, `reach_level`,
 `enter_dungeon`, `explore_dungeon`) drives `planner.ObjectivePlanner`, a pure
@@ -150,9 +153,12 @@ every Dungeons of Doom level 1..`max_level` to be explored: it plans
 toward it otherwise (so a level skipped by a trap door is revisited by
 climbing), and retraces the branch link out of another dungeon. A level is
 explored once exploration has found it exhausted; that flag, unlike
-`exhausted`, survives later knowledge growth. Legs are checked after every
-step whose
-NLE episode continues (NLE zeroes the bottom-line statistics of a terminal
+`exhausted`, survives later knowledge growth. A strict `find_oracle` leg
+(`{"kind": "find_oracle"}`) is parseable but has no behavior yet:
+`ObjectivePlanner` refuses any objective containing it, and `TaskSpec` rejects
+`NetHackGold-v0` and `NetHackOracle-v0` as "not supported yet". Legs are
+checked after every step whose NLE episode continues (NLE zeroes the
+bottom-line statistics of a terminal
 observation). On `NetHackStaircase-v0` (and later Oracle) NLE's success
 state ends the run; on other tasks, completing the last leg ends it with
 `objective_complete` and closes NLE. The coordinator snapshot reports the

@@ -20,6 +20,7 @@ from nethack_agent.tasks import PROMPT_KEY_ACTION_NAMES
 from nethack_agent.traversal import (
     DUNGEON_EXIT_LEVEL,
     GOAL_TYPES,
+    ApproachOracleGoal,
     ExploreLevelGoal,
     Goal,
     LevelKey,
@@ -57,6 +58,8 @@ def model_selectable_skills(goal: Goal) -> tuple[Skill, ...]:
     """
     if isinstance(goal, ExploreLevelGoal):
         return (Skill.EXPLORE_LEVEL,)
+    if isinstance(goal, ApproachOracleGoal):
+        raise ValueError(f"{goal.kind.value} goals have no skills yet")
     return (Skill.STAIRCASE_NAVIGATION, Skill.EXPLORE_LEVEL)
 
 

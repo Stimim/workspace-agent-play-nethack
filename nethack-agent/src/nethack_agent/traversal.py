@@ -335,6 +335,8 @@ class GoalKind(Enum):
     TRAVERSE_STAIRS = "traverse_stairs"
     # Explore one level until deterministic exploration is exhausted.
     EXPLORE_LEVEL = "explore_level"
+    # Walk next to the Oracle seen on this level without ever attacking her.
+    APPROACH_ORACLE = "approach_oracle"
 
 
 @dataclass(frozen=True, slots=True)
@@ -400,10 +402,34 @@ class ExploreLevelGoal:
         return {"kind": self.kind.value, "level": self.level.to_json()}
 
 
+@dataclass(frozen=True, slots=True)
+class ApproachOracleGoal:
+    """Stand next to the Oracle seen on this level; she is never attacked."""
+
+    level: LevelKey
+
+    kind: ClassVar[GoalKind] = GoalKind.APPROACH_ORACLE
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.level, LevelKey):
+            raise TypeError("goal level must be a LevelKey")
+
+    @property
+    def token(self) -> str:
+        return (
+            f"{self.kind.value}:{self.level.dungeon_number}:{self.level.dungeon_level}"
+        )
+
+    def to_json(self) -> dict[str, object]:
+        return {"kind": self.kind.value, "level": self.level.to_json()}
+
+
 type StairGoal = StandOnStairsGoal | TraverseStairsGoal
-type Goal = StandOnStairsGoal | TraverseStairsGoal | ExploreLevelGoal
+type Goal = (
+    StandOnStairsGoal | TraverseStairsGoal | ExploreLevelGoal | ApproachOracleGoal
+)
 STAIR_GOAL_TYPES: Final = (StandOnStairsGoal, TraverseStairsGoal)
-GOAL_TYPES: Final = (*STAIR_GOAL_TYPES, ExploreLevelGoal)
+GOAL_TYPES: Final = (*STAIR_GOAL_TYPES, ExploreLevelGoal, ApproachOracleGoal)
 
 # Milestone 1's goal: stand on any `>` without descending.
 STAND_ON_DOWNSTAIRS: Final = StandOnStairsGoal(
@@ -418,9 +444,12 @@ def goal_from_json(value: object, name: str = "goal") -> Goal:
     if not isinstance(value, dict):
         raise ContractError(f"{name} must be an object")
     kind = enum_value(value.get("kind"), f"{name} kind", GoalKind)
-    if kind is GoalKind.EXPLORE_LEVEL:
+    if kind is GoalKind.EXPLORE_LEVEL or kind is GoalKind.APPROACH_ORACLE:
         payload = object_value(value, name, {"kind", "level"})
-        return ExploreLevelGoal(LevelKey.from_json(payload["level"], f"{name} level"))
+        level = LevelKey.from_json(payload["level"], f"{name} level")
+        if kind is GoalKind.EXPLORE_LEVEL:
+            return ExploreLevelGoal(level)
+        return ApproachOracleGoal(level)
     payload = object_value(value, name, {"kind", "target"})
     target = StairTarget.from_json(payload["target"], f"{name} target")
     if kind is GoalKind.STAND_ON_STAIRS:
@@ -433,6 +462,7 @@ class ObjectiveLegKind(Enum):
     REACH_LEVEL = "reach_level"
     ENTER_DUNGEON = "enter_dungeon"
     EXPLORE_DUNGEON = "explore_dungeon"
+    FIND_ORACLE = "find_oracle"
 
 
 @dataclass(frozen=True, slots=True)
@@ -519,14 +549,32 @@ class ExploreDungeonLeg:
         return {"kind": self.kind.value, "max_level": self.max_level}
 
 
+@dataclass(frozen=True, slots=True)
+class FindOracleLeg:
+    """Complete when the Oracle's exact glyph is next to the hero.
+
+    That is NLE's Oracle success condition, which also ends the episode.
+    """
+
+    kind: ClassVar[ObjectiveLegKind] = ObjectiveLegKind.FIND_ORACLE
+
+    def to_json(self) -> dict[str, object]:
+        return {"kind": self.kind.value}
+
+
 type ObjectiveLeg = (
-    StandOnStairsLeg | ReachLevelLeg | EnterDungeonLeg | ExploreDungeonLeg
+    StandOnStairsLeg
+    | ReachLevelLeg
+    | EnterDungeonLeg
+    | ExploreDungeonLeg
+    | FindOracleLeg
 )
 OBJECTIVE_LEG_TYPES: Final = (
     StandOnStairsLeg,
     ReachLevelLeg,
     EnterDungeonLeg,
     ExploreDungeonLeg,
+    FindOracleLeg,
 )
 
 
@@ -534,6 +582,9 @@ def objective_leg_from_json(value: object, name: str = "objective leg") -> Objec
     if not isinstance(value, dict):
         raise ContractError(f"{name} must be an object")
     kind = enum_value(value.get("kind"), f"{name} kind", ObjectiveLegKind)
+    if kind is ObjectiveLegKind.FIND_ORACLE:
+        object_value(value, name, {"kind"})
+        return FindOracleLeg()
     if kind is ObjectiveLegKind.STAND_ON_STAIRS:
         payload = object_value(value, name, {"kind", "target"})
         return StandOnStairsLeg(

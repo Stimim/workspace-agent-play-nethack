@@ -23,7 +23,12 @@ from nethack_agent.contracts import (
     load_json_object,
     object_value,
 )
-from nethack_agent.traversal import STAIRCASE_OBJECTIVE, ExploreDungeonLeg, Objective
+from nethack_agent.traversal import (
+    STAIRCASE_OBJECTIVE,
+    ExploreDungeonLeg,
+    FindOracleLeg,
+    Objective,
+)
 
 
 class NleTask(Enum):
@@ -114,16 +119,22 @@ PROMPT_KEY_ACTION_NAMES: Final = frozenset(
     f"{type(action).__name__}.{action.name}" for action in _HUNGER_ADDITIONS
 )
 
-# Tasks whose objectives are defined. Scout and Eat explore the Dungeons of
-# Doom with exactly one explore_dungeon leg (ADR 0004 section 8).
+# Tasks whose objectives have behavior. Gold and Oracle legs are typed below
+# but are rejected until the planner and coordinator pursue them.
 _SUPPORTED_TASKS: Final = frozenset(
     {NleTask.STAIRCASE, NleTask.SCORE, NleTask.SCOUT, NleTask.EAT}
 )
-# Each task-progression task's single action profile: Eat needs the hunger
-# profile to answer its item prompt; Scout needs nothing beyond NLE's actions.
-_EXPLORATION_TASK_PROFILES: Final = {
-    NleTask.SCOUT: ActionProfile.NLE_TASK_ACTIONS,
-    NleTask.EAT: ActionProfile.NLE_HUNGER_ACTIONS,
+# Each task-progression task's single leg type and action profile (ADR 0004
+# section 8). Eat needs the hunger profile to answer its item prompt, and
+# Oracle's 5,000-step cap exceeds the hunger horizon; Scout and Gold need
+# nothing beyond NLE's actions.
+_TASK_PROGRESSION: Final[
+    dict[NleTask, tuple[type[ExploreDungeonLeg] | type[FindOracleLeg], ActionProfile]]
+] = {
+    NleTask.SCOUT: (ExploreDungeonLeg, ActionProfile.NLE_TASK_ACTIONS),
+    NleTask.GOLD: (ExploreDungeonLeg, ActionProfile.NLE_TASK_ACTIONS),
+    NleTask.EAT: (ExploreDungeonLeg, ActionProfile.NLE_HUNGER_ACTIONS),
+    NleTask.ORACLE: (FindOracleLeg, ActionProfile.NLE_HUNGER_ACTIONS),
 }
 
 
@@ -152,20 +163,25 @@ class TaskSpec:
                 f"{NleTask.STAIRCASE.value} allows only the single objective leg "
                 "stand_on_stairs(down, any)"
             )
-        explores = any(
-            isinstance(leg, ExploreDungeonLeg) for leg in self.objective.legs
-        )
-        profile = _EXPLORATION_TASK_PROFILES.get(self.environment)
-        if profile is None:
-            if explores:
-                raise ContractError(
-                    "an explore_dungeon leg is valid only on "
-                    + " and ".join(task.value for task in _EXPLORATION_TASK_PROFILES)
-                )
+        progression = _TASK_PROGRESSION.get(self.environment)
+        if progression is None:
+            for leg in self.objective.legs:
+                if isinstance(leg, ExploreDungeonLeg | FindOracleLeg):
+                    tasks = " and ".join(
+                        task.value
+                        for task, (leg_type, _) in _TASK_PROGRESSION.items()
+                        if isinstance(leg, leg_type)
+                    )
+                    raise ContractError(
+                        f"a {leg.kind.value} leg is valid only on {tasks}"
+                    )
             return
-        if len(self.objective.legs) != 1 or not explores:
+        leg_type, profile = _TASK_PROGRESSION[self.environment]
+        legs = self.objective.legs
+        if len(legs) != 1 or not isinstance(legs[0], leg_type):
             raise ContractError(
-                f"{self.environment.value} requires exactly one explore_dungeon leg"
+                f"{self.environment.value} requires exactly one "
+                f"{leg_type.kind.value} leg"
             )
         if self.action_profile is not profile:
             raise ContractError(
