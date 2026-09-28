@@ -78,3 +78,52 @@ development-only seeds.
   and the expanded final event (#323, `MiscDirection.WAIT`) showed the
   confirmation rationale and `Exhausted: level (0, 1)`
   (`C:\Temp\explore-ui-smoke.png`).
+
+## Held-out probes and fixed thresholds
+
+The probes ran the exact planned cases with the scripted development model into
+throwaway reports, on seed ranges no committed suite uses. Nothing was tuned
+after them; they fixed only the suite thresholds.
+
+| Probe | Seed | End (steps) | Levels explored (marker step) | Max depth | Explored cells | Return | Death |
+| --- | ---: | --- | --- | ---: | ---: | ---: | --- |
+| Scout, `explore_dungeon(3)` | 800 | death (982) | DL1 (126) | 2 | 964 | 963.94 | killed by a goblin |
+| | 801 | death (1,007) | none | 1 | 625 | 625.00 | killed by a kobold |
+| | 802 | death (923) | DL1 (922) | 1 | 320 | 320.00 | killed by a kobold zombie |
+| | 803 | death (1,032) | none | 1 | 557 | 557.00 | died of starvation |
+| | 804 | death (1,012) | none | 1 | 554 | 554.00 | killed by a grid bug |
+| Eat, `explore_dungeon(5)` | 820 | death (1,748) | none | 1 | 669 | 793.97 | killed by a jackal |
+| | 821 | death (1,691) | DL1 (1,511) | 2 | 753 | 793.97 | killed by a newt |
+| | 822 | death (1,740) | DL1 (586) | 2 | 1,060 | 793.96 | killed by a fox |
+| | 823 | death (1,707) | none | 1 | 583 | 793.94 | killed by a bat |
+| | 824 | truncated (2,000) | DL1 (245) | 1 | 462 | 1,587.98 | alive |
+
+No probe completed its objective. Every Scout probe reached Fainting; every
+Eat probe ate one known ration at Hungry (seed 824 ate two) and four later
+died while Fainting. Every audit was clean: no invalid action, gate rejection,
+or unconfirmed marker. The Scout reward is almost exactly the explored-cell
+count, and each Eat ration was worth about 800.
+
+**Observed failure class.** ADR 0004 defines a level as exhausted when
+exploration reports `search_exhausted`, which happens only after its bounded
+hidden-passage search of every wall and dead end facing dense unexplored rock.
+That search outlasted the hunger horizon: Scout, whose `nle-task-actions`
+profile cannot eat, starves or faints near 1,000 steps, and Eat's one ration
+extends that to about 1,700. Seed 824 also shows the cost after exhaustion: its
+first level had no known `>`, so its remaining 1,755 steps were 173 stuck
+consultations and re-armed searches. The definition was deliberately kept; the
+evidence motivates a future bounded search-budget or exploration skill under a
+new policy, which is not implemented.
+
+**Thresholds.** Scout and Eat have no NLE success state, and the probes never
+completed the objective, so both suites are ADR 0004 section 8 baselines:
+`min_successes: 0` with metric thresholds fixed before their first episode.
+
+- `scout-v1` (seeds 900-904, `explore_dungeon(3)`, cap 2,000): median
+  `explored_cells` and median Scout return each at least 350, the probe median
+  557 times 0.7 rounded down to a multiple of 50. Deaths and depth have no
+  bound because every probe died and only one left level 1.
+- `eat-v1` (seeds 920-924, `explore_dungeon(5)`, cap 2,000): median Eat return
+  at least 700 (the median episode eats a ration), median `explored_cells` at
+  least 450 (669 times 0.7, rounded down), and at most one starvation death
+  (the probes had none).

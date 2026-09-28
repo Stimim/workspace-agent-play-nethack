@@ -719,6 +719,17 @@ relabeled. `staircase-v3` and `traversal-v2` repeat their cases, seeds, caps,
 and thresholds unchanged under the current policy, as their `seed_selection`
 states.
 
+`scout-v1` and `eat-v1` are the first task baselines for policy
+`hierarchical-task-progression-v1`: `NetHackScout-v0` with
+`explore_dungeon(3)` on seeds 900-904 and `NetHackEat-v0` with
+`explore_dungeon(5)` on seeds 920-924, each with a 2,000-step cap and
+`min_successes: 0`. Scout gates on median explored cells and median return
+(at least 350 each); Eat on median return (at least 700), median explored
+cells (at least 450), and at most one starvation death. The thresholds came
+from scripted probes on seeds 800-804 and 820-824 before either suite ran,
+where no episode completed its objective because exhaustive search outlasted
+the hunger horizon ([note 0017](docs/notes/0017-scout-and-eat-task-suites.md)).
+
 `nethack-agent eval run` drives every case/seed pair in-process through one
 `RunManager` with `create_run(auto_start=True)`: the same coordinator, worker
 loop, action gate, SQLite store, and ttyrec capture as the HTTP service, without

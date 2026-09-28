@@ -456,6 +456,14 @@ state, are gated as baselines. Suites with an `explore_dungeon` objective or
 any `exhausted_level` marker are audited by replaying the coordinator's memory
 (`replay.ExplorationReplay`); an unconfirmed marker is an integrity failure.
 
+The first task baselines are `evaluation/scout-v1.json` (Scout, seeds 900-904,
+`explore_dungeon(3)`) and `evaluation/eat-v1.json` (Eat, seeds 920-924,
+`explore_dungeon(5)`), both with a 2,000-step cap, `min_successes: 0`, and
+metric thresholds fixed from scripted probes on seeds 800-804 and 820-824
+before their first episode; the suites and
+[note 0017](notes/0017-scout-and-eat-task-suites.md) record the probe
+distributions and threshold rule.
+
 `evaluation/staircase-v1.json` likewise remains the schema-1 milestone record
 bound to policy `hierarchical-explore-v1`. To reproduce that historical suite,
 check out commit `3211405` in a separate worktree and use a fresh data

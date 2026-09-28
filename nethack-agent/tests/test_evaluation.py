@@ -1638,3 +1638,65 @@ def test_explore_objectives_count_only_exhaustion_markers_the_replay_confirms(
         "step 5 exhausted_level marker is not supported: deterministic exploration "
         "still had an action"
     ) in forged.integrity_problems
+
+
+@pytest.mark.parametrize(
+    ("name", "task", "seeds", "thresholds"),
+    [
+        (
+            "scout-v1",
+            TaskSpec(
+                NleTask.SCOUT,
+                ActionProfile.NLE_TASK_ACTIONS,
+                Objective((ExploreDungeonLeg(3),)),
+            ),
+            tuple(range(900, 905)),
+            [
+                ("explored_cells", "median", "at_least", 350),
+                ("task_return", "median", "at_least", 350),
+            ],
+        ),
+        (
+            "eat-v1",
+            TaskSpec(
+                NleTask.EAT,
+                ActionProfile.NLE_HUNGER_ACTIONS,
+                Objective((ExploreDungeonLeg(5),)),
+            ),
+            tuple(range(920, 925)),
+            [
+                ("task_return", "median", "at_least", 700),
+                ("explored_cells", "median", "at_least", 450),
+                ("starvation_death", "sum", "at_most", 1),
+            ],
+        ),
+    ],
+)
+def test_committed_task_baselines_fix_seeds_caps_and_metric_gates(
+    name: str,
+    task: TaskSpec,
+    seeds: tuple[int, ...],
+    thresholds: list[tuple[str, str, str, int]],
+) -> None:
+    suite = load_suite(REPORT_DIRECTORY.parent / f"{name}.json")
+
+    assert suite.policy_version == run_manager.POLICY_VERSION
+    assert suite.knowledge_bundle_id == "staircase-reviewed-v3"
+    (case,) = suite.cases
+    assert case.task == task
+    assert case.seeds == seeds
+    assert case.max_episode_steps == 2000
+    assert case.acceptance.min_successes == 0
+    assert case.acceptance.required_success_seeds == ()
+    assert [
+        (
+            item.metric.value,
+            item.statistic.value,
+            item.comparison.value,
+            item.value,
+        )
+        for item in case.acceptance.metric_thresholds
+    ] == thresholds
+    assert suite.global_acceptance.max_invalid_actions == 0
+    assert suite.global_acceptance.max_gate_rejections == 0
+    assert suite.global_acceptance.require_complete_records
