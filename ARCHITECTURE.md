@@ -6,7 +6,7 @@ Build a local, autonomous NetHack agent whose long-term success criterion is asc
 
 ## Current status
 
-The deterministic NLE adapter, immutable observation projector, hierarchical goal/skill coordinator with typed traversal goals from an objective planner, per-level dungeon memory with stair identities, deterministic staircase navigation and level exploration, and a permit-based action gate, structured Ollama decision model, reviewed local knowledge bundle, typed SQLite event log, loopback HTTP/WebSocket control service with the dependency-free browser UI, headless scenario orchestrator, executable socket-boundary verifier, and the committed 10-seed evaluation suite with its `eval run` and `eval abort` harness are implemented. Milestone 1 is accepted: the first complete real-model suite run of policy `hierarchical-explore-v1` passed with 10/10 task successes (`nethack-agent/evaluation/reports/staircase-v1-20260926T211301Z.json`). With the current `staircase-reviewed-v2` knowledge bundle and explicit `autoopen`, the same suite and model passed again with 10/10 and step-identical trajectories (`nethack-agent/evaluation/reports/staircase-v1-20260927T065500Z.json`).
+The deterministic NLE adapter, immutable observation projector, typed traversal planner, per-level dungeon memory, deterministic staircase-navigation, exploration and bounded hunger skills, contextual action gate, structured Ollama decision model, reviewed local knowledge, typed SQLite event log, loopback control service and browser UI, scenario orchestrator, network-boundary verifier, and policy-pinned evaluation harness are implemented. Milestone 1 and traversal-policy evidence remain accepted records; the current behavior is `hierarchical-survival-v1`.
 
 ## System context
 
@@ -55,9 +55,13 @@ and a `traversal.Objective`. `NetHackStaircase-v0` accepts only its single
 `stand_on_stairs(down, any)` leg and `NetHackScore-v0` any legs; Scout, Gold,
 Eat, and Oracle are rejected until ADR 0004 section 8 defines their
 objectives. An `ActionProfile` is a named, code-defined tuple of NLE action
-members; only `nle-task-actions` (NLE's 23 `TASK_ACTIONS`) exists. The adapter
-passes it as NLE's `actions=` argument and fails construction unless the raw
-environment's action table equals it. One committed suite seed is
+members. `nle-task-actions` is NLE's 23 `TASK_ACTIONS`.
+`nle-hunger-actions` keeps those actions in order, then adds ESC and one enum
+member for every otherwise-missing `a-z`/`A-Z` inventory letter, deduplicated
+by integer command value. The additions have static role `prompt_key`; existing
+movement-letter collisions keep their routine movement role. The adapter
+passes the selected tuple as NLE's `actions=` argument and fails construction
+unless the raw environment's action table equals it. A suite seed is
 deterministically expanded into separate core, display, and level-generation
 seeds; NLE reseeding is disabled and time-derived effects use the seed. The
 adapter requests only public observation keys, passes each task's own NLE
@@ -155,30 +159,31 @@ coding agents review persisted evidence and either revise reviewed knowledge
 or implement a deterministic skill for a simple recurring case.
 
 `AgentCoordinator` consults the model for skill at the start of an episode,
-offering exactly the planner's goal. A deterministic arbiter then owns skill
-switching on every step: `staircase_navigation` whenever a remembered
-staircase matching the goal is reachable, otherwise `explore_level`. The start
-decision is recorded but cannot override the arbiter. Per step, in order:
+offering exactly the planner's goal and only staircase navigation and
+exploration. A deterministic arbiter owns execution; the hunger skill is never
+a model choice. Per step, in order:
 
 1. a pending direction prompt from exploration's own kick is answered;
-2. `SafePromptHandler` acknowledges wait-for-space prompts, cancels text input
-   with an empty response, and declines recognizable yes/no prompts (which
-   includes "Really attack?" for peaceful monsters);
-3. any other prompt goes to the model as a fallback action;
-4. `StaircaseNavigationSkill` ranks the remembered staircases of the goal's
-   direction whose identity is compatible with its target: an established
-   match before a probe of an unknown identity, then the shortest
-   breadth-first route, then the topmost, then leftmost coordinate. For
-   `stand_on_stairs(down, any)` every `>` ranks alike, as in milestone 1. On
-   the chosen staircase it waits (`stand_on_stairs`) or uses it with the
-   level-change action (`traverse_stairs`). It steps straight onto the
-   staircase when adjacent and otherwise first fights an adjacent hostile;
-5. `ExploreLevelSkill` acts, biased toward unreachable compatible staircases,
-   or reports a typed `StuckReason`. The first `search_exhausted` report on a
-   level marks it exhausted and replans; only if the replanned goal yields no
-   action does the stuck consultation below run.
+2. on `nle-hunger-actions` runs, `HungerSkill` continues its one-prompt
+   sequence or, with no prompt active, proposes `EAT` only at NLE hunger value
+   2 (Hungry) or worse and only for the first inventory-letter-sorted item
+   whose typed letter, food object class, exact normalized food-ration
+   description, and BUC evidence agree;
+3. `SafePromptHandler` acknowledges wait-for-space prompts, cancels text input,
+   and declines recognizable yes/no prompts, including peaceful attacks and
+   floor-food `eat it?`;
+4. any other prompt goes to the model as a fallback action;
+5. `StaircaseNavigationSkill` ranks remembered compatible staircases by
+   established identity before a probe, then route distance, row, and column.
+   On the chosen staircase it fights an adjacent safe-to-melee hostile before
+   either waiting or traversing. Stepping onto an adjacent staircase still
+   completes or enables the goal immediately;
+6. `ExploreLevelSkill` acts, biased toward unreachable compatible staircases,
+   or reports a typed `StuckReason`. The first `search_exhausted` report marks
+   the level exhausted and replans before a stuck consultation.
 
-Both skills route over the current `navigation.LevelMemory`, a bounded
+Navigation and exploration both route over the current
+`navigation.LevelMemory`, a bounded
 per-level record of the 21x79 map owned by the coordinator's
 `navigation.DungeonMemory`, which keeps one record per `(dungeon_number,
 dungeon_level)`. A level record remembers the last terrain glyph of every cell
@@ -198,9 +203,11 @@ is the dungeon exit by `rule`. A level change without a stair action (a trap
 door, hole, or level teleport) links nothing, and main versus branch stairs
 cannot be told apart before one of these rules applies. Current limits: a
 Mines entrance behind a secret door can be missed; Sokoban's dungeon number is
-inferred from `dungeon.def` order and has not been reached; ladders and
-portals are not stairs here; and the baseline's combat, hunger, and eating
-failures (note 0015) still end longer traversal episodes.
+inferred from `dungeon.def` order and has not been reached; and ladders and
+portals are not stairs. Survival policy is intentionally narrow: it has no
+retreat, rest, weapon, floor-food, general inventory, prayer, or speculative
+navigation policy.
+
 Breadth-first routes follow NetHack 3.6.7 `test_move`: no diagonal move into or
 out of an open or closed door (doorless and broken doorways allow diagonals),
 closed doors are entered orthogonally because moving into one opens it,
@@ -210,10 +217,13 @@ monsters block routes; pets are displaced. Explicit refusal messages ("It's a
 wall.", diagonal-door refusals) block an edge for the level; three unexplained
 failed moves only mark it suspect.
 
-`ExploreLevelSkill` first attacks an adjacent displayed monster unless it is a
-pet, answered a "Really attack?" prompt, or is on a passive-damage list
-(floating eye, gas spore, molds, jellies); NLE's Staircase action set has no
-fight command, so it moves into the monster. It then walks to the nearest
+`ExploreLevelSkill` attacks an adjacent displayed monster unless it is a pet,
+has answered a "Really attack?" prompt, or is on the never-melee list. That
+list covers passive-damage monsters (floating eye, gas spore, molds and
+jellies) and the always-peaceful Oracle by exact public monster glyph/name, so
+the first adjacent observation cannot attack her before peacefulness is
+learned. NLE's task action set has no fight command, so attacks move into the
+monster. Exploration then walks to the nearest
 reachable frontier, a known cell next to never-observed blank space, with
 doorways and corridors winning distance ties and a remembered but unreachable
 `>` biasing the choice toward it. A frontier reachable only past a monster is
@@ -233,29 +243,35 @@ steps. Choosing `explore_level` re-arms exploration (a new search round, cleared
 suspect edges and abandoned goals); choosing `staircase_navigation`, or a
 re-armed exploration that still cannot act, yields a model fallback action.
 
-Every proposal passes through `ActionGate`. It verifies the finite action index
-table and passes a level change (`MiscDirection.UP` or `MiscDirection.DOWN`,
-`decision.LEVEL_CHANGE_ACTIONS`) only with a coordinator `TraversalPermit` in
-the same direction; the model is never offered those actions. The coordinator
-issues a permit only when the shared `decision.level_change_error` predicate
-passes: the task's objective has a leg beyond standing on stairs, the goal is
-`traverse_stairs` in that direction, deterministic `staircase_navigation`
-proposed it with an in-place intent on the hero's cell recording the stair
-identity and level, no prompt is active, the identity is compatible with the
-goal's target, and the action is not `<` on (0, 1). Level memory must also
-hold a staircase of that direction under the hero with the recorded identity
-and staircase-pair evidence. Otherwise the refusal pauses the run like any gate
-rejection. `<` on
-dungeon level 1 asks to leave the dungeon; NLE's default prompt handling
-declines that question (see ADR 0004), and the predicate still refuses it. A
-recorded level-change step must satisfy the selection part of the same
-predicate to be read at all. A step records its typed
-goal and executed skill, the action source (`deterministic_skill`,
-`deterministic_prompt`, or `model_fallback`), who selected the skill (`arbiter`
-or, after a stuck report, `model`), the stuck reason if any, the skill's map
-intent, and the applicable structured model decisions and metrics. A
-model-selected skill must match the step's model skill decision. This is an
-auditable decision trace, not chain-of-thought.
+Every proposal passes through `ActionGate`, which verifies the finite action
+index and its profile role. Level changes require a matching
+`TraversalPermit`; `EAT` requires a `HungerPermit`; added `prompt_key` actions
+require a `PromptPermit` for the same integer command. None of those actions is
+offered to model fallback, and fallback inventory rendering omits raw letters.
+An existing movement-letter collision remains a routine action, but the same
+prompt predicate can authorize it as a deterministic response when that exact
+letter is offered.
+
+The hunger permit predicate requires a `deterministic_skill` selection by
+`hunger`, no active prompt, NLE hunger 2 or worse, and an explicitly recognized
+safe ration in the decided-on typed inventory. The prompt permit predicate
+requires `deterministic_prompt`/`hunger`, an active exact NLE eat-item prompt,
+and either ESC or a command literally present in its offered letters. The
+one-step pending ration is cleared after the next observation; changed,
+missing, or unoffered item evidence cancels the recognized prompt with ESC.
+The shared structural predicate also rejects invalid persisted EAT and added
+prompt-key selections during event construction.
+
+The traversal permit remains as in ADR 0004. The shared
+`decision.level_change_error` predicate requires a level-changing objective,
+a same-direction `traverse_stairs` goal, deterministic staircase navigation,
+an in-place intent on the hero's matching remembered staircase, compatible
+identity and pair evidence, no prompt, and not `<` on `(0, 1)`. A refusal
+pauses the run. A step records its typed goal and executed skill, action source
+(`deterministic_skill`, `deterministic_prompt`, or `model_fallback`), skill
+selection source, stuck reason, optional map intent, and applicable model
+decisions and metrics. This is an auditable decision trace, not
+chain-of-thought.
 
 The map intent (`decision.ActionIntent`) comes from the deterministic skill's
 own routing data, never from the action direction or rationale text. It has an
@@ -302,11 +318,13 @@ Prompt answers and model fallbacks carry no intent; the contract rejects an
 intent on any non-`deterministic_skill` selection. Recording the intent and
 path does not change any action choice.
 
-`OllamaDecisionModel` implements both model boundaries. Skill selection uses
-`SKILL_DECISION_SCHEMA` with skill descriptions, the consultation reason, and,
-when stuck, the visible map; ambiguous action fallback uses
-`ACTION_DECISION_SCHEMA` and only gate-allowed actions, with at most three
-candidates, 100-character candidate reasons, and 200-character rationales.
+`OllamaDecisionModel` implements both model boundaries. Skill selection's
+per-call schema includes only the supplied traversal skills and goals;
+deterministic hunger is not supplied. Ambiguous action fallback uses
+`ACTION_DECISION_SCHEMA` and only the gate's routine allowed actions, excluding
+level changes, `EAT`, and added prompt keys. Its inventory summary deliberately
+omits raw inventory letters. It allows at most three candidates, 100-character
+candidate reasons, and 200-character rationales.
 Both paths disable thinking, use temperature 0, a 512-token output cap, and an
 explicit `num_ctx` (default 8,192, `NETHACK_AGENT_OLLAMA_NUM_CTX`). A reported
 prompt that leaves less than 512 tokens of that window raises
@@ -440,11 +458,11 @@ Run creation accepts validated run execution parameters (`seed`,
 (`StrictInt` and `StrictBool`, with `extra="forbid"`, and the `TaskSpec` domain
 parser for `task`) rather than arbitrary command lines. The character
 (`val-dwa-law`), model (`gemma4-nethack:latest`), policy
-(`hierarchical-traversal-v1`), and knowledge settings are fixed by the service
-configuration (environment variables and process defaults) rather than
-accepted per request, ensuring uniform evaluation conditions across runs; a
-run without `task` executes the staircase task, and a traversal task's
-objective drives the coordinator's planner.
+(`hierarchical-survival-v1`), and knowledge settings are fixed by the service
+configuration rather than accepted per request. A run without `task` executes
+the legacy staircase task and action profile; a supplied traversal task's
+objective and action profile drive the coordinator.
+
 Lifecycle commands are serialized through the coordinator state machine. Stop
 is idempotent and graceful: close NLE, flush SQLite events, finalize the ttyrec
 reference, and report the terminal state without duplicating stop events on
@@ -661,6 +679,12 @@ with zero invalid actions, gate rejections, or integrity failures but did not
 pass: the three cases achieved 3/5, 3/5, and 1/5, so entering the Mines missed
 its fixed 2/5 threshold. A completed failing suite is retained as evidence;
 thresholds and seeds are not rewritten after observing it.
+
+The current `hierarchical-survival-v1` checkout retains
+`staircase-reviewed-v3` but refuses both traversal-policy schema-2 suites before
+creating a run store, report, or episode. Their files and reports are not
+rerun, rewritten, or relabeled; a survival evaluation requires a new fixed
+suite.
 
 `nethack-agent eval run` drives every case/seed pair in-process through one
 `RunManager` with `create_run(auto_start=True)`: the same coordinator, worker

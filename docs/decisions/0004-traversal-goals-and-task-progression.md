@@ -1,6 +1,6 @@
 # ADR 0004: Typed traversal goals and staged NLE task progression
 
-- Status: accepted (implementation in progress)
+- Status: accepted
 - Date: 2026-09-27
 - Refines: [ADR 0002](0002-deterministic-skill-arbiter.md) (fixed goal,
   unconditional level-change ban) and applies
@@ -554,9 +554,9 @@ The protocol:
 
 ## Implementation notes
 
-Milestone A steps 1-6 and 8 landed in commits `3211405` through the change
-recorded in [note 0015](../notes/0015-typed-traversal-goals.md); step 7 is
-owned separately. Details that refine the plan above:
+Milestone A steps 1-8 landed in commits `3211405` through the changes recorded
+in [note 0015](../notes/0015-typed-traversal-goals.md) and the committed
+schema-2 evaluation evidence. Details that refine the plan above:
 
 - `IntentDestination.pair_known` records whether memory held two staircases of
   the destination's direction. The coordinator requires it to match memory
@@ -569,10 +569,12 @@ owned separately. Details that refine the plan above:
 - `enter_dungeon` searches range levels that are unvisited, not yet
   exhausted, or show two staircases of the branch direction first (nearest
   level, deeper on ties), then re-arms each exhausted range level once.
-- The policy is `hierarchical-traversal-v1` and the knowledge bundle
-  `staircase-reviewed-v3`; `staircase-v1` is refused under any policy but
-  `hierarchical-explore-v1`, and commit `3211405` is the last with that
-  policy.
+- The traversal implementation policy is `hierarchical-traversal-v1` with
+  knowledge bundle `staircase-reviewed-v3`; its schema-2 suites and reports
+  remain pinned there. The later evidence-gated survival behavior is policy
+  `hierarchical-survival-v1` ([note 0016](../notes/0016-evidence-gated-survival-skills.md)).
+  `staircase-v1` remains bound to `hierarchical-explore-v1`, and commit
+  `3211405` is the last checkout with that policy.
 
 ## Consequences
 

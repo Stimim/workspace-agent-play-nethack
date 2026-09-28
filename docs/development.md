@@ -417,7 +417,7 @@ requires the configured limits on invalid actions and gate rejections and, for
 the committed suites, complete SQLite and ttyrec records. A pin mismatch is
 rejected before the evaluator creates a run store, report, or episode.
 
-The current policy `hierarchical-traversal-v1` and knowledge bundle
+Policy `hierarchical-traversal-v1` and knowledge bundle
 `staircase-reviewed-v3` have two committed suites:
 
 - `nethack-agent/evaluation/staircase-v2.json` reruns the milestone staircase
@@ -439,26 +439,17 @@ but not accepted: 3/5, 3/5, and 1/5 by case). Both have zero invalid actions,
 gate rejections, and integrity failures. Preserve the failing traversal report;
 do not tune the fixed suite after observing it.
 
-Confirm local prerequisites, then run each whole suite against the configured
-local model with a fresh data directory:
+The current checkout runs policy `hierarchical-survival-v1` with the same
+knowledge bundle. It refuses both schema-2 suites above before creating a data
+directory because their policy pin is immutable. Reproduce them only from the
+recorded traversal-policy commit, with a fresh data directory. Do not rerun,
+rewrite, or relabel their reports as survival-policy evidence. A survival
+evaluation requires a new predeclared suite id, seeds, thresholds, and policy
+pin.
 
-```bash
-cd nethack-agent
-uv run nethack-agent doctor
-uv run nethack-agent eval run \
-  --suite evaluation/staircase-v2.json \
-  --data-dir data/evaluations/staircase-v2 \
-  --report-dir evaluation/reports
-uv run nethack-agent eval run \
-  --suite evaluation/traversal-v1.json \
-  --data-dir data/evaluations/traversal-v1 \
-  --report-dir evaluation/reports
-```
-
-`evaluation/staircase-v1.json` remains the schema-1 milestone record bound to
-policy `hierarchical-explore-v1`. The current checkout refuses it because typed
-goals changed the prompt and model-output contract. To reproduce that historical
-suite, check out commit `3211405` in a separate worktree and use a fresh data
+`evaluation/staircase-v1.json` likewise remains the schema-1 milestone record
+bound to policy `hierarchical-explore-v1`. To reproduce that historical suite,
+check out commit `3211405` in a separate worktree and use a fresh data
 directory: older strict readers cannot read newer typed traversal events, and
 mixing policies in one run store defeats per-policy evidence.
 

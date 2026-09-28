@@ -1,6 +1,13 @@
 # NetHack agent
 
-This Python application domain contains the deterministic NLE adapter, immutable observation projector, hierarchical goal/skill coordinator, per-level terrain memory with deterministic staircase-navigation, level-exploration, and prompt skills, action gate, structured Ollama decision model, reviewed and hash-pinned local knowledge bundle, typed SQLite run/event store, loopback HTTP/WebSocket control service with a dependency-free browser UI, headless scenario orchestrator, executable network-boundary verifier, and the committed 10-seed evaluation suite with its `eval run` and `eval abort` harness. Milestone status is tracked in [`../TODO_LIST.md`](../TODO_LIST.md). Knowledge card sources, attribution, and update rules are in [`knowledge/README.md`](knowledge/README.md).
+This Python application domain contains the deterministic NLE adapter,
+immutable observation projector, hierarchical goal/skill coordinator,
+per-level terrain memory, deterministic staircase-navigation, level-exploration
+and evidence-bounded hunger skills, contextual action permits, structured
+Ollama decision model, reviewed local knowledge, typed SQLite run/event store,
+loopback control service and browser UI, scenario orchestrator, network
+verifier, and policy-pinned evaluation harness. Milestone status is tracked in
+[`../TODO_LIST.md`](../TODO_LIST.md).
 
 ```bash
 uv sync --locked
@@ -68,20 +75,17 @@ a non-loopback sentinel, runs a real NLE step through the HTTP control service
 with the explicit scripted development model, records actual destinations, and
 fails if any connection target is not loopback.
 
-Run either policy-pinned committed suite against the local model to write a new
-timestamped JSON and Markdown report:
+The committed `staircase-v2` and `traversal-v1` suites and their reports are
+immutable evidence for policy `hierarchical-traversal-v1`. The current policy
+is `hierarchical-survival-v1`, so this checkout intentionally refuses both
+suites before creating a run store or episode. Reproduce them only from their
+recorded traversal-policy commit and never relabel their reports. A future
+survival suite must use a new suite id and pin.
 
-```bash
-uv run nethack-agent eval run --suite evaluation/staircase-v2.json \
-  --data-dir data/evaluations/staircase-v2 --report-dir evaluation/reports
-uv run nethack-agent eval run --suite evaluation/traversal-v1.json \
-  --data-dir data/evaluations/traversal-v1 --report-dir evaluation/reports
-```
-
-`--development-scripted-model` exercises the harness without Ollama; such
-reports are never milestone evidence. `eval abort --report <json> --reason
-<text>` finalizes an interrupted report that will not be completed. See
-[`../docs/development.md`](../docs/development.md#evaluation-suites).
+`--development-scripted-model` exercises scenario and harness mechanics without
+Ollama; such runs are never milestone evidence. `eval abort --report <json>
+--reason <text>` finalizes an interrupted report that will not be completed.
+See [`../docs/development.md`](../docs/development.md#evaluation-suites).
 
 Regression tests use real NLE environments and scripted models; they do not require Ollama:
 

@@ -47,19 +47,20 @@ typed task spec (NLE task, action profile, and objective legs). An objective
 planner turns the legs into typed goals: stand on, or traverse, a staircase of
 a direction with a main or branch identity
 ([ADR 0004](docs/decisions/0004-traversal-goals-and-task-progression.md)).
-Two deterministic skills serve the goals over a dungeon memory that keeps each
-visited level: `staircase_navigation` routes to a remembered reachable
-staircase matching the goal and waits on it or uses it, and `explore_level`
-walks to unexplored space, opens or kicks doors, fights adjacent hostiles, and
-searches for hidden passages. A deterministic arbiter switches between them;
-the local model is consulted at the start, when exploration is stuck, and for
-unhandled prompts. Every action passes through a gate that rejects invalid
-indices and any level change (`<` and `>`) without a coordinator traversal
-permit, which only a typed traversal goal on a level-changing task can earn.
-The staircase task never changes level. Runs expose current goal and skill
-and stream discriminated typed events through the loopback HTTP/WebSocket service and CLI client. The
-`scenario run` command owns a child service for one bounded run, and
-`verify network` records and enforces its runtime socket boundary.
+Three deterministic skills serve the goals over dungeon memory that keeps each
+visited level. `staircase_navigation` routes to a remembered reachable
+staircase matching the goal and waits on it or uses it, but first fights an
+adjacent safe-to-melee hostile. `explore_level` walks to unexplored space,
+opens or kicks doors, fights adjacent hostiles, and searches for hidden
+passages. On runs using the bounded `nle-hunger-actions` profile, the hunger
+skill eats only an exactly recognized inventory food ration at Hungry or worse
+and supplies its currently offered inventory letter. Prompt-only keys and
+`EAT` are permit-gated away from model fallbacks. A deterministic arbiter
+switches between traversal skills; the local model is consulted at the start,
+when exploration is stuck, and for unhandled prompts. The staircase task never
+changes level. Runs expose the current goal and skill, stream typed events
+through the loopback service and CLI, and keep bounded scenarios and network
+verification reproducible.
 
 The first product milestone requires this hierarchy to succeed on at least 6
 of 10 fixed `NetHackStaircase-v0` seeds, including seed 6, while recording
@@ -87,13 +88,17 @@ model again passed 10/10 with trajectories identical to the accepted run
 [note 0013](docs/notes/0013-review-feedback-resolutions.md)).
 
 Milestone A of the traversal roadmap
-([note 0015](docs/notes/0015-typed-traversal-goals.md)) then replaced the
-fixed goal with typed traversal goals, per-level dungeon memory with stair
-identities, permit-gated level changes, and the `staircase-reviewed-v3`
-bundle, under policy `hierarchical-traversal-v1`. That policy's prompts and
-model output contract differ, so `staircase-v1` evidence is reproducible only
-from commit `3211405` (policy `hierarchical-explore-v1`) in a fresh data
-directory; the current checkout refuses to evaluate it.
+([note 0015](docs/notes/0015-typed-traversal-goals.md)) replaced the fixed goal
+with typed traversal goals, per-level dungeon memory with stair identities,
+permit-gated level changes, and the `staircase-reviewed-v3` bundle. Its
+committed schema-2 `staircase-v2` and `traversal-v1` suites and reports remain
+immutably pinned to policy `hierarchical-traversal-v1`.
+
+The evidence-gated combat and hunger changes in
+[note 0016](docs/notes/0016-evidence-gated-survival-skills.md) are policy
+`hierarchical-survival-v1`, retaining `staircase-reviewed-v3`. The current
+checkout refuses all older policy-pinned suites before creating an episode;
+they must not be relabeled or rerun as survival evidence.
 
 ## Documentation
 

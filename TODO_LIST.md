@@ -28,11 +28,13 @@ Dependency order for the four capability items below: traversal goals, then NLE 
 - [ ] Analyze milestone failures and update deterministic skills or reviewed knowledge; do not let evaluation runs mutate themselves.
 - [ ] Add replay comparison and aggregate run diagnostics.
 - [ ] Add bounded navigation, combat-risk, hunger, inventory, and prompt-handling skills as evidence requires.
-  - [ ] Combat risk: fight an adjacent hostile before waiting on stairs (baseline seeds 1, 2, 4 died on `>`); retreat/rest rules only after traversal or Scout deaths with HP traces.
-  - [ ] Hunger: a new action profile with only the keys eating needs (item letter as a prompt answer, ESC) and eating a known-safe inventory ration when Hungry (seeds 2, 3, 5 starved or fainted with a ration uneaten).
+  - [x] Combat risk: fight a safe-to-melee adjacent hostile before waiting on or traversing stairs; baseline seeds 1, 2, and 4 supplied the evidence. Retreat, rest, and weapon rules remain evidence-gated.
+  - [x] Hunger: `nle-hunger-actions` adds only ESC and deduplicated inventory letters to `TASK_ACTIONS`; eat an exactly recognized inventory ration at Hungry or worse and answer its matching item prompt.
   - [x] Covered stairs: recognized from look-here messages as part of traversal memory (seed 5).
-  - [ ] Prompt handlers ship with the actions that cause them (eat item selection, "eat it?", "pray?"); no generic prompt skill while suites show no unhandled prompts.
-  - [ ] Navigation and inventory skills only after a failure class recurs in traversal or task-suite evidence.
+  - [ ] Prompt handlers ship with the actions that cause them:
+    - [x] Inventory-ration item selection and conservative `eat it?` decline.
+    - [ ] Prayer confirmation only after prayer policy and failure evidence exist.
+  - [ ] Navigation and general inventory skills only after a failure class recurs in traversal or task-suite evidence.
 - [ ] Evaluate whether Laya improves routine action ranking enough to justify another model runtime.
 - [ ] Survey the [Janelia FlyEM male CNS connectome](https://www.janelia.org/project-team/flyem/male-cns-connectome) and define a bounded, evidence-driven comparison of any connectome-inspired planning or action-ranking approach against current baselines; this is research, not a production commitment.
 - [ ] Replace the fixed downstairs-only milestone goal with typed traversal goals that can select upstairs, downstairs, and a branch-specific staircase identity; extend memory, intents, and evaluation cases before allowing level changes.
@@ -44,7 +46,8 @@ Dependency order for the four capability items below: traversal goals, then NLE 
   - [x] Intents gain `upstairs`, stair identity, and level; UI and legacy readability.
   - [x] Policy `hierarchical-traversal-v1`; `eval run` refuses schema-1 `staircase-v1` under any policy but `hierarchical-explore-v1` before any episode.
   - [x] Replace the staircase knowledge card with the direction- and identity-neutral `stairs-traversal` card (bundle `staircase-reviewed-v3`), set policy `hierarchical-traversal-v1`, record stair-pair evidence on intents, and record milestone A in [note 0015](docs/notes/0015-typed-traversal-goals.md) (ADR 0004 step 8).
-  - [ ] Suite schema 2 pinning policy and knowledge, report schema 3 with traversal metrics, `staircase-v2` regression and `traversal-v1` (descend, round trip, enter Mines); `staircase-v1` stays unchanged and bound to `hierarchical-explore-v1`.
+  - [x] Suite schema 2 pins policy and knowledge; report schema 3 records traversal metrics; immutable `staircase-v2` and `traversal-v1` remain bound to `hierarchical-traversal-v1`.
+  - [x] Policy `hierarchical-survival-v1` adds only evidence-gated adjacent stair defense and known-ration hunger handling while retaining bundle `staircase-reviewed-v3` ([note 0016](docs/notes/0016-evidence-gated-survival-skills.md)).
 - [ ] Evaluate model-owned high-level choices when benchmarks expose real trade-offs: descend versus gain resources/levels, pray or use another recovery, and prioritize dangerous visible threats.
   - [ ] Only after suites contain a pre-declared number of decision points with two or more applicable goals.
   - [ ] Paired arbiter versus model arms on the same committed seeds (model three times), pre-registered primary metric, bootstrap intervals, latency and token costs; the model owns a decision class only if it wins without more deaths.
