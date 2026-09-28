@@ -48,13 +48,16 @@ class Skill(Enum):
     STAIRCASE_NAVIGATION = "staircase_navigation"
     EXPLORE_LEVEL = "explore_level"
     HUNGER = "hunger"
+    # Route to visible gold on NetHackGold-v0; deterministic, never offered to
+    # the model.
+    GOLD_NAVIGATION = "gold_navigation"
 
 
 def model_selectable_skills(goal: Goal) -> tuple[Skill, ...]:
     """The skills the model may choose for `goal`.
 
     Staircase navigation serves only stair goals. Deterministic specialists
-    such as hunger are never offered.
+    such as hunger and gold navigation are never offered.
     """
     if isinstance(goal, ExploreLevelGoal):
         return (Skill.EXPLORE_LEVEL,)
@@ -93,6 +96,8 @@ class DestinationKind(Enum):
     SEARCH_SPOT = "search_spot"
     # A known-locked door exploration walks beside, kicks, and aims a kick at.
     LOCKED_DOOR = "locked_door"
+    # A displayed gold-piece stack gold navigation routes onto.
+    GOLD = "gold"
 
 
 STAIR_DESTINATIONS: Final = {
@@ -693,6 +698,19 @@ class ActionSelection:
                 raise TypeError("intent must be an ActionIntent or None")
             if self.source is not ActionSelectionSource.DETERMINISTIC_SKILL:
                 raise ContractError("only deterministic skill selections carry intent")
+        gold_intent = (
+            self.intent is not None
+            and self.intent.destination is not None
+            and self.intent.destination.kind is DestinationKind.GOLD
+        )
+        if gold_intent and self.skill is not Skill.GOLD_NAVIGATION:
+            raise ContractError("only gold navigation has a gold destination")
+        if self.skill is Skill.GOLD_NAVIGATION and (
+            not gold_intent or self.skill_selection is not SkillSelectionSource.ARBITER
+        ):
+            raise ContractError(
+                "gold navigation is an arbiter-selected skill with a gold destination"
+            )
         if (
             self.skill_selection is SkillSelectionSource.MODEL
             and self.stuck_reason is None

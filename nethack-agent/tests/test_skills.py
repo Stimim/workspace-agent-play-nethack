@@ -19,6 +19,7 @@ from nethack_agent.decision import (
 from nethack_agent.environment import LegalAction, NleEnvironment, ScenarioConfig
 from nethack_agent.model import ScriptedDevelopmentModel
 from nethack_agent.navigation import (
+    GOLD_GLYPH,
     MOVE_ACTION_NAMES,
     OSCILLATION_WINDOW,
     ActionKind,
@@ -40,6 +41,7 @@ from nethack_agent.observation import (
 from nethack_agent.skills import (
     SEARCHES_PER_ROUND,
     ExploreLevelSkill,
+    GoldNavigationSkill,
     HungerSkill,
     SafePromptHandler,
     SkillAction,
@@ -86,6 +88,7 @@ _GLYPHS = {
     ">": _CMAP + 24,
     "0": nethack.GLYPH_OBJ_OFF + _BOULDER,
     "%": nethack.GLYPH_OBJ_OFF + _FOOD,
+    "$": GOLD_GLYPH,
     "j": nethack.GLYPH_MON_OFF + _MONSTERS["jackal"],
     "e": nethack.GLYPH_MON_OFF + _MONSTERS["floating eye"],
     "f": nethack.GLYPH_PET_OFF + _MONSTERS["kitten"],
@@ -719,6 +722,88 @@ def test_oracle_is_never_treated_as_an_adjacent_hostile(
         assert action_name(actions, proposal.action_index) != "CompassDirection.E"
         assert proposal.intent is not None
         assert proposal.intent.attack_target is None
+
+
+def test_gold_glyph_is_the_gold_piece_object() -> None:
+    assert GOLD_GLYPH == nethack.GLYPH_OBJ_OFF + 410
+    assert nethack.glyph_is_object(GOLD_GLYPH)
+    assert nethack.glyph_to_obj(GOLD_GLYPH) == 410
+    assert nethack.OBJ_NAME(nethack.objclass(410)) == "gold piece"
+
+
+def test_gold_cells_are_rederived_from_every_observation(
+    template: ProjectedObservation,
+) -> None:
+    memory = remembered(template, ("|@.$%.$|",))
+    assert memory.gold == frozenset({(3, 0), (6, 0)})
+    # Food is an object but not gold.
+    assert (4, 0) in memory.objects
+
+    # Gold that stops being displayed is forgotten at once, even when the
+    # hero never saw it picked up.
+    memory.observe(sketch(template, ("|.@.%.$|",), step=1))
+    memory.observe(sketch(template, ("|..@%..|",), step=2))
+    assert memory.gold == frozenset()
+
+
+def test_gold_skill_routes_to_nearest_gold_breaking_ties_by_row_then_column(
+    template: ProjectedObservation, actions: dict[str, LegalAction]
+) -> None:
+    skill = GoldNavigationSkill()
+    # Gold at (1, 1), (5, 1), (1, 3), and (5, 3) is two steps away; the lowest
+    # row wins, then the lowest column. (7, 2) is four steps away.
+    memory = remembered(
+        template,
+        (
+            "---------",
+            "|$...$..|",
+            "|..@...$|",
+            "|$...$..|",
+            "---------",
+        ),
+    )
+
+    proposal = skill.select_action(memory, actions)
+
+    assert proposal is not None
+    assert action_name(actions, proposal.action_index) == "CompassDirection.W"
+    assert proposal.intent == ActionIntent(
+        IntentDestination(DestinationKind.GOLD, 1, 1), None, cells((2, 2), (1, 1))
+    )
+    assert_followed_route(proposal, (3, 2))
+    # A strictly nearer gold wins over row and column.
+    near = remembered(template, ("|$..@.$|",))
+    nearest = skill.select_action(near, actions)
+    assert nearest is not None
+    assert nearest.intent is not None
+    assert nearest.intent.destination == IntentDestination(DestinationKind.GOLD, 6, 0)
+
+
+def test_gold_skill_needs_reachable_displayed_gold(
+    template: ProjectedObservation, actions: dict[str, LegalAction]
+) -> None:
+    skill = GoldNavigationSkill()
+
+    assert skill.select_action(remembered(template, ("|@...|",)), actions) is None
+    # Gold behind a wall is not reachable.
+    walled = remembered(template, ("|@.|$|",))
+    assert walled.gold == frozenset({(4, 0)})
+    assert skill.select_action(walled, actions) is None
+
+
+def test_gold_skill_fights_an_adjacent_hostile_first(
+    template: ProjectedObservation, actions: dict[str, LegalAction]
+) -> None:
+    memory = remembered(template, ("|j@..$|",))
+
+    proposal = GoldNavigationSkill().select_action(memory, actions)
+
+    assert proposal is not None
+    assert action_name(actions, proposal.action_index) == "CompassDirection.W"
+    assert proposal.record.target_glyph == _GLYPHS["j"]
+    assert proposal.intent == ActionIntent(
+        IntentDestination(DestinationKind.GOLD, 5, 0), MapCell(1, 0), None
+    )
 
 
 def test_object_in_dark_corridor_is_passable_and_door_under_hero_is_open(

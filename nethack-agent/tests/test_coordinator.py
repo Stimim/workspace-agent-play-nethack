@@ -36,7 +36,7 @@ from nethack_agent.model import (
     HierarchicalDecisionModel,
     ScriptedDevelopmentModel,
 )
-from nethack_agent.navigation import ActionRecord, LevelMemory
+from nethack_agent.navigation import GOLD_GLYPH, ActionRecord, LevelMemory
 from nethack_agent.observation import ObservationProjector
 from nethack_agent.replay import ExplorationReplay
 from nethack_agent.tasks import STAIRCASE_TASK, ActionProfile, NleTask, TaskSpec
@@ -710,3 +710,36 @@ def test_exploring_the_last_required_level_ends_without_a_model_consultation(
     )
     assert committed[replay_committed:] == committed[:replay_committed]
     assert replay.explored == {LevelKey(0, 1)}
+
+
+def test_gold_task_routes_onto_visible_gold_and_other_tasks_never_do(
+    tmp_path: Path,
+) -> None:
+    explore = Objective((ExploreDungeonLeg(3),))
+    gold_task = TaskSpec(NleTask.GOLD, ActionProfile.NLE_TASK_ACTIONS, explore)
+    # Seed 4 shows gold at the start: gold navigation acts on step 1 and NLE's
+    # pickup_types:$ picks the gold up on step 3.
+    _, records = run_to_end(tmp_path / "gold", 4, gold_task, max_steps=40)
+
+    first = next(
+        index
+        for index, record in enumerate(records)
+        if record.selection.skill is Skill.GOLD_NAVIGATION
+    )
+    assert first == 0
+    start_gold = records[first].before.player.gold
+    assert any(
+        record.after.player.gold > start_gold for record in records[first : first + 10]
+    )
+    for record in records:
+        if record.selection.skill is not Skill.GOLD_NAVIGATION:
+            continue
+        assert record.selection.source is ActionSelectionSource.DETERMINISTIC_SKILL
+        intent = record.selection.intent
+        assert intent is not None and intent.destination is not None
+        glyphs = record.before.map.glyph_rows
+        assert glyphs[intent.destination.y][intent.destination.x] == GOLD_GLYPH
+
+    scout_task = TaskSpec(NleTask.SCOUT, ActionProfile.NLE_TASK_ACTIONS, explore)
+    _, scout = run_to_end(tmp_path / "scout", 4, scout_task, max_steps=40)
+    assert all(record.selection.skill is not Skill.GOLD_NAVIGATION for record in scout)

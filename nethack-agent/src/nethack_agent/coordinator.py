@@ -42,6 +42,7 @@ from nethack_agent.planner import ObjectivePlanner, leg_complete
 from nethack_agent.replay import routine_actions, stair_target
 from nethack_agent.skills import (
     ExploreLevelSkill,
+    GoldNavigationSkill,
     HungerSkill,
     SafePromptHandler,
     SkillAction,
@@ -53,6 +54,7 @@ from nethack_agent.tasks import ActionProfile, ActionRole, NleTask
 from nethack_agent.traversal import (
     STAIR_GOAL_TYPES,
     STAND_ON_DOWNSTAIRS,
+    ExploreLevelGoal,
     Goal,
     LevelKey,
     StairDirection,
@@ -241,6 +243,8 @@ class AgentCoordinator:
         self._navigation = StaircaseNavigationSkill()
         self._exploration = ExploreLevelSkill()
         self._prompt_handler = SafePromptHandler()
+        # Only NetHackGold-v0 rewards gold, and only its options pick it up.
+        self._gold = GoldNavigationSkill() if task.environment is NleTask.GOLD else None
         self._hunger = (
             HungerSkill()
             if task.action_profile is ActionProfile.NLE_HUNGER_ACTIONS
@@ -456,8 +460,9 @@ class AgentCoordinator:
         The objective planner sets the step's goal. Priority: a pending
         exploration kick direction, the bounded hunger sequence, safe prompt
         answers, the model for unhandled prompts, staircase navigation to a
-        reachable remembered staircase matching the goal, then level
-        exploration. When exploration
+        reachable remembered staircase matching the goal, on NetHackGold-v0
+        gold navigation to reachable displayed gold under an explore_level
+        goal, then level exploration. When exploration
         first exhausts the level, the level is marked exhausted and the goal
         replanned; if that yields no action, the stuck report triggers a model
         skill consultation (rate-limited) and otherwise a model fallback.
@@ -532,6 +537,18 @@ class AgentCoordinator:
             return self._skill_plan(
                 navigation, goal, arbiter_skill, arbiter, None, skill_model_decision
             )
+
+        if self._gold is not None and isinstance(goal, ExploreLevelGoal):
+            gold = self._gold.select_action(memory, actions)
+            if gold is not None:
+                return self._skill_plan(
+                    gold,
+                    goal,
+                    Skill.GOLD_NAVIGATION,
+                    arbiter,
+                    None,
+                    skill_model_decision,
+                )
 
         explored = self._exploration.select_action(memory, actions, stair_target(goal))
         if explored.action is not None:

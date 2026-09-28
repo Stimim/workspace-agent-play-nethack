@@ -208,6 +208,39 @@ class StaircaseNavigationSkill:
         )
 
 
+class GoldNavigationSkill:
+    """Route onto the nearest reachable displayed gold on NetHackGold-v0.
+
+    Gold ranks by route distance, then map row and column. NLE's Gold task
+    sets `pickup_types:$`, so stepping onto the gold picks it up; no pickup
+    command exists. An adjacent hostile is fought first.
+    """
+
+    def select_action(
+        self, memory: LevelMemory, actions_by_name: dict[str, LegalAction]
+    ) -> SkillAction | None:
+        tree = route_tree(memory)
+        reachable = [
+            (tree.distances[point], point[1], point[0], point)
+            for point in memory.gold
+            if point in tree.distances and point not in memory.abandoned_goals
+        ]
+        if not reachable:
+            return None
+        distance, _, _, chosen = min(reachable)
+        destination = IntentDestination(DestinationKind.GOLD, *chosen)
+        defense = _attack_adjacent_hostile(memory, actions_by_name, destination)
+        if defense is not None:
+            return defense
+        return _route_step(
+            memory,
+            tree.route(chosen),
+            actions_by_name,
+            f"Walk onto the gold at {_cell(chosen)} to pick it up ({distance} steps).",
+            destination,
+        )
+
+
 class ExploreLevelSkill:
     """Frontier exploration, door handling, and bounded searching on one level."""
 

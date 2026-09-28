@@ -119,10 +119,10 @@ PROMPT_KEY_ACTION_NAMES: Final = frozenset(
     f"{type(action).__name__}.{action.name}" for action in _HUNGER_ADDITIONS
 )
 
-# Tasks whose objectives have behavior. Gold and Oracle legs are typed below
-# but are rejected until the planner and coordinator pursue them.
+# Tasks whose objectives have behavior. Oracle's leg is typed below but is
+# rejected until the planner and coordinator pursue it.
 _SUPPORTED_TASKS: Final = frozenset(
-    {NleTask.STAIRCASE, NleTask.SCORE, NleTask.SCOUT, NleTask.EAT}
+    {NleTask.STAIRCASE, NleTask.SCORE, NleTask.SCOUT, NleTask.GOLD, NleTask.EAT}
 )
 # Each task-progression task's single leg type and action profile (ADR 0004
 # section 8). Eat needs the hunger profile to answer its item prompt, and

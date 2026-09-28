@@ -164,6 +164,13 @@ _BOULDER_OBJECT: Final = next(
     for index in range(nethack.NUM_OBJECTS)
     if nethack.OBJ_NAME(nethack.objclass(index)) == "boulder"
 )
+# The exact glyph of a displayed gold-piece stack (object index 410 in NLE's
+# NetHack 3.6.7 build).
+GOLD_GLYPH: Final = nethack.GLYPH_OBJ_OFF + next(
+    index
+    for index in range(nethack.NUM_OBJECTS)
+    if nethack.OBJ_NAME(nethack.objclass(index)) == "gold piece"
+)
 # Monsters that must never be meleed by the deterministic policy. The passive
 # list protects the level-1 hero from paralysis or retaliation; the always-
 # peaceful Oracle is protected from the first adjacent observation, before a
@@ -287,6 +294,9 @@ class LevelMemory:
         self.monsters: dict[Point, Monster] = {}
         self.boulders: frozenset[Point] = frozenset()
         self.objects: frozenset[Point] = frozenset()
+        # Cells whose current glyph is exactly `GOLD_GLYPH`; rederived from
+        # every observation, never remembered once the gold is not displayed.
+        self.gold: frozenset[Point] = frozenset()
         self.edge_failures: dict[Edge, int] = {}
         self.suspect_edges: set[Edge] = set()
         self.abandoned_goals: set[Point] = set()
@@ -417,6 +427,7 @@ class LevelMemory:
         monsters: dict[Point, Monster] = {}
         boulders: set[Point] = set()
         objects: set[Point] = set()
+        gold: set[Point] = set()
         for y, glyphs in enumerate(observation.map.glyph_rows):
             cmap_row = self._cmap[y]
             for x, glyph in enumerate(glyphs):
@@ -432,6 +443,8 @@ class LevelMemory:
                         boulders.add((x, y))
                     else:
                         objects.add((x, y))
+                        if glyph == GOLD_GLYPH:
+                            gold.add((x, y))
                 elif nethack.glyph_is_monster(glyph) and (x, y) != self.position:
                     monsters[(x, y)] = Monster(
                         glyph,
@@ -441,6 +454,7 @@ class LevelMemory:
         self.monsters = monsters
         self.boulders = frozenset(boulders)
         self.objects = frozenset(objects)
+        self.gold = frozenset(gold)
 
     def _learn(self, record: ActionRecord, observation: ProjectedObservation) -> None:
         message = observation.message.lower()

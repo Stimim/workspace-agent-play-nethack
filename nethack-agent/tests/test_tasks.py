@@ -16,7 +16,6 @@ from nethack_agent.tasks import (
 )
 from nethack_agent.traversal import (
     STAIRCASE_OBJECTIVE,
-    EnterDungeonLeg,
     ExploreDungeonLeg,
     FindOracleLeg,
     LevelKey,
@@ -100,35 +99,13 @@ def test_staircase_task_rejects_every_other_objective(objective: Objective) -> N
         TaskSpec(NleTask.STAIRCASE, ActionProfile.NLE_TASK_ACTIONS, objective)
 
 
-@pytest.mark.parametrize(
-    ("task", "profile", "objective"),
-    [
-        (
-            NleTask.GOLD,
-            ActionProfile.NLE_TASK_ACTIONS,
-            Objective((ExploreDungeonLeg(3),)),
-        ),
-        (
-            NleTask.ORACLE,
-            ActionProfile.NLE_HUNGER_ACTIONS,
-            Objective((FindOracleLeg(),)),
-        ),
-        (
-            NleTask.GOLD,
-            ActionProfile.NLE_TASK_ACTIONS,
-            Objective((EnterDungeonLeg(2),)),
-        ),
-    ],
-)
-def test_tasks_without_behavior_are_rejected(
-    task: NleTask, profile: ActionProfile, objective: Objective
-) -> None:
-    with pytest.raises(ContractError, match=f"{task.value} .*not supported yet"):
+def test_oracle_is_rejected_until_it_has_behavior() -> None:
+    with pytest.raises(ContractError, match="NetHackOracle-v0 .*not supported yet"):
         TaskSpec.from_json(
             {
-                "environment": task.value,
-                "action_profile": profile.value,
-                "objective": objective.to_json(),
+                "environment": NleTask.ORACLE.value,
+                "action_profile": ActionProfile.NLE_HUNGER_ACTIONS.value,
+                "objective": Objective((FindOracleLeg(),)).to_json(),
             }
         )
 
@@ -140,6 +117,7 @@ EXPLORE_THREE = Objective((ExploreDungeonLeg(3),))
     ("task", "profile"),
     [
         (NleTask.SCOUT, ActionProfile.NLE_TASK_ACTIONS),
+        (NleTask.GOLD, ActionProfile.NLE_TASK_ACTIONS),
         (NleTask.EAT, ActionProfile.NLE_HUNGER_ACTIONS),
     ],
 )
@@ -167,7 +145,9 @@ def test_explore_dungeon_legs_are_rejected_on_other_tasks(task: NleTask) -> None
         TaskSpec(task, ActionProfile.NLE_TASK_ACTIONS, EXPLORE_THREE)
 
 
-@pytest.mark.parametrize("task", [NleTask.SCORE, NleTask.SCOUT, NleTask.EAT])
+@pytest.mark.parametrize(
+    "task", [NleTask.SCORE, NleTask.SCOUT, NleTask.GOLD, NleTask.EAT]
+)
 def test_find_oracle_legs_are_rejected_on_other_tasks(task: NleTask) -> None:
     with pytest.raises(ContractError, match="find_oracle|explore_dungeon"):
         TaskSpec(task, ActionProfile.NLE_TASK_ACTIONS, Objective((FindOracleLeg(),)))

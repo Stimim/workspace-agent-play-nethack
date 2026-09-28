@@ -207,13 +207,26 @@ def test_committed_traversal_suite_fixes_cases_seeds_and_thresholds() -> None:
     ] == [["reach_level"], ["reach_level", "reach_level"], ["enter_dungeon"]]
 
 
-@pytest.mark.parametrize("suite_path", [STAIRCASE_V2_PATH, TRAVERSAL_V1_PATH])
-def test_committed_traversal_suites_refuse_under_the_current_policy_before_any_episode(
-    tmp_path: Path, suite_path: Path
+_TASK_PROGRESSION_POLICY = "hierarchical-task-progression-v1"
+
+
+@pytest.mark.parametrize(
+    ("suite_path", "pin"),
+    [
+        (STAIRCASE_V2_PATH, "hierarchical-traversal-v1"),
+        (TRAVERSAL_V1_PATH, "hierarchical-traversal-v1"),
+        (STAIRCASE_V3_PATH, _TASK_PROGRESSION_POLICY),
+        (TRAVERSAL_V2_PATH, _TASK_PROGRESSION_POLICY),
+        (REPORT_DIRECTORY.parent / "scout-v1.json", _TASK_PROGRESSION_POLICY),
+        (REPORT_DIRECTORY.parent / "eat-v1.json", _TASK_PROGRESSION_POLICY),
+    ],
+)
+def test_committed_suites_refuse_under_a_later_policy_before_any_episode(
+    tmp_path: Path, suite_path: Path, pin: str
 ) -> None:
     # Their policy pin is immutable evidence; later policies use new suite ids.
-    assert load_suite(suite_path).policy_version == "hierarchical-traversal-v1"
-    assert run_manager.POLICY_VERSION != "hierarchical-traversal-v1"
+    assert load_suite(suite_path).policy_version == pin
+    assert pin != run_manager.POLICY_VERSION
     options = EvaluationOptions(
         suite=load_suite(suite_path),
         data_directory=tmp_path / "data",
@@ -235,13 +248,14 @@ def test_committed_traversal_suites_refuse_under_the_current_policy_before_any_e
         (TRAVERSAL_V2_PATH, TRAVERSAL_V1_PATH),
     ],
 )
-def test_regression_suites_reuse_their_predecessors_cases_under_the_current_policy(
+def test_regression_suites_reuse_their_predecessors_cases_under_a_new_policy(
     regression: Path, original: Path
 ) -> None:
     suite = load_suite(regression)
     previous = load_suite(original)
 
-    assert suite.policy_version == run_manager.POLICY_VERSION
+    assert suite.policy_version == _TASK_PROGRESSION_POLICY
+    assert previous.policy_version != suite.policy_version
     assert suite.knowledge_bundle_id == previous.knowledge_bundle_id
     assert suite.suite_id != previous.suite_id
     assert [case.to_json() for case in suite.cases] == [
@@ -1640,6 +1654,83 @@ def test_explore_objectives_count_only_exhaustion_markers_the_replay_confirms(
     ) in forged.integrity_problems
 
 
+def test_audit_flags_a_gold_intent_on_a_cell_that_showed_no_gold(
+    tmp_path: Path,
+) -> None:
+    data_directory = tmp_path / "data"
+    manager = RunManager(
+        data_directory,
+        OllamaConfig(model="scripted"),
+        model_factory=lambda _client: ScriptedDevelopmentModel(),
+    )
+    task = TaskSpec(
+        NleTask.GOLD,
+        ActionProfile.NLE_TASK_ACTIONS,
+        Objective((ExploreDungeonLeg(3),)),
+    )
+    try:
+        # Seed 4 routes to gold on its first step and picks it up at step 3.
+        run_id = manager.create_run(
+            seed=4, max_episode_steps=40, auto_start=True, task=task
+        ).id
+        deadline = time.monotonic() + 120
+        while manager.store.get_run(run_id).state is RunState.RUNNING:
+            assert time.monotonic() < deadline
+            time.sleep(0.05)
+    finally:
+        manager.close()
+    store = RunStore(data_directory / "runs.sqlite3")
+    base_suite = load_suite(SUITE_PATH)
+    case = replace(base_suite.cases[0], task=task, max_episode_steps=40)
+    suite = replace(base_suite, cases=(case,))
+    record = store.get_run(run_id)
+
+    def audit() -> SeedResult:
+        return summarize_run(
+            record,
+            store.events_after(run_id, limit=1000),
+            suite=suite,
+            seed=4,
+            ended_by="terminal",
+            wall_seconds=0.0,
+            data_directory=data_directory,
+            case=case,
+        )
+
+    honest = audit()
+    assert honest.integrity_problems == ()
+    assert honest.metrics.final_gold > 0
+
+    # Relabel an exploration route as gold navigation: its frontier cell
+    # never displayed gold on the observation the step was decided on.
+    with sqlite3.connect(data_directory / "runs.sqlite3") as connection:
+        rowid, payload = next(
+            (rowid, payload)
+            for rowid, text in connection.execute(
+                "SELECT rowid, payload_json FROM events ORDER BY sequence"
+            )
+            if isinstance(payload := json.loads(text), dict)
+            and isinstance(selection := payload.get("selection"), dict)
+            and isinstance(intent := selection.get("intent"), dict)
+            and intent.get("path") is not None
+            and intent["destination"]["kind"] == "frontier"
+        )
+        selection = payload["selection"]
+        selection["skill"] = "gold_navigation"
+        selection["intent"]["destination"]["kind"] = "gold"
+        destination = selection["intent"]["destination"]
+        connection.execute(
+            "UPDATE events SET payload_json = ? WHERE rowid = ?",
+            (json.dumps(payload), rowid),
+        )
+    step = payload["observation"]["step_index"]
+
+    assert audit().integrity_problems == (
+        f"step {step} gold intent ({destination['x']}, {destination['y']}) does "
+        "not show gold on the decided-on observation",
+    )
+
+
 @pytest.mark.parametrize(
     ("name", "task", "seeds", "thresholds"),
     [
@@ -1680,7 +1771,7 @@ def test_committed_task_baselines_fix_seeds_caps_and_metric_gates(
 ) -> None:
     suite = load_suite(REPORT_DIRECTORY.parent / f"{name}.json")
 
-    assert suite.policy_version == run_manager.POLICY_VERSION
+    assert suite.policy_version == _TASK_PROGRESSION_POLICY
     assert suite.knowledge_bundle_id == "staircase-reviewed-v3"
     (case,) = suite.cases
     assert case.task == task

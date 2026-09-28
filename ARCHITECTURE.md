@@ -6,7 +6,7 @@ Build a local, autonomous NetHack agent whose long-term success criterion is asc
 
 ## Current status
 
-The deterministic NLE adapter, immutable observation projector, typed traversal planner, per-level dungeon memory, deterministic staircase-navigation, exploration and bounded hunger skills, contextual action gate, structured Ollama decision model, reviewed local knowledge, typed SQLite event log, loopback control service and browser UI, scenario orchestrator, network-boundary verifier, exhaustion-marker replay, and policy-pinned evaluation harness with typed metric thresholds are implemented. Milestone 1, traversal-policy, and survival-policy evidence remain accepted or recorded as they were; the current behavior is `hierarchical-task-progression-v1`.
+The deterministic NLE adapter, immutable observation projector, typed traversal planner, per-level dungeon memory, deterministic staircase-navigation, exploration, gold-navigation and bounded hunger skills, contextual action gate, structured Ollama decision model, reviewed local knowledge, typed SQLite event log, loopback control service and browser UI, scenario orchestrator, network-boundary verifier, exhaustion-marker replay, and policy-pinned evaluation harness with typed metric thresholds are implemented. Milestone 1, traversal-policy, and survival-policy evidence remain accepted or recorded as they were; the current behavior is `hierarchical-task-progression-v1`.
 
 ## System context
 
@@ -156,7 +156,8 @@ explored once exploration has found it exhausted; that flag, unlike
 `exhausted`, survives later knowledge growth. A strict `find_oracle` leg
 (`{"kind": "find_oracle"}`) is parseable but has no behavior yet:
 `ObjectivePlanner` refuses any objective containing it, and `TaskSpec` rejects
-`NetHackGold-v0` and `NetHackOracle-v0` as "not supported yet". Legs are
+`NetHackOracle-v0` as "not supported yet". `NetHackGold-v0` takes one
+`explore_dungeon` leg with `nle-task-actions`. Legs are
 checked after every step whose NLE episode continues (NLE zeroes the
 bottom-line statistics of a terminal
 observation). On `NetHackStaircase-v0` (and later Oracle) NLE's success
@@ -180,7 +181,8 @@ or implement a deterministic skill for a simple recurring case.
 offering exactly the planner's goal and the skills that can serve it
 (`decision.model_selectable_skills`): staircase navigation and exploration for
 a stair goal, exploration alone for an `explore_level` goal. A deterministic
-arbiter owns execution; the hunger skill is never a model choice. Per step, in
+arbiter owns execution; the hunger and gold-navigation skills are never model
+choices. Per step, in
 order:
 
 1. a pending direction prompt from exploration's own kick is answered;
@@ -198,7 +200,16 @@ order:
    On the chosen staircase it fights an adjacent safe-to-melee hostile before
    either waiting or traversing. Stepping onto an adjacent staircase still
    completes or enables the goal immediately;
-6. `ExploreLevelSkill` acts, biased toward unreachable compatible staircases
+6. on `NetHackGold-v0` under an `explore_level` goal, `GoldNavigationSkill`
+   routes onto the reachable cell whose current glyph is exactly the gold-piece
+   glyph (`LevelMemory.gold`, rederived from every observation and never
+   remembered), ranked by route distance, row, and column and skipping goals
+   abandoned for oscillation. It fights an adjacent safe-to-melee hostile
+   first. NLE's `pickup_types:$` picks the gold up; there is no pickup command.
+   Its intent has a `gold` destination, only `gold_navigation` steps may carry
+   one, and the evaluator reports an integrity problem when that cell did not
+   show the gold glyph on the level of the observation the step was decided on;
+7. `ExploreLevelSkill` acts, biased toward unreachable compatible staircases
    of a stair goal, or reports a typed `StuckReason`. The first
    `search_exhausted` report at the level's current knowledge marks the level
    exhausted and explored and records `selection.exhausted_level` on that
@@ -487,7 +498,7 @@ Run creation accepts validated run execution parameters (`seed`,
 (`StrictInt` and `StrictBool`, with `extra="forbid"`, and the `TaskSpec` domain
 parser for `task`) rather than arbitrary command lines. The character
 (`val-dwa-law`), model (`gemma4-nethack:latest`), policy
-(`hierarchical-task-progression-v1`), and knowledge settings are fixed by the service
+(`hierarchical-task-specialists-v1`), and knowledge settings are fixed by the service
 configuration rather than accepted per request. A run without `task` executes
 the legacy staircase task and action profile; a supplied traversal task's
 objective and action profile drive the coordinator.
@@ -717,13 +728,14 @@ pass: the three cases achieved 3/5, 3/5, and 1/5, so entering the Mines missed
 its fixed 2/5 threshold. A completed failing suite is retained as evidence;
 thresholds and seeds are not rewritten after observing it.
 
-Neither later checkout can rerun them: `hierarchical-survival-v1` and the
-current `hierarchical-task-progression-v1` retain `staircase-reviewed-v3` but
-refuse both traversal-policy schema-2 suites before creating a run store,
-report, or episode. Their files and reports are not rerun, rewritten, or
-relabeled. `staircase-v3` and `traversal-v2` repeat their cases, seeds, caps,
-and thresholds unchanged under the current policy, as their `seed_selection`
-states.
+No later checkout can rerun them: `hierarchical-survival-v1`,
+`hierarchical-task-progression-v1`, and the current
+`hierarchical-task-specialists-v1` retain `staircase-reviewed-v3` but refuse
+both traversal-policy schema-2 suites before creating a run store, report, or
+episode. Their files and reports are not rerun, rewritten, or relabeled.
+`staircase-v3` and `traversal-v2` repeat their cases, seeds, caps, and
+thresholds unchanged under `hierarchical-task-progression-v1`, as their
+`seed_selection` states.
 
 `scout-v1` and `eat-v1` are the first task baselines for policy
 `hierarchical-task-progression-v1`: `NetHackScout-v0` with
@@ -744,6 +756,11 @@ explored cells and return 524) and `eat-v1` its gates (median return 793.96,
 median explored cells 848, no starvation death), each with 0/5 objective
 completions (reports `*-20260928T0914*`, `T091827Z`, and `T092011Z` in
 `nethack-agent/evaluation/reports/`).
+
+Policy `hierarchical-task-specialists-v1` adds gold navigation on
+`NetHackGold-v0` (`explore_dungeon` with `nle-task-actions`). It refuses
+`staircase-v3`, `traversal-v2`, `scout-v1`, and `eat-v1`, which stay pinned to
+`hierarchical-task-progression-v1`; it has no committed suite yet.
 
 `nethack-agent eval run` drives every case/seed pair in-process through one
 `RunManager` with `create_run(auto_start=True)`: the same coordinator, worker

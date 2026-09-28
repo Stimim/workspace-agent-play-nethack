@@ -439,15 +439,17 @@ but not accepted: 3/5, 3/5, and 1/5 by case). Both have zero invalid actions,
 gate rejections, and integrity failures. Preserve the failing traversal report;
 do not tune the fixed suite after observing it.
 
-The survival-policy checkout and the current `hierarchical-task-progression-v1`
-checkout run the same knowledge bundle but refuse both schema-2 suites above
-before creating a data directory because their policy pin is immutable.
-Reproduce them only from the recorded traversal-policy commit, with a fresh
-data directory. Do not rerun, rewrite, or relabel their reports as later-policy
-evidence. Policy `hierarchical-task-progression-v1` instead has its own
-regression suites, `evaluation/staircase-v3.json` and
-`evaluation/traversal-v2.json`, which repeat the cases, seeds, caps, and
-thresholds above under new suite ids.
+The survival-policy, `hierarchical-task-progression-v1`, and current
+`hierarchical-task-specialists-v1` checkouts run the same knowledge bundle but
+refuse both schema-2 suites above before creating a data directory because
+their policy pin is immutable. Reproduce them only from the recorded
+traversal-policy commit, with a fresh data directory. Do not rerun, rewrite, or
+relabel their reports as later-policy evidence. Policy
+`hierarchical-task-progression-v1` instead has its own regression suites,
+`evaluation/staircase-v3.json` and `evaluation/traversal-v2.json`, which repeat
+the cases, seeds, caps, and thresholds above under new suite ids; they, and the
+`scout-v1` and `eat-v1` baselines, are in turn refused by the current policy,
+which has no committed suite yet.
 
 A case may also declare typed `metric_thresholds` (metric, statistic, and an
 `at_least`/`at_most` bound). A case with at least one threshold may set

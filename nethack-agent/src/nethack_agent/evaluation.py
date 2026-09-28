@@ -33,6 +33,7 @@ from nethack_agent.decision import (
     LEVEL_CHANGE_ACTIONS,
     ActionSelectionSource,
     DecisionMetrics,
+    DestinationKind,
     RunOutcome,
     RunState,
     level_change_error,
@@ -47,6 +48,7 @@ from nethack_agent.events import (
 )
 from nethack_agent.knowledge import load_default_knowledge_bundle
 from nethack_agent.model import ScriptedDevelopmentModel
+from nethack_agent.navigation import GOLD_GLYPH
 from nethack_agent.observation import ProjectedObservation
 from nethack_agent.ollama import OllamaClient, OllamaConfig, OllamaError
 from nethack_agent.replay import ExplorationReplay
@@ -1198,6 +1200,9 @@ def summarize_run(
                 payload, legal_actions, decided_on, level_changes_allowed
             ):
                 invalid_actions += 1
+            gold_error = _gold_intent_error(payload, decided_on)
+            if gold_error is not None:
+                problems.append(f"step {len(step_payloads)} {gold_error}")
             decided_on = payload.observation
             if payload.observation.step_index != len(step_payloads):
                 problems.append(
@@ -1614,6 +1619,35 @@ def _level_change_allowed(
         )
         is None
     )
+
+
+def _gold_intent_error(
+    payload: StepPayload, decided_on: ProjectedObservation | None
+) -> str | None:
+    """Why a gold intent is unsupported by the observation it was decided on.
+
+    Gold navigation routes only onto a cell that displays exactly the gold
+    glyph on the level the hero was on; None for steps without a gold intent.
+    """
+    intent = payload.selection.intent
+    destination = None if intent is None else intent.destination
+    if destination is None or destination.kind is not DestinationKind.GOLD:
+        return None
+    assert intent is not None
+    cell = f"({destination.x}, {destination.y})"
+    if decided_on is None:
+        return f"gold intent {cell} has no decided-on observation"
+    player = decided_on.player
+    if intent.level != LevelKey(player.dungeon_number, player.dungeon_level):
+        return f"gold intent {cell} names another level than the decided-on one"
+    rows = decided_on.map.glyph_rows
+    if (
+        destination.y >= len(rows)
+        or destination.x >= len(rows[destination.y])
+        or rows[destination.y][destination.x] != GOLD_GLYPH
+    ):
+        return f"gold intent {cell} does not show gold on the decided-on observation"
+    return None
 
 
 def _ttyrec(reference: str | None, data_directory: Path) -> tuple[str | None, bool]:

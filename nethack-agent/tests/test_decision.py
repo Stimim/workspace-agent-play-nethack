@@ -663,3 +663,68 @@ def test_explore_goals_offer_only_exploration_and_describe_the_level(
     assert "- explore_level:0:2: explore level 2 of dungeon 0 until" in prompt
     assert 'Available skills: ["explore_level"]' in prompt
     assert "staircase_navigation cannot act now" not in prompt
+
+
+@pytest.mark.parametrize(
+    "goal", [ExploreLevelGoal(LevelKey(0, 2)), STAND_ON_DOWNSTAIRS, _MAIN_DOWN]
+)
+def test_gold_navigation_is_never_offered_to_the_model(goal: Goal) -> None:
+    skills = model_selectable_skills(goal)
+    schema = skill_decision_schema((goal,), skills)
+
+    assert Skill.GOLD_NAVIGATION not in skills
+    assert "gold_navigation" not in schema["properties"]["skill"]["enum"]  # type: ignore[index]
+    response = json.loads(valid_skill_decision())
+    response["goal"] = goal.token
+    response["skill"] = "gold_navigation"
+    with pytest.raises(DecisionError, match="not available"):
+        parse_skill_decision(json.dumps(response), (goal,), frozenset(skills))
+
+
+def gold_step(**changes: object) -> ActionSelection:
+    """A gold-navigation step east toward the gold at (6, 3) on (0, 1)."""
+    fields: dict[str, object] = {
+        "source": ActionSelectionSource.DETERMINISTIC_SKILL,
+        "goal": ExploreLevelGoal(LevelKey(0, 1)),
+        "skill": Skill.GOLD_NAVIGATION,
+        "skill_selection": SkillSelectionSource.ARBITER,
+        "stuck_reason": None,
+        "action_index": 1,
+        "rationale": "Walk onto the gold.",
+        "intent": ActionIntent(
+            IntentDestination(DestinationKind.GOLD, 6, 3),
+            None,
+            (MapCell(5, 3), MapCell(6, 3)),
+            LevelKey(0, 1),
+        ),
+    }
+    fields.update(changes)
+    return ActionSelection(**fields)  # type: ignore[arg-type]
+
+
+def test_gold_intents_belong_only_to_gold_navigation_and_end_on_the_gold() -> None:
+    step = gold_step()
+    assert ActionSelection.from_json(step.to_json()) == step
+    frontier = ActionIntent(
+        IntentDestination(DestinationKind.FRONTIER, 6, 3),
+        None,
+        (MapCell(5, 3), MapCell(6, 3)),
+    )
+
+    with pytest.raises(ContractError, match="only gold navigation"):
+        gold_step(skill=Skill.EXPLORE_LEVEL)
+    with pytest.raises(ContractError, match="gold destination"):
+        gold_step(intent=frontier)
+    with pytest.raises(ContractError, match="gold destination"):
+        gold_step(intent=None)
+    with pytest.raises(ContractError, match="arbiter-selected"):
+        gold_step(
+            skill_selection=SkillSelectionSource.MODEL,
+            stuck_reason=StuckReason.SEARCH_EXHAUSTED,
+        )
+    with pytest.raises(ContractError, match="must end at the destination"):
+        ActionIntent(
+            IntentDestination(DestinationKind.GOLD, 6, 3),
+            None,
+            (MapCell(5, 3), MapCell(5, 4)),
+        )

@@ -77,12 +77,13 @@ fails if any connection target is not loopback.
 
 The committed `staircase-v2` and `traversal-v1` suites and their reports are
 immutable evidence for policy `hierarchical-traversal-v1`. The current policy
-is `hierarchical-task-progression-v1`, so this checkout intentionally refuses
+is `hierarchical-task-specialists-v1`, so this checkout intentionally refuses
 both suites before creating a run store or episode. Reproduce them only from
 their recorded traversal-policy commit and never relabel their reports.
-`staircase-v3` and `traversal-v2` repeat their cases, seeds, caps, and
-thresholds under the current policy, and `scout-v1` and `eat-v1` are the
-Scout and Eat metric baselines:
+`staircase-v3` and `traversal-v2` (regression suites) and `scout-v1` and
+`eat-v1` (Scout and Eat metric baselines) are pinned to
+`hierarchical-task-progression-v1` and are refused the same way; run them only
+from a checkout with that policy:
 
 ```bash
 uv run nethack-agent eval run --suite evaluation/staircase-v3.json \
