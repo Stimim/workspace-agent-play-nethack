@@ -111,6 +111,8 @@ single real-model runs:
 no completed objective, because exhaustive search outlasts the hunger horizon
 ([note 0017](docs/notes/0017-scout-and-eat-task-suites.md)).
 
+The next milestone ([`TODO_LIST.md`](TODO_LIST.md), [ADR 0005](docs/decisions/0005-early-survival-and-seed-evaluation.md), proposed) targets reaching Dungeons of Doom level 5 without hunger deaths: prayer, safe corpse eating, and bounded hidden-passage search, evaluated on a reviewed catalog of representative seeds plus 20 freshly drawn seeds per run.
+
 ## Documentation
 
 Start with [`docs/README.md`](docs/README.md). Architecture documents describe

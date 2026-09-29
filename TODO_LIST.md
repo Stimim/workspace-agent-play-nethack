@@ -2,7 +2,7 @@
 
 This file tracks product work. Completed work and reasoning belong in `docs/notes/`; durable choices belong in `docs/decisions/` and `ARCHITECTURE.md`.
 
-## Now: milestone 1 — Staircase agent (accepted)
+## Done: milestone 1 — Staircase agent (accepted)
 
 Acceptance: the fixed local policy succeeds on at least 6 of 10 committed deterministic `NetHackStaircase-v0` seeds, including seed 6, with no invalid NLE actions and complete SQLite plus ttyrec replay data.
 
@@ -21,11 +21,40 @@ Acceptance: the fixed local policy succeeds on at least 6 of 10 committed determ
 - [x] Meet the milestone acceptance gate on the complete suite.
 - [x] Verify gameplay performs no non-loopback network requests.
 
-## Next: robust dungeon play
+## Now: milestone 2 — Survive the early dungeon
+
+Goal: reach Dungeons of Doom level 5, the shallowest Oracle level, without hunger deaths. Every failed episode in `traversal-v2`, `scout-v1`, and `eat-v1` (18 of 18) reached Fainting, while every successful one stayed not hungry: exhaustive hidden-passage search outlasts the food supply, and `TASK_ACTIONS` cannot pray ([note 0017](docs/notes/0017-scout-and-eat-task-suites.md)). Design: [ADR 0005](docs/decisions/0005-early-survival-and-seed-evaluation.md) (proposed).
+
+Acceptance is judged on the first committed real-model run of the milestone suite. A failed run is kept; a retry needs a new policy version and a new seed draw.
+
+- Suite `descend-d5-v1` (suite schema 3): `NetHackScore-v0`, a survival action profile (task actions plus eating, PRAY, and prompt keys accepted only as offered answers), objective `reach_level(0, 5)`, and a step cap fixed from held-out probes (at least 3,000).
+- Fresh sample: 20 seeds drawn per run from a declared range, excluding every seed in the used-seed ledger; the report records the draw seed and the drawn seeds before the first episode. Pass: at least 50% reach the objective (probes may only raise this), zero starvation deaths, and zero deaths while Weak or Fainting.
+- Baseline: every representative-seed catalog entry for the suite's task runs in the same report. No `must_pass` entry may regress; `known_failure` changes are reported with a paired per-seed diff against the previous report.
+- Suite-wide: zero invalid actions and gate rejections, complete records, and every prayer replayed by the evaluator against the gate's predicate.
+- Regressions under the new policy: the staircase cases pass 10/10; the traversal cases meet their original thresholds, including `enter-mines` at least 2/5; Scout and Eat thresholds are no worse than `scout-v1` and `eat-v1`.
+- Unchanged: `gemma4-nethack:latest`, `num_ctx` 8,192, offline gameplay, and immutable committed suites and reports.
+
+Work, in order:
+
+- [ ] Representative-seed catalog: strict `evaluation/representative-seeds.json` rendered to `representative-seeds.md` (seed, task, cap, represented behavior, provenance, `must_pass` or `known_failure`, linked test). Seed it from existing evidence: 6; 5; 1, 2, 4; 4 and 7; 53; 701 and 702; 824. Add a scripted-model catalog check that asserts outcome class and key invariants, not step counts.
+- [ ] Used-seed ledger covering committed suites, probes, development runs, and the catalog.
+- [ ] Suite schema 3 (a baseline case from the catalog and a `fresh_sample` block) and report changes (draw provenance, separate baseline and fresh-sample acceptance, paired baseline diff). Schemas 1-2 and existing reports stay readable and unchanged.
+- [ ] Failure diagnostics: per-episode steps by skill and by search, first Hungry turn, and a `hunger_at_death` metric; a note analyzing the 18 Fainting episodes.
+- [ ] Reviewed, cited knowledge cards for prayer and hunger and for safe corpse eating (new bundle).
+- [ ] Survival action profile and gate roles: PRAY, eating, and the prayer and eating confirmations accepted only as offered answers; the evaluator audits them with the same predicate.
+- [ ] Deterministic prayer skill: pray when Weak and the tracked prayer timeout is safe; record the prayer and its outcome in the intent.
+- [ ] Corpse eating: eat fresh corpses on the reviewed safe list; decline everything else.
+- [ ] Bounded search: order hidden-passage search by promise and cap it with a per-level budget fixed from held-out probes.
+- [ ] New policy version, held-out probes, committed suites, one real-model run, and docs (`ARCHITECTURE.md`, `README.md`, development guide, a note); mark ADR 0005 accepted.
+
+Out of scope: Oracle navigation and the `gold-v1` and `oracle-v1` suites (milestone 3 candidates), retreat, rest, or HP-based prayer unless probes show HP deaths, and model-owned choices.
+
+## Robust dungeon play (ADR 0004)
+
+Remaining ADR 0004 items. Survival, prayer, corpse eating, bounded search, and failure diagnostics moved to milestone 2.
 
 Dependency order for the four capability items below: traversal goals, then NLE task suites, then evidence-gated skills, then model-owned choices ([ADR 0004](docs/decisions/0004-traversal-goals-and-task-progression.md)).
 
-- [ ] Analyze milestone failures and update deterministic skills or reviewed knowledge; do not let evaluation runs mutate themselves.
 - [ ] Add replay comparison and aggregate run diagnostics.
 - [ ] Add bounded navigation, combat-risk, hunger, inventory, and prompt-handling skills as evidence requires.
   - [x] Combat risk: fight a safe-to-melee adjacent hostile before waiting on or traversing stairs; baseline seeds 1, 2, and 4 supplied the evidence. Retreat, rest, and weapon rules remain evidence-gated.
@@ -33,7 +62,6 @@ Dependency order for the four capability items below: traversal goals, then NLE 
   - [x] Covered stairs: recognized from look-here messages as part of traversal memory (seed 5).
   - [ ] Prompt handlers ship with the actions that cause them:
     - [x] Inventory-ration item selection and conservative `eat it?` decline.
-    - [ ] Prayer confirmation only after prayer policy and failure evidence exist.
   - [ ] Navigation and general inventory skills only after a failure class recurs in traversal or task-suite evidence.
 - [ ] Evaluate whether Laya improves routine action ranking enough to justify another model runtime.
 - [ ] Survey the [Janelia FlyEM male CNS connectome](https://www.janelia.org/project-team/flyem/male-cns-connectome) and define a bounded, evidence-driven comparison of any connectome-inspired planning or action-ranking approach against current baselines; this is research, not a production commitment.
@@ -59,7 +87,6 @@ Dependency order for the four capability items below: traversal goals, then NLE 
   - [x] Oracle goal and leg contracts: strict `approach_oracle` goal (token `approach_oracle:<dnum>:<dlevel>`) and `find_oracle` leg; `NetHackOracle-v0` is rejected as not supported yet and the planner refuses `find_oracle` objectives (94e3180).
   - [x] Policy `hierarchical-task-specialists-v1`: deterministic gold navigation on `NetHackGold-v0` to the nearest reachable displayed gold under `pickup_types:$`, with `gold` intents audited against the decided-on observation's gold glyph (7c71d7a).
   - [ ] Not started: `gold-v1` and `oracle-v1` suites and Oracle navigation.
-  - [ ] Bounded search budget or exploration skill: exhaustive hidden-passage search costs more steps than the Scout and Eat hunger horizons (evidence in note 0017); not implemented until a later policy.
 
 ### Development tooling
 - [x] Add the `omp-commit` skill: derive the active conversation UUID from
