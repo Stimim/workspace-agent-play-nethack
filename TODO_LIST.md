@@ -72,6 +72,15 @@ Dependency order for the four capability items below: traversal goals, then NLE 
   direct OMP processes already fall back; OMP 18.3.2 did not refresh the
   already-running conversation's worker-launcher snapshot ([0008](docs/notes/0008-omp-local-coding-fallback.md)).
 
+- [x] Tune the local coding workers: 64k-context `omp-coder` (qwen3.5:9b) and
+  `omp-coder-large` (gemma4:26b) recipes, benchmarked on specified, open-ended,
+  and spec-to-code tasks ([0019](docs/notes/0019-local-coding-worker-tuning.md)).
+- [ ] Persist `edit.modelVariants: {omp-coder: replace}` and the
+  `fast_worker`/`good_worker` roles from
+  [0019](docs/notes/0019-local-coding-worker-tuning.md) (needs user approval),
+  `/restart`, and verify one Vibe `fast` and one `good` turn names the new
+  models and edits without hashline errors.
+
 ### Observability and browser UI
 
 Browser tooling for inspecting runs. Evidence, design, and the limitations behind the open items are in notes 0009-0012.

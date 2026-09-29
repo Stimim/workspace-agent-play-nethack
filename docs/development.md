@@ -164,6 +164,57 @@ is less capable than the primary. Keep fallback assignments focused and
 concise. Ollama remains bound to loopback, so this fallback introduces no
 additional cloud provider.
 
+### OMP local coding workers
+
+OMP's `fast` and `good` coding-worker tiers (Vibe `cli=fast`/`cli=good`, and
+the `sonic`/`task` subagents through `task.agentModelOverrides`) resolve to
+local Ollama models. These are development tools, never used by the playing
+agent. Both recipes run at `num_ctx` 65,536:
+
+```bash
+ollama create omp-coder:latest --file _agents/models/omp-coder/Modelfile
+ollama create omp-coder-large:latest --file _agents/models/omp-coder-large/Modelfile
+omp models refresh
+```
+
+- `omp-coder:latest` is `qwen3.5:9b`, the `fast` tier: about 8.5 GB,
+  64% on the GPU, about 10 output tokens per second. It reliably executes
+  fully specified edits.
+- `omp-coder-large:latest` is `gemma4:26b` (26B-A4B MoE), the `good` tier:
+  19 GB, mostly on the CPU, about 17 output and 190 prompt tokens per second.
+  It gave the better open-ended and spec-to-code results.
+
+The two models do not fit in memory together, so alternating tiers reloads a
+model each time. `providers.maxInFlightRequests.ollama: 1` and
+`task.maxConcurrency: 2` stay in the global config.
+
+Local workers require the `replace` edit tool. With OMP's default `hashline`
+tool they fail even fully specified edits. Persist the overlay's key and the
+roles, then `/restart`:
+
+```yaml
+edit:
+  modelVariants:
+    omp-coder: replace          # substring match; other models keep hashline
+modelRoles:
+  fast_worker: ollama/omp-coder:latest:high
+  good_worker: ollama/omp-coder-large:latest:high
+```
+
+A running OMP session keeps the worker settings and model catalog it started
+with. Without `/restart`, run a local worker as a fresh process from a
+checkout or a `git worktree` of it:
+
+```bash
+omp -p --config _agents/models/omp-local-worker.yml \
+  --model ollama/omp-coder-large:latest --thinking high "<task>"
+```
+
+Add `--mode json --session-dir DIR` to keep a transcript. Check every worker
+result yourself (diff, tests, browser); worker reports are not evidence. The
+benchmark behind these choices is in
+[note 0019](notes/0019-local-coding-worker-tuning.md).
+
 ### Local control service
 
 ```bash
