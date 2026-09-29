@@ -143,3 +143,53 @@ at gemma4's 190 tokens/s), so avoid running both tiers concurrently.
 - Small models sometimes end a turn after announcing a plan. In `omp -p`, that
   ended the run with no edit (the first Qwen L2 run). Vibe workers instead
   receive OMP's idle reminder.
+
+## Follow-up: one local model
+
+The two-model split above was superseded the same day. Every local OMP role now
+uses one tag, `omp-coder:latest`, rebuilt from gemma4:26b at `num_ctx` 65,536.
+`omp-coder-large`, `qwen3.5:9b`, and the `--config` overlay were removed.
+
+Evidence behind the change:
+
+- **The GPU memory is the same, split differently.** Ollama load logs show
+  about 5 GB on the GPU for both models.
+  - Qwen at 64k: 22 of 34 layers, 3.25 GB weights, 1.28 GB KV, and about
+    0.65 GB compute. Twelve dense layers (2.0 GB) run on the CPU, which limits
+    output to about 10 tokens/s.
+  - Gemma: all 31 layers' attention and shared weights (3.43 GB), 0.94 GB KV at
+    32k, and about 0.64 GB compute. Its 14.3 GB of MoE expert weights stay in
+    RAM, and only about 4B parameters are active per token.
+- **One model interleaves cheaply.** Ollama's runner has one active slot but
+  keeps a RAM prompt cache (`limits: 8192 MiB, 65536 tokens`).
+  - On one loaded model, a 6,954-token prompt took 6.7 s to read. After a
+    different 7,867-token prompt displaced it, a repeat read only 4 new tokens,
+    in 0.2 s.
+  - Different models do not share this: switching unloads the runner and its
+    cache, and the two models did not fit together.
+  - Two tags built from the same Modelfile share one manifest ID (checked with
+    a throwaway `omp-coder-tagtest`) and one runner, so per-tier tags would not
+    get separate caches either.
+- **Gemma's thinking is binary.** Ollama exposes gemma4 thinking as on or
+  off. The `fast` and `good` roles both use `:high` (on), so the tiers behave
+  identically. `smol`, `tiny`, and `commit` use `:off`.
+
+Persisted global settings: `modelRoles` (smol, tiny, commit, fast_worker,
+good_worker all on `ollama/omp-coder:latest`), `edit.modelVariants:
+{omp-coder: replace}`, and `disabledProviders: [google-antigravity]`.
+`task.maxConcurrency: 2` is kept and will be reviewed after a few iterations.
+The playing agent keeps `gemma4-nethack:latest`.
+
+Removing the Gemini, `smol`, and `tiny` `retry.fallbackChains` entries was not
+applied: the approval prompt timed out. `omp-coder-smol:latest` and its recipe
+remain as those chains' target until they are removed.
+
+Verification with fresh `omp -p` processes and no overlay:
+
+- A worker fixed a subtraction bug in a scratch `calc.py`. It called `glob`,
+  `read`, `edit` with `new_string` (the persisted `replace` variant), and
+  `bash`; the result returned 5. Every assistant record named
+  `provider=ollama, model=omp-coder:latest`, and `ollama ps` showed 19 GB at
+  80% CPU / 20% GPU with context 65,536.
+- `@tiny`, `@smol`, and `@commit` each resolved to `ollama/omp-coder:latest`
+  and returned the requested marker.

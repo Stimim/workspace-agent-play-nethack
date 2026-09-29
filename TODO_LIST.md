@@ -66,20 +66,15 @@ Dependency order for the four capability items below: traversal goals, then NLE 
   unambiguous live OMP evidence, normalize its Git trailer, and run format/lint
   checks before allowing a commit.
 
-- [ ] After `/restart` reloads the persistent OMP settings, rerun one bounded
-  `vibe_spawn cli=fast` task and require turn metadata to show
-  `ollama/omp-coder-smol:latest` after the real Antigravity quota 429. Fresh
-  direct OMP processes already fall back; OMP 18.3.2 did not refresh the
-  already-running conversation's worker-launcher snapshot ([0008](docs/notes/0008-omp-local-coding-fallback.md)).
-
-- [x] Tune the local coding workers: 64k-context `omp-coder` (qwen3.5:9b) and
-  `omp-coder-large` (gemma4:26b) recipes, benchmarked on specified, open-ended,
-  and spec-to-code tasks ([0019](docs/notes/0019-local-coding-worker-tuning.md)).
-- [ ] Persist `edit.modelVariants: {omp-coder: replace}` and the
-  `fast_worker`/`good_worker` roles from
-  [0019](docs/notes/0019-local-coding-worker-tuning.md) (needs user approval),
-  `/restart`, and verify one Vibe `fast` and one `good` turn names the new
-  models and edits without hashline errors.
+- [x] Tune the local coding workers and consolidate every local OMP role on one
+  64k-context `omp-coder` model (gemma4:26b) with the `replace` edit tool
+  ([0019](docs/notes/0019-local-coding-worker-tuning.md)).
+- [ ] After `/restart`, verify that one Vibe `fast` and one `good` turn name
+  `ollama/omp-coder:latest` and edit without hashline errors. After a few
+  iterations, review whether `task.maxConcurrency: 2` helps or hurts on a
+  single local model.
+- [ ] Remove the legacy `retry.fallbackChains` entries (Gemini, `smol`, `tiny`;
+  needs user approval), then the `omp-coder-smol` tag and recipe.
 
 ### Observability and browser UI
 

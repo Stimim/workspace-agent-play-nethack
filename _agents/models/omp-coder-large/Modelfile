@@ -1,8 +1,0 @@
-FROM gemma4:26b
-
-# Gemma 4 26B-A4B MoE. On the reference 8 GB GPU it runs about 80% CPU /
-# 20% GPU (19 GB) at about 17 output and 190 prompt tokens per second. Its
-# sliding-window attention makes 65,536 context cost about the same as 32,768,
-# so OMP workers never reached compaction in the recorded benchmark tasks.
-# Sampling stays at the model's defaults (temperature 1, top_k 64, top_p 0.95).
-PARAMETER num_ctx 65536

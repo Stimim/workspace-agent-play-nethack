@@ -1,14 +1,10 @@
-FROM qwen3.5:9b
+FROM gemma4:26b
 
-# OMP worker prompts start near 9k tokens, and compaction reserves 8,192
-# tokens (compaction.reserveTokens). At 32,768 a Vibe worker compacted up to
-# 27 times per task; 65,536 leaves room for multi-file tasks. On the reference
-# 8 GB GPU this runs 36% CPU / 64% GPU at about 10 output tokens per second.
+# The single local OMP model: Vibe/task fast and good workers plus the smol,
+# tiny, and commit roles. Gemma 4 26B-A4B MoE keeps attention and shared
+# weights on the 8 GB GPU (about 5 GB) and its expert weights in RAM
+# (14.3 GB), at about 17 output and 190 prompt tokens per second. Sliding-window
+# attention makes 65,536 context cost about the same as 32,768; OMP compacts
+# at 49,152 tokens (65,536 minus its 16,384-token reserve).
+# Sampling stays at the model's defaults (temperature 1, top_k 64, top_p 0.95).
 PARAMETER num_ctx 65536
-
-# Qwen3.5 recommended sampling for thinking-mode coding.
-PARAMETER temperature 0.6
-PARAMETER top_p 0.95
-PARAMETER top_k 20
-PARAMETER min_p 0
-PARAMETER presence_penalty 0
