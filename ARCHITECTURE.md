@@ -762,6 +762,18 @@ Policy `hierarchical-task-specialists-v1` adds gold navigation on
 `staircase-v3`, `traversal-v2`, `scout-v1`, and `eat-v1`, which stay pinned to
 `hierarchical-task-progression-v1`; it has no committed suite yet.
 
+Milestone 2 evaluation adds a reviewed representative-seed catalog
+(`evaluation/representative-seeds.json`, rendered to `representative-seeds.md`)
+and a used-seed ledger (`evaluation/seed-ledger.json`), strict typed files read
+by `seed_catalog.py`
+([ADR 0005](docs/decisions/0005-early-survival-and-seed-evaluation.md)).
+`nethack-agent eval catalog check` runs every entry as its own single-seed case
+through the same `run_evaluation` path with the scripted development model and
+compares each outcome with the entry's `must_pass` or `known_failure`
+expectation; integrity problems, invalid actions, gate rejections, and errors
+always fail. The committed suites, the catalog, and the ledger together define
+the seeds that a fresh sample must exclude.
+
 `nethack-agent eval run` drives every case/seed pair in-process through one
 `RunManager` with `create_run(auto_start=True)`: the same coordinator, worker
 loop, action gate, SQLite store, and ttyrec capture as the HTTP service, without

@@ -29,6 +29,13 @@ from nethack_agent.observation import ObservationProjector
 from nethack_agent.ollama import OllamaClient, OllamaConfig, OllamaError
 from nethack_agent.run_manager import RunManager
 from nethack_agent.scenario import ScenarioRunConfig, run_scenario
+from nethack_agent.seed_catalog import (
+    DEFAULT_CATALOG_PATH,
+    CatalogCheckStatus,
+    load_catalog,
+    render_catalog_markdown,
+    run_catalog_check,
+)
 from nethack_agent.tasks import TaskSpec, load_task_file
 from nethack_agent.verification import verify_network_boundary
 
@@ -304,6 +311,28 @@ def _build_parser() -> argparse.ArgumentParser:
         "--report", type=Path, required=True, help="report JSON path"
     )
     eval_abort_parser.add_argument("--reason", required=True)
+    catalog_parser = eval_commands.add_parser(
+        "catalog", help="render or check the representative-seed catalog"
+    )
+    catalog_commands = catalog_parser.add_subparsers(
+        dest="catalog_command", required=True
+    )
+    for name, text in (
+        ("render", "write the catalog Markdown from its JSON"),
+        ("check", "run every entry with the scripted development model"),
+    ):
+        command_parser = catalog_commands.add_parser(name, help=text)
+        command_parser.add_argument(
+            "--catalog", type=Path, default=DEFAULT_CATALOG_PATH
+        )
+        if name == "check":
+            command_parser.add_argument("--data-dir", type=Path, required=True)
+            command_parser.add_argument(
+                "--report-dir",
+                type=Path,
+                help="report directory (default: DATA_DIR/reports)",
+            )
+            command_parser.add_argument("--json", action="store_true")
     return parser
 
 
@@ -484,6 +513,51 @@ def _abort_evaluation_command(arguments: argparse.Namespace) -> int:
     return 0
 
 
+def _run_catalog_command(arguments: argparse.Namespace) -> int:
+    try:
+        catalog = load_catalog(arguments.catalog)
+        if arguments.catalog_command == "render":
+            markdown_path = arguments.catalog.with_suffix(".md")
+            markdown = render_catalog_markdown(catalog)
+            markdown_path.write_text(markdown, encoding="utf-8")
+            print(f"OK catalog rendered: {markdown_path}")
+            return 0
+        report_directory = arguments.report_dir or arguments.data_dir / "reports"
+        checks, paths = run_catalog_check(catalog, arguments.data_dir, report_directory)
+    except KeyboardInterrupt:
+        print("FAIL catalog: interrupted", file=sys.stderr)
+        return 130
+    except Exception as error:
+        print(f"FAIL catalog: {error}", file=sys.stderr)
+        return 1
+    failed = sum(check.status is CatalogCheckStatus.FAIL for check in checks)
+    changed = (CatalogCheckStatus.IMPROVED, CatalogCheckStatus.CHANGED)
+    notices = sum(check.status in changed for check in checks)
+    if arguments.json:
+        payload = {
+            "checks": [check.to_json() for check in checks],
+            "failed": failed,
+            "to_update": notices,
+            "report_paths": {"json": str(paths.json), "markdown": str(paths.markdown)},
+        }
+        print(json.dumps(payload, sort_keys=True))
+        return 1 if failed else 0
+    for check in checks:
+        observed = check.observed_outcome
+        observed_text = "none" if observed is None else observed.value
+        print(
+            f"{check.status.value.upper()} {check.entry_id} seed {check.seed}: "
+            f"expected {check.expectation.value}/{check.expected_outcome.value}, "
+            f"observed {observed_text}; {check.detail}"
+        )
+    verdict = "FAIL" if failed else "PASS"
+    print(
+        f"{verdict} catalog check: {len(checks)} entries, {failed} failed, "
+        f"{notices} to update in the catalog; report {paths.json}"
+    )
+    return 1 if failed else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     arguments = _build_parser().parse_args(argv)
     if arguments.command == "run":
@@ -492,6 +566,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run_scenario_command(arguments)
     if arguments.command == "verify":
         return _run_network_verification(arguments)
+    if arguments.command == "eval" and arguments.eval_command == "catalog":
+        return _run_catalog_command(arguments)
     if arguments.command == "eval" and arguments.eval_command == "abort":
         return _abort_evaluation_command(arguments)
     if arguments.command == "eval":

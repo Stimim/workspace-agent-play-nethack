@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "source": "adr-0004-baseline",
+      "seeds": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "ranges": [],
+      "note": "Scripted-model baseline on Score, Scout, Gold, Eat, and Oracle with a 2,000-step cap (ADR 0004)."
+    },
+    {
+      "source": "adr-0004-traversal-probe",
+      "seeds": [],
+      "ranges": [
+        [
+          1,
+          10
+        ]
+      ],
+      "note": "Throwaway NetHackScore-v0 traversal probe (ADR 0004)."
+    },
+    {
+      "source": "note-0007-held-out",
+      "seeds": [],
+      "ranges": [
+        [
+          11,
+          60
+        ]
+      ],
+      "note": "Held-out staircase development seeds used to avoid overfitting, including 12, 16, 24, 29, 44, and 58 (note 0007)."
+    },
+    {
+      "source": "traversal-threshold-probes",
+      "seeds": [],
+      "ranges": [
+        [
+          600,
+          604
+        ]
+      ],
+      "note": "Held-out probes that fixed the traversal-v1 thresholds (ARCHITECTURE.md)."
+    },
+    {
+      "source": "scout-eat-threshold-probes",
+      "seeds": [],
+      "ranges": [
+        [
+          800,
+          804
+        ],
+        [
+          820,
+          824
+        ]
+      ],
+      "note": "Held-out Scout and Eat probes (note 0017)."
+    },
+    {
+      "source": "note-0017-development-smoke",
+      "seeds": [],
+      "ranges": [
+        [
+          11,
+          15
+        ],
+        [
+          20,
+          58
+        ]
+      ],
+      "note": "Scout and Eat development smoke, the seed search that found seed 53, and scripted trace seed 58 (note 0017, ADR 0004)."
+    }
+  ]
+}

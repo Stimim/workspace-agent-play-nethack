@@ -36,8 +36,8 @@ Acceptance is judged on the first committed real-model run of the milestone suit
 
 Work, in order:
 
-- [ ] Representative-seed catalog: strict `evaluation/representative-seeds.json` rendered to `representative-seeds.md` (seed, task, cap, represented behavior, provenance, `must_pass` or `known_failure`, linked test). Seed it from existing evidence: 6; 5; 1, 2, 4; 4 and 7; 53; 701 and 702; 824. Add a scripted-model catalog check that asserts outcome class and key invariants, not step counts.
-- [ ] Used-seed ledger covering committed suites, probes, development runs, and the catalog.
+- [x] Representative-seed catalog: strict `evaluation/representative-seeds.json` rendered to `representative-seeds.md` (seed, task, cap, represented behavior, provenance, `must_pass` or `known_failure`, linked test). Seed it from existing evidence: 6; 5; 1, 2, 4; 4 and 7; 53; 701 and 702; 824. Add a scripted-model catalog check that asserts outcome class and key invariants, not step counts ([0020](docs/notes/0020-representative-seed-catalog.md)).
+- [x] Used-seed ledger covering committed suites, probes, development runs, and the catalog.
 - [ ] Suite schema 3 (a baseline case from the catalog and a `fresh_sample` block) and report changes (draw provenance, separate baseline and fresh-sample acceptance, paired baseline diff). Schemas 1-2 and existing reports stay readable and unchanged.
 - [ ] Failure diagnostics: per-episode steps by skill and by search, first Hungry turn, and a `hunger_at_death` metric; a note analyzing the 18 Fainting episodes.
 - [ ] Reviewed, cited knowledge cards for prayer and hunger and for safe corpse eating (new bundle).

@@ -420,6 +420,43 @@ check out commit `3211405` in a separate worktree and use a fresh data
 directory: older strict readers cannot read newer typed traversal events, and
 mixing policies in one run store defeats per-policy evidence.
 
+### Representative seeds and the used-seed ledger
+
+`nethack-agent/evaluation/representative-seeds.json` is the reviewed catalog of
+representative seeds
+([ADR 0005](decisions/0005-early-survival-and-seed-evaluation.md) section 2).
+Each entry names one seed, its `TaskSpec` and step cap, the behavior it
+represents, its provenance, a permanent test when one exists, and its
+expectation: `must_pass` or `known_failure`, with the outcome the scripted
+development model produced when the expectation was set. The strict JSON is the
+source of truth; regenerate the human-readable table after every edit:
+
+```bash
+uv run nethack-agent eval catalog render
+```
+
+`tests/test_seed_catalog.py` fails when `representative-seeds.md` is stale.
+Check every entry against the current checkout with the scripted development
+model (about three minutes; never evaluation evidence):
+
+```bash
+uv run nethack-agent eval catalog check --data-dir /tmp/nh-catalog-check
+```
+
+The command writes a development report with one single-seed case per entry
+under `DATA_DIR/reports`, prints one line per entry, and exits nonzero if any
+entry fails. An entry fails when its run has an integrity problem, an invalid
+action, a gate rejection, or an error, or when a `must_pass` entry does not
+succeed with its recorded outcome. A `known_failure` that now succeeds is
+reported as `IMPROVED`, and one that ends with a different outcome as
+`CHANGED`; both exit zero but mean the catalog must be updated in the same
+change as the policy change that caused it, with a note.
+
+`nethack-agent/evaluation/seed-ledger.json` records the seeds that probes and
+development runs have used, as sources with explicit seeds or inclusive ranges.
+`seed_catalog.used_seeds()` unions it with every committed suite's seeds and the
+catalog; fresh seed samples must exclude that set.
+
 Progress lines go to stderr every `--progress-interval` seconds (default 30).
 Each invocation reserves a new `<suite>-<UTC timestamp>.json` and `.md` pair in
 the report directory (default `DATA_DIR/reports`), rewrites that pair (mode
