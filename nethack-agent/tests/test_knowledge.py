@@ -86,6 +86,43 @@ def test_reviewed_bundle_is_deterministic_and_manifest_ordered() -> None:
     )
 
 
+def test_named_survival_bundle_preserves_default_and_stays_bounded(
+    tmp_path: Path,
+) -> None:
+    default = load_default_knowledge_bundle()
+    survival = load_knowledge_bundle(
+        KNOWLEDGE_DIRECTORY, bundle_id="survival-reviewed-v1"
+    )
+    assert default.bundle_id == "staircase-reviewed-v3"
+    assert [card.card_id for card in default.cards] == [
+        "stairs-traversal",
+        "exploration-map",
+        "safe-interaction",
+    ]
+    assert [card.card_id for card in survival.cards] == [
+        "stairs-traversal",
+        "exploration-map",
+        "prayer-hunger",
+        "safe-corpses",
+    ]
+    assert survival.content_hash != default.content_hash
+    assert survival.character_count <= 6_000
+    assert survival.estimated_tokens <= 1_500
+    assert all(card.sources for card in survival.cards)
+    assert "prayer-hunger" in survival.prompt_context
+    assert "safe-corpses" not in default.prompt_context
+
+    directory = copy_knowledge(tmp_path)
+    manifest_path = directory / "manifest.survival-reviewed-v1.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["bundle_id"] = "another-reviewed-v1"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(KnowledgeManifestError, match="must match requested"):
+        load_knowledge_bundle(directory, bundle_id="survival-reviewed-v1")
+    with pytest.raises(KnowledgeManifestError, match="lowercase hyphenated"):
+        load_knowledge_bundle(directory, bundle_id="../manifest")
+
+
 def test_manifest_order_changes_version_and_prompt_order(tmp_path: Path) -> None:
     directory = copy_knowledge(tmp_path)
     original = load_knowledge_bundle(directory)

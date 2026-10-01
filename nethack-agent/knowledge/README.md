@@ -6,21 +6,34 @@ which serves coding agents.
 
 ## Reviewed bundle
 
-`manifest.json` is the only runtime entry point. It allowlists cards in prompt
-order and pins each file's SHA-256. Files not listed there, including this
-README, never enter a prompt.
+`manifest.json` is the unchanged default runtime entry point
+(`staircase-reviewed-v3`). `manifest.survival-reviewed-v1.json` is an
+explicitly selectable, *not yet active* successor: pass
+`bundle_id=\"survival-reviewed-v1\"` to `load_knowledge_bundle(directory, ...)`.
+It reuses the staircase and exploration cards, adds the two reviewed survival
+cards, and omits `safe-interaction.md` to remain within the existing 6,000
+character/1,500 estimated-token budget. Prompt and action safety remain the
+deterministic gate's responsibility; switching bundles requires the later new
+policy and its regression evaluation. Each manifest allowlists cards in prompt
+order and pins SHA-256; files not listed there, including this README, never
+enter a prompt.
 
 | Card | Question answered | Sources |
 | --- | --- | --- |
 | `stairs-traversal.md` | How do I recognize, reach, and use staircases, and what can the display not tell me? | [Staircase](https://nethackwiki.com/wiki/Staircase), [Command](https://nethackwiki.com/wiki/Command), [Gnomish Mines](https://nethackwiki.com/wiki/Gnomish_Mines), [Sokoban](https://nethackwiki.com/wiki/Sokoban) |
 | `exploration-map.md` | How should I read the ASCII map and explore conservatively? | [Dungeon feature](https://nethackwiki.com/wiki/Dungeon_feature), [Movement](https://nethackwiki.com/wiki/Movement), [Command](https://nethackwiki.com/wiki/Command) |
 | `safe-interaction.md` | What basic monster, door, and prompt facts prevent risky improvisation? | [Melee](https://nethackwiki.com/wiki/Melee), [Movement](https://nethackwiki.com/wiki/Movement), [Door](https://nethackwiki.com/wiki/Door), [Command](https://nethackwiki.com/wiki/Command) |
+| `prayer-hunger.md` | When does hunger become urgent, and when is prayer plausibly safe rather than guaranteed? | [Nutrition](https://nethackwiki.com/wiki/Nutrition), [Food ration](https://nethackwiki.com/wiki/Food_ration), [Prayer timeout](https://nethackwiki.com/wiki/Prayer_timeout), [Prayer](https://nethackwiki.com/wiki/Prayer) |
+| `safe-corpses.md` | Which observed fresh corpses may an unpolymorphed dwarven Valkyrie consider, and which must never be eaten? | [Corpse](https://nethackwiki.com/wiki/Corpse), [Cannibalism](https://nethackwiki.com/wiki/Cannibalism), [Lycanthropy](https://nethackwiki.com/wiki/Lycanthropy), [Lichen](https://nethackwiki.com/wiki/Lichen), [Newt](https://nethackwiki.com/wiki/Newt), [Sewer rat](https://nethackwiki.com/wiki/Sewer_rat), [Giant rat](https://nethackwiki.com/wiki/Giant_rat), [Gecko](https://nethackwiki.com/wiki/Gecko) |
 
-Facts were extracted on 2026-09-27 (and for `stairs-traversal.md`, which
-replaced the milestone `staircase-goal.md` card in bundle
-`staircase-reviewed-v3`, on 2026-09-28) from the local NetHackWiki current-page dump
-(`docs/external/nethack-wiki-xml-dump/nethackwiki_current.xml`) with the
-repository wiki skill. The raw dump is neither committed nor read at runtime.
+The original facts were extracted on 2026-09-27 (the
+`stairs-traversal.md` replacement on 2026-09-28). The new survival cards were
+reviewed on 2026-10-01 from the local NetHackWiki current-page dump
+(`docs/external/nethack-wiki-xml-dump/nethackwiki_current.xml`); every factual
+claim cites a page and the page's dump revision date. The cards' metadata and
+[note 0024](../../docs/notes/0024-reviewed-survival-knowledge.md) record
+revision timestamps, version caveats, and excluded candidates. The raw dump is
+neither committed nor read at runtime.
 
 ## Card format
 
@@ -52,8 +65,9 @@ the card and the run records the bundle version.
 2. Check version tags and source references; record uncertainty explicitly.
 3. Paraphrase only necessary actionable facts. Do not copy large passages,
    bulk-convert wiki pages, or add model-generated claims without review.
-4. Update the card's SHA-256 in `manifest.json`; when a card set changes
-   semantically, also bump `bundle_id`.
+4. Update the card's SHA-256 in the selected manifest; when a card set changes
+   semantically, create or bump its `bundle_id` without mutating existing
+   report/suite pins.
 5. Run `uv run pytest -q tests/test_knowledge.py` from `nethack-agent/`.
 
 The loader enforces the manifest's `max_context_characters` (at most 6,000) and

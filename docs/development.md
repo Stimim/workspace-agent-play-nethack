@@ -631,15 +631,23 @@ Do not put the raw dump into a model prompt. Extract a relevant page, verify the
 
 ### Reviewed runtime knowledge
 
-`nethack-agent/knowledge/manifest.json` allowlists cards in prompt order and
-pins each card's SHA-256. After a reviewed card edit, recompute its hash, update
-the manifest, and bump `bundle_id` for a semantic card-set change:
+`nethack-agent/knowledge/manifest.json` is still the active
+`staircase-reviewed-v3` bundle. It allowlists cards in prompt order and pins
+each card's SHA-256. The separate
+`manifest.survival-reviewed-v1.json` selects reviewed hunger/prayer and
+conservative corpse cards without changing the current policy or any suite
+pin. The bundle id names its new survival scope; explicit selection requires
+`load_knowledge_bundle(Path(\"knowledge\"), bundle_id=\"survival-reviewed-v1\")`.
+The selected context is 5,917 characters / 1,480 estimated tokens; it omits
+the older `safe-interaction` card to stay below the existing 6,000 / 1,500
+budget. Card edits require updating the selected manifest's hash and bumping
+that bundle id for semantic changes (do not mutate committed-report pins):
 
 ```bash
 cd nethack-agent
-sha256sum knowledge/stairs-traversal.md
+sha256sum knowledge/prayer-hunger.md knowledge/safe-corpses.md
 uv run pytest -q tests/test_knowledge.py
-uv run python -c 'from nethack_agent.knowledge import load_default_knowledge_bundle as l; b=l(); print(b.version, b.character_count, b.estimated_tokens)'
+uv run python -c 'from pathlib import Path; from nethack_agent.knowledge import load_knowledge_bundle as l; b=l(Path(\"knowledge\"), bundle_id=\"survival-reviewed-v1\"); print(b.version, b.character_count, b.estimated_tokens)'
 ```
 
 The service loads and validates the bundle once at startup, then records its
@@ -647,6 +655,10 @@ content-derived version on every run. Ollama skill and fallback-action prompts
 include only its bounded facts and non-goals. Card metadata, the raw dump, and
 unlisted files are not injected. See `nethack-agent/knowledge/README.md` for the
 card schema, sources, and CC BY-SA 3.0 attribution.
+
+The default remains fixed until a later policy version explicitly adopts the
+survival bundle. Source revisions and the corrected <=19-turn corpse age rule
+are reviewed in [note 0024](notes/0024-reviewed-survival-knowledge.md).
 
 ## Dependency policy
 

@@ -94,9 +94,18 @@ def load_default_knowledge_bundle() -> KnowledgeBundle:
     )
 
 
-def load_knowledge_bundle(directory: Path) -> KnowledgeBundle:
+def load_knowledge_bundle(
+    directory: Path, *, bundle_id: str | None = None
+) -> KnowledgeBundle:
     root = directory.expanduser().resolve()
-    manifest_path = root / MANIFEST_NAME
+    try:
+        requested = (
+            None if bundle_id is None else _identifier(bundle_id, "knowledge bundle_id")
+        )
+    except ContractError as error:
+        raise KnowledgeManifestError(str(error)) from error
+    manifest_name = MANIFEST_NAME if requested is None else f"manifest.{requested}.json"
+    manifest_path = root / manifest_name
     try:
         manifest_text = manifest_path.read_text(encoding="utf-8")
     except FileNotFoundError as error:
@@ -122,6 +131,10 @@ def load_knowledge_bundle(directory: Path) -> KnowledgeBundle:
                 f"knowledge manifest schema_version must be {MANIFEST_SCHEMA_VERSION}"
             )
         bundle_id = _identifier(manifest["bundle_id"], "knowledge bundle_id")
+        if requested is not None and bundle_id != requested:
+            raise ContractError(
+                f"knowledge manifest bundle_id must match requested {requested!r}"
+            )
         context_bound = integer_value(
             manifest["max_context_characters"],
             "knowledge manifest max_context_characters",

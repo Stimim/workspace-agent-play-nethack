@@ -399,16 +399,21 @@ Two audiences require separate material:
 
 The 188 MB wiki XML dump is source material, not a runtime prompt and not committed. Automatic extraction must not become trusted gameplay knowledge without review. Policy, prompts, skills, model identity, and knowledge remain fixed throughout an evaluation suite; there is no online self-modification.
 
-`knowledge.load_knowledge_bundle` reads only `knowledge/manifest.json` and the
-direct Markdown cards it allowlists, in manifest order. The manifest pins each
-card's SHA-256; the loader rejects missing, tampered, duplicate, escaping,
-oversized, or malformed cards and requires canonical NetHackWiki sources,
-retrieval date, reviewed dump path, version applicability, uncertainty, and
-CC BY-SA 3.0 attribution. It renders only facts and non-goals, rejects context
-above the manifest bound (at most 6,000 characters) or 1,500 estimated tokens,
-and derives `<bundle_id>+sha256:<digest>` from the canonical manifest plus exact
+`knowledge.load_default_knowledge_bundle()` still selects only
+`knowledge/manifest.json` (`staircase-reviewed-v3`). A named
+`knowledge.load_knowledge_bundle(directory, bundle_id=\"survival-reviewed-v1\")`
+selects its own allowlisted `manifest.survival-reviewed-v1.json` without
+switching the current policy, service default, or any committed suite pin.
+Each manifest pins direct Markdown cards in prompt order by SHA-256; the
+loader rejects missing, tampered, duplicate, escaping, oversized, or
+malformed cards and requires canonical NetHackWiki sources, retrieval date,
+reviewed dump path, version applicability, uncertainty, and CC BY-SA 3.0
+attribution. It renders only facts and non-goals, rejects context above the
+manifest bound (at most 6,000 characters) or 1,500 estimated tokens, and
+derives `<bundle_id>+sha256:<digest>` from the canonical manifest plus exact
 card bytes. There is no runtime network access, raw-dump access, or dynamic
-retrieval. `RunManager` loads one bundle at service construction and records
+retrieval.
+`RunManager` loads one bundle at service construction and records
 its version in every run; packaged wheels include the same directory. Explicit
 scripted development runs record the service's bundle version for comparable
 metadata but do not consume its prompt context.
@@ -424,6 +429,17 @@ states no stand-or-use policy: the goal-derived prompt text says whether the
 current goal stands on or uses a staircase, and model fallbacks are never
 offered `<` or `>`. The earlier `staircase-reviewed-v1` and `-v2` bundles
 remain the knowledge of the accepted milestone 1 reports.
+
+The new **not yet active** `survival-reviewed-v1` bundle retains staircase
+and exploration guidance, and adds cited prayer/hunger and conservative
+fresh-corpse cards; `safe-interaction` remains in the default bundle but is
+omitted from the named one to meet the fixed context budget. Its verified
+context is 5,917 characters / 1,480 estimated tokens. An observed kill on
+the corpse's cell within 19 game turns is required for ordinary low-risk
+corpses; uncertainty about curse, age, identity, or prayer timeout is never
+converted into an asserted safe action. Gate/skill adoption belongs to a
+later policy version, not this review
+([note 0024](docs/notes/0024-reviewed-survival-knowledge.md)).
 
 ### Persistence and replay
 

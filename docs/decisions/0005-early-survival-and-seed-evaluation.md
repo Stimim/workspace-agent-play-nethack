@@ -159,14 +159,21 @@ permanent test that uses it, if any. Initial entries:
 
 ### 6. Corpse eating
 
-- **Allow-list:** a reviewed, cited knowledge card lists corpses safe for a
-  dwarven Valkyrie. Candidates, each to be verified on its own wiki page: newt,
-  jackal, coyote, fox, sewer rat, giant rat, gecko, grid bug, and lichen. Every
-  harmful class in the facts table is excluded.
+- **Allow-list:** the reviewed card considers only identified lichen, newt,
+  sewer rat, giant rat, or gecko corpses for a normal dwarven Valkyrie with
+  observed kill and freshness evidence. Grid bugs leave no corpse; jackal,
+  coyote, and fox are deliberately omitted because eating them can incur
+  cannibalism while infected with werejackal lycanthropy, which is not reliably
+  ruled out by their names. The remaining harmful classes are excluded
+  ([note 0024](../notes/0024-reviewed-survival-knowledge.md)).
 - **Freshness:** only a corpse on the cell of a monster the hero was observed
-  killing, at most 30 turns earlier. Then age / 10 is at most 3, so rottenness
-  stays below 4 when uncursed and below 6 even if cursed: never tainted and
-  never old. The remaining 1/7 rotten-food chance is accepted and recorded.
+  killing, at most 19 game turns earlier. Rotten-age calculations divide age
+  by a random integer from 10 to 29 and add 2 if cursed; at age 19 or less,
+  this remains below 4 even with unknown BUC, avoiding the \"old\" and tainted
+  age thresholds. The earlier proposed 30-turn limit did not account for
+  cursed corpses reaching the \"old\" threshold. A separate 1/7 rotten-food
+  chance remains for most ordinary corpses and is accepted and recorded
+  ([note 0024](../notes/0024-reviewed-survival-knowledge.md)).
 - **Trigger:** whenever the hero is not Satiated. Choking needs a meal started
   while Satiated, so this is safe, and it saves rations. Rations are eaten only
   when Hungry or worse with no eligible corpse; prayer covers Weak.
