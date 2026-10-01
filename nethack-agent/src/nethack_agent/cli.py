@@ -164,6 +164,16 @@ def _positive_int(value: str) -> int:
     return parsed
 
 
+def _nonnegative_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("must be a nonnegative integer") from error
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be a nonnegative integer")
+    return parsed
+
+
 def _port(value: str) -> int:
     parsed = int(value)
     if not 1 <= parsed <= 65_535:
@@ -293,6 +303,16 @@ def _build_parser() -> argparse.ArgumentParser:
         "--seeds",
         type=_seed_list,
         help="comma-separated execution order; a subset yields a partial report",
+    )
+    eval_run_parser.add_argument(
+        "--draw-seed",
+        type=_nonnegative_int,
+        help="reproduce a fresh_sample seed draw (default: random at run start)",
+    )
+    eval_run_parser.add_argument(
+        "--compare-report",
+        type=Path,
+        help="prior report of the same suite for a paired baseline comparison",
     )
     eval_run_parser.add_argument(
         "--progress-interval", type=_positive_float, default=30.0
@@ -450,6 +470,8 @@ def _run_evaluation_command(arguments: argparse.Namespace) -> int:
             data_directory=arguments.data_dir,
             report_directory=arguments.report_dir or arguments.data_dir / "reports",
             seeds=arguments.seeds,
+            draw_seed=arguments.draw_seed,
+            compare_report=arguments.compare_report,
             development_scripted_model=arguments.development_scripted_model,
             progress_interval_seconds=arguments.progress_interval,
         )
@@ -500,6 +522,28 @@ def _run_evaluation_command(arguments: argparse.Namespace) -> int:
         )
         for reason in acceptance.reasons:
             print(f"  - {reason}")
+        if suite.schema_version == 3:
+            baseline = report["baseline"]
+            fresh = report["fresh"]
+            print(f"  baseline: {'PASS' if baseline['passed'] else 'FAIL'}")
+            if fresh is not None:
+                fresh_status = "PASS" if fresh["acceptance"]["passed"] else "FAIL"
+                print(
+                    f"  fresh sample: {fresh_status} "
+                    f"({fresh['successes']}/{fresh['sample_size']})"
+                )
+            comparison = report["comparison"]
+            if comparison is not None:
+                print("  paired baseline diff:")
+                for entry in comparison["entries"]:
+                    print(
+                        f"    {entry['entry_id']} seed {entry['seed']}: "
+                        f"{entry['prior_outcome'] or '-'} "
+                        f"({'yes' if entry['prior_successful'] else 'no'}) -> "
+                        f"{entry['current_outcome'] or '-'} "
+                        f"({'yes' if entry['current_successful'] else 'no'}); "
+                        f"{entry['change']}"
+                    )
     return 130 if run.interrupted else 0
 
 

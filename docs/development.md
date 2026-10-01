@@ -457,6 +457,76 @@ development runs have used, as sources with explicit seeds or inclusive ranges.
 `seed_catalog.used_seeds()` unions it with every committed suite's seeds and the
 catalog; fresh seed samples must exclude that set.
 
+### Suite schema 3: baselines and fresh samples
+
+Schema-3 suites can contain ordinary fixed-seed `cases`, a `baseline` with
+catalog `entry_ids`, a `fresh_sample`, or a combination. Baseline entries are
+resolved from `representative-seeds.json` beside the suite; each retains its
+catalog task, seed, cap, and `must_pass`/`known_failure` expectation. The
+catalog's policy pin must match the suite, and its content hash is recorded and
+checked at the end. For example, a development-only fixture can use:
+
+```json
+{
+  "schema_version": 3,
+  "suite_id": "small-fresh-fixture",
+  "character": "val-dwa-law",
+  "policy_version": "hierarchical-task-specialists-v1",
+  "knowledge_bundle_id": "staircase-reviewed-v3",
+  "seed_selection": "Fixture: catalog anchor plus unused sample.",
+  "step_cap_rationale": "Four-step fresh runs; catalog baseline keeps its cap.",
+  "baseline": {"entry_ids": ["staircase-anchor-6"]},
+  "fresh_sample": {
+    "case_id": "fresh-staircase",
+    "task": {
+      "environment": "NetHackStaircase-v0",
+      "action_profile": "nle-task-actions",
+      "objective": {
+        "legs": [
+          {"kind": "stand_on_stairs", "target": {
+            "direction": "down", "connection": "any", "dungeon_number": null
+          }}
+        ]
+      }
+    },
+    "max_episode_steps": 4,
+    "count": 2,
+    "range": [1000000, 2147483647],
+    "acceptance": {"min_success_rate": 0.5}
+  },
+  "acceptance": {
+    "max_invalid_actions": 0,
+    "max_gate_rejections": 0,
+    "require_complete_records": true
+  }
+}
+```
+
+Run with `uv run nethack-agent eval run --suite /tmp/small-fresh-fixture.json
+--data-dir /tmp/nh-fresh --development-scripted-model --draw-seed 29`; keep
+`representative-seeds.json` and `seed-ledger.json` beside the fixture.
+To compare baseline episodes, rerun with
+`--compare-report /tmp/nh-fresh/reports/<first-report>.json`. The second draw
+excludes the first report's fresh seeds even with the same draw seed. The
+previous report must be schema 4 for the same suite *digest*; changing the
+fixture requires a new suite id rather than silently comparing different
+tasks. Before any episode the JSON and Markdown report pair records the draw
+seed, ordered drawn seeds, and the excluded-seed snapshot, so that seed draw
+can still be reconstructed after the ledger grows. `--seeds` cannot override
+a fresh sample.
+
+Report schema 4 separates catalog baseline acceptance (no `must_pass`
+regressions; report `known_failure` improvements/changes), fresh rate plus
+optional metric gates and a 95% Wilson interval, and suite-wide integrity.
+`--compare-report` adds the paired per-entry baseline outcome/success diff to
+both the Markdown report and ordinary CLI output. Fresh samples from distinct
+draws must be compared by rates/intervals, not as paired seeds. A scripted
+development report is never real-model milestone evidence; the real
+`descend-d5-v1` suite and run are later work. Historical report schemas 2-3
+continue rendering byte-for-byte
+([note 0022](notes/0022-suite-schema-3-fresh-samples.md)).
+
+
 Progress lines go to stderr every `--progress-interval` seconds (default 30).
 Each invocation reserves a new `<suite>-<UTC timestamp>.json` and `.md` pair in
 the report directory (default `DATA_DIR/reports`), rewrites that pair (mode

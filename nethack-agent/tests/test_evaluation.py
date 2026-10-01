@@ -1791,3 +1791,576 @@ def test_committed_task_baselines_fix_seeds_caps_and_metric_gates(
     assert suite.global_acceptance.max_invalid_actions == 0
     assert suite.global_acceptance.max_gate_rejections == 0
     assert suite.global_acceptance.require_complete_records
+
+
+def schema_3_suite(tmp_path: Path) -> EvaluationSuite:
+    catalog_directory = REPORT_DIRECTORY.parent
+    for name in ("representative-seeds.json", "seed-ledger.json"):
+        (tmp_path / name).write_bytes((catalog_directory / name).read_bytes())
+    payload = suite_2_payload()
+    payload["schema_version"] = 3
+    payload["policy_version"] = run_manager.POLICY_VERSION
+    payload["knowledge_bundle_id"] = "staircase-reviewed-v3"
+    payload.pop("cases")
+    payload["baseline"] = {
+        "entry_ids": ["staircase-anchor-6", "descend-d3-hidden-downstairs-701"]
+    }
+    payload["fresh_sample"] = {
+        "case_id": "fresh-staircase",
+        "task": STAIRCASE_TASK.to_json(),
+        "max_episode_steps": 300,
+        "count": 3,
+        "range": [1_000_000, 1_000_999],
+        "acceptance": {"min_success_rate": 0.5},
+    }
+    return load_suite(write_suite(tmp_path, payload))
+
+
+def test_schema_3_baseline_requires_catalog_policy_pin(tmp_path: Path) -> None:
+    suite = schema_3_suite(tmp_path)
+    assert suite.catalog_path is not None
+    catalog = json.loads(suite.catalog_path.read_text(encoding="utf-8"))
+    catalog["policy_version"] = "different-policy"
+    suite.catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
+
+    with pytest.raises(
+        SuiteValidationError, match="catalog policy_version.*does not match"
+    ):
+        load_suite(suite.path)
+
+
+def test_changed_baseline_catalog_fails_input_integrity_and_acceptance(
+    tmp_path: Path,
+) -> None:
+    suite = schema_3_suite(tmp_path)
+    payload = json.loads(suite.path.read_text(encoding="utf-8"))
+    payload.pop("fresh_sample")
+    suite = load_suite(write_suite(tmp_path, payload))
+    assert suite.catalog_path is not None
+    report = EvaluationReport(
+        suite=suite,
+        model_mode="ollama",
+        model="gemma4-nethack:latest",
+        policy_version=suite.policy_version,
+        knowledge_version=evaluation.load_default_knowledge_bundle().version,
+        ollama_num_ctx=8192,
+        requested_seeds=(6, 701),
+        data_directory=str(tmp_path),
+        started_at="2026-09-30T00:00:00+00:00",
+        status=ReportStatus.COMPLETE,
+        results=[
+            result(6, RunOutcome.TASK_SUCCESS, case_id="staircase-anchor-6"),
+            result(701, RunOutcome.DEATH, case_id="descend-d3-hidden-downstairs-701"),
+        ],
+    )
+    assert evaluation._inputs_unchanged(report)
+    assert report.acceptance().passed
+    catalog_record = report.to_json()["baseline"]["catalog"]
+    assert catalog_record["path"] == str(suite.catalog_path)
+    assert catalog_record["sha256"] == suite.catalog_sha256
+
+    catalog = json.loads(suite.catalog_path.read_text(encoding="utf-8"))
+    catalog["entries"][0]["represents"] = "Changed during the evaluation run."
+    suite.catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
+    report.inputs_unchanged = evaluation._inputs_unchanged(report)
+
+    assert report.inputs_unchanged is False
+    assert report.acceptance().checks["inputs_unchanged"] is False
+    assert not report.acceptance().passed
+    assert "catalog" in render_report_markdown(report.to_json()).lower()
+
+
+@pytest.mark.parametrize(
+    ("section", "key", "value", "message"),
+    [
+        ("suite", "unexpected", True, "unexpected"),
+        ("baseline", "unknown", True, "unknown"),
+        ("fresh_sample", "unknown", True, "unknown"),
+        ("fresh_sample", "range", [8, 7], "reversed"),
+        ("fresh_sample", "range", [1, 2, 3], "two bounds"),
+        ("fresh_sample", "count", 1001, "available range"),
+        ("fresh_sample", "count", 0, "at least 1"),
+        ("fresh_sample", "count", True, "integer"),
+        ("fresh_sample", "range", [1, True], "integer"),
+        ("fresh_acceptance", "min_success_rate", 1.01, r"\[0, 1\]"),
+        ("fresh_acceptance", "min_success_rate", -0.01, r"\[0, 1\]"),
+        ("fresh_acceptance", "min_success_rate", True, "number"),
+        ("fresh_acceptance", "metric_thresholds", [], "must not be empty"),
+        ("baseline", "entry_ids", ["missing-entry"], "unknown catalog entry_id"),
+        (
+            "baseline",
+            "entry_ids",
+            ["staircase-anchor-6", "staircase-anchor-6"],
+            "unique",
+        ),
+        ("fresh_sample", "case_id", "staircase-anchor-6", "unique across"),
+    ],
+)
+def test_schema_3_rejects_invalid_blocks(
+    tmp_path: Path, section: str, key: str, value: object, message: str
+) -> None:
+    suite = schema_3_suite(tmp_path)
+    payload = json.loads(suite.path.read_text(encoding="utf-8"))
+    target = (
+        payload["fresh_sample"]["acceptance"]
+        if section == "fresh_acceptance"
+        else payload[section]
+        if section != "suite"
+        else payload
+    )
+    target[key] = value
+    with pytest.raises(SuiteValidationError, match=message):
+        load_suite(write_suite(tmp_path, payload))
+
+
+def test_schema_3_cases_are_optional_but_all_case_ids_are_unique(
+    tmp_path: Path,
+) -> None:
+    suite = schema_3_suite(tmp_path)
+    payload = json.loads(suite.path.read_text(encoding="utf-8"))
+    payload["cases"] = [
+        {
+            "case_id": "regression",
+            "task": STAIRCASE_TASK.to_json(),
+            "seeds": [3],
+            "max_episode_steps": 300,
+            "acceptance": {"min_successes": 1, "required_success_seeds": []},
+        }
+    ]
+    parsed = load_suite(write_suite(tmp_path, payload))
+    assert [case.case_id for case in parsed.cases] == [
+        "regression",
+        "staircase-anchor-6",
+        "descend-d3-hidden-downstairs-701",
+    ]
+    payload["cases"][0]["case_id"] = "staircase-anchor-6"
+    with pytest.raises(SuiteValidationError, match="unique across"):
+        load_suite(write_suite(tmp_path, payload))
+    payload.pop("cases")
+    payload.pop("baseline")
+    payload.pop("fresh_sample")
+    with pytest.raises(
+        SuiteValidationError, match="requires cases, baseline, or fresh_sample"
+    ):
+        load_suite(write_suite(tmp_path, payload))
+
+
+def test_fresh_draw_is_deterministic_and_excludes_ledger_and_prior_reports(
+    tmp_path: Path,
+) -> None:
+    suite = schema_3_suite(tmp_path)
+    payload = json.loads(suite.path.read_text(encoding="utf-8"))
+    payload["fresh_sample"]["range"] = [1, 1000]
+    suite = load_suite(write_suite(tmp_path, payload))
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    (reports / "earlier.json").write_text(
+        json.dumps(
+            {
+                "report_schema_version": 4,
+                "draw_provenance": evaluation.DrawProvenance(
+                    1,
+                    (997, 1000),
+                    (),
+                    evaluation._draw_available_seeds((997, 1000), (), 1, 4),
+                ).to_json(),
+            }
+        ),
+        encoding="utf-8",
+    )
+    first, excluded = evaluation.draw_fresh_seeds(suite, 7)
+    second, _ = evaluation.draw_fresh_seeds(suite, 7)
+    assert first == second
+    assert excluded > 4
+    assert not set(first) & {6, 701, 997, 998, 999, 1000}
+    payload["fresh_sample"]["range"] = [997, 1000]
+    suite = load_suite(write_suite(tmp_path, payload))
+    with pytest.raises(EvaluationError, match="only 0 remain"):
+        evaluation.draw_fresh_seeds(suite, 7)
+
+
+def test_schema_3_rejects_explicit_seeds_and_mismatched_comparison_before_run(
+    tmp_path: Path,
+) -> None:
+    suite = schema_3_suite(tmp_path)
+    with pytest.raises(ValueError, match="--seeds cannot"):
+        EvaluationOptions(suite, tmp_path / "data", tmp_path / "out", seeds=(6,))
+    previous = tmp_path / "previous.json"
+    previous.write_text(
+        json.dumps({"report_schema_version": 4, "suite": {"suite_id": "another"}}),
+        encoding="utf-8",
+    )
+    with pytest.raises(EvaluationError, match="suite_id does not match"):
+        run_evaluation(
+            EvaluationOptions(
+                suite,
+                tmp_path / "data",
+                tmp_path / "out",
+                development_scripted_model=True,
+                compare_report=previous,
+            ),
+            progress=None,
+        )
+    assert not (tmp_path / "data").exists()
+
+
+@pytest.mark.parametrize(
+    ("must_outcome", "known_outcome", "known_changes", "problem", "passes", "status"),
+    [
+        (RunOutcome.TASK_SUCCESS, RunOutcome.DEATH, {}, {}, True, "pass"),
+        (RunOutcome.DEATH, RunOutcome.DEATH, {}, {}, False, "pass"),
+        (RunOutcome.TASK_SUCCESS, RunOutcome.TRUNCATED, {}, {}, True, "changed"),
+        (
+            RunOutcome.TASK_SUCCESS,
+            RunOutcome.OBJECTIVE_COMPLETE,
+            {"metrics": replace(EpisodeMetrics.empty(), objective_legs_completed=1)},
+            {},
+            True,
+            "improved",
+        ),
+        (
+            RunOutcome.TASK_SUCCESS,
+            RunOutcome.DEATH,
+            {},
+            {"integrity_problems": ("missing ttyrec",)},
+            False,
+            "fail",
+        ),
+        (
+            RunOutcome.TASK_SUCCESS,
+            RunOutcome.DEATH,
+            {},
+            {"invalid_actions": 1},
+            False,
+            "fail",
+        ),
+    ],
+)
+def test_schema_3_baseline_gate_reports_catalog_statuses(
+    tmp_path: Path,
+    must_outcome: RunOutcome,
+    known_outcome: RunOutcome,
+    known_changes: dict[str, object],
+    problem: dict[str, object],
+    passes: bool,
+    status: str,
+) -> None:
+    suite = schema_3_suite(tmp_path)
+    payload = json.loads(suite.path.read_text(encoding="utf-8"))
+    payload.pop("fresh_sample")
+    suite = load_suite(write_suite(tmp_path, payload))
+    results = [
+        result(6, must_outcome, case_id="staircase-anchor-6"),
+        result(
+            701,
+            known_outcome,
+            case_id="descend-d3-hidden-downstairs-701",
+            **(known_changes | problem),
+        ),
+    ]
+    report = EvaluationReport(
+        suite,
+        "ollama",
+        "gemma4-nethack:latest",
+        suite.policy_version,
+        "staircase-reviewed-v3+sha256:test",
+        8192,
+        (6, 701),
+        str(tmp_path),
+        "2026-09-30T00:00:00+00:00",
+        status=ReportStatus.COMPLETE,
+        results=results,
+    )
+    assert report.acceptance().checks["baseline:staircase-anchor-6"] is (
+        must_outcome is RunOutcome.TASK_SUCCESS
+    )
+    assert report.acceptance().checks["baseline:descend-d3-hidden-downstairs-701"] is (
+        status != "fail"
+    )
+    assert report.to_json()["baseline"]["entries"][1]["check"]["status"] == status
+    assert report.acceptance().passed is passes
+
+
+@pytest.mark.parametrize(
+    ("successes", "total", "bounds"),
+    [(5, 10, (23.7, 76.3)), (10, 20, (29.9, 70.1))],
+)
+def test_wilson_interval_for_fresh_sample(
+    successes: int, total: int, bounds: tuple[float, float]
+) -> None:
+    assert (
+        tuple(
+            round(percent * 100, 1)
+            for percent in evaluation._wilson_95(successes, total)
+        )
+        == bounds
+    )
+
+
+def test_schema_4_report_round_trips_with_paired_baseline_diff(tmp_path: Path) -> None:
+    suite = schema_3_suite(tmp_path)
+    fresh = suite.fresh_sample
+    assert fresh is not None
+    provenance_record = evaluation._fresh_draw(suite, 7)
+    seeds = provenance_record.drawn_seeds
+    fresh_case = evaluation.EvaluationCase(
+        fresh.case_id,
+        fresh.task,
+        seeds,
+        fresh.max_episode_steps,
+        evaluation.CaseAcceptance(0, (), fresh.acceptance.metric_thresholds),
+    )
+    suite = replace(suite, cases=suite.cases + (fresh_case,))
+    baseline = [
+        result(6, RunOutcome.TASK_SUCCESS, case_id="staircase-anchor-6"),
+        result(701, RunOutcome.DEATH, case_id="descend-d3-hidden-downstairs-701"),
+    ]
+    provenance = provenance_record
+    common = {
+        "suite": suite,
+        "model_mode": "ollama",
+        "model": "gemma4-nethack:latest",
+        "policy_version": suite.policy_version,
+        "knowledge_version": "staircase-reviewed-v3+sha256:test",
+        "ollama_num_ctx": 8192,
+        "requested_seeds": (6, 701, *seeds),
+        "data_directory": str(tmp_path),
+        "started_at": "2026-09-30T00:00:00+00:00",
+        "finished_at": "2026-09-30T00:01:00+00:00",
+        "status": ReportStatus.COMPLETE,
+        "draw_provenance": provenance,
+    }
+    previous = EvaluationReport(
+        **common,
+        results=[
+            *baseline,
+            *(result(seed, RunOutcome.DEATH, case_id=fresh.case_id) for seed in seeds),
+        ],
+    )
+    current = EvaluationReport(
+        **common,
+        results=[
+            baseline[0],
+            result(
+                701,
+                RunOutcome.OBJECTIVE_COMPLETE,
+                case_id="descend-d3-hidden-downstairs-701",
+                metrics=replace(EpisodeMetrics.empty(), objective_legs_completed=1),
+            ),
+            result(seeds[0], RunOutcome.TASK_SUCCESS, case_id=fresh.case_id),
+            result(seeds[1], RunOutcome.TASK_SUCCESS, case_id=fresh.case_id),
+            result(seeds[2], RunOutcome.DEATH, case_id=fresh.case_id),
+        ],
+        comparison_source=previous.to_json(),
+    )
+    stored = current.to_json()
+    assert stored["report_schema_version"] == 4
+    assert stored["fresh"]["successes"] == 2
+    assert stored["baseline"]["passed"] is True
+    assert stored["baseline"]["entries"][1]["check"]["status"] == "improved"
+    comparison = stored["comparison"]["entries"][1]
+    assert comparison["prior_outcome"] == "death"
+    assert comparison["current_outcome"] == "objective_complete"
+    markdown = current.to_markdown()
+    assert markdown == render_report_markdown(json.loads(json.dumps(stored)))
+    assert "## Paired baseline comparison" in markdown
+    assert "## Fresh sample `fresh-staircase`" in markdown
+
+
+def test_fresh_metric_gate_can_fail_despite_success_rate(tmp_path: Path) -> None:
+    suite = schema_3_suite(tmp_path)
+    payload = json.loads(suite.path.read_text(encoding="utf-8"))
+    payload.pop("baseline")
+    payload["fresh_sample"]["acceptance"]["metric_thresholds"] = [
+        {
+            "metric": "death",
+            "statistic": "sum",
+            "bound": {"comparison": "at_most", "value": 0},
+        }
+    ]
+    suite = load_suite(write_suite(tmp_path, payload))
+    fresh = suite.fresh_sample
+    assert fresh is not None
+    sample = replace(
+        suite,
+        cases=(
+            evaluation.EvaluationCase(
+                fresh.case_id,
+                fresh.task,
+                (1_000_101, 1_000_102, 1_000_103),
+                fresh.max_episode_steps,
+                evaluation.CaseAcceptance(0, (), fresh.acceptance.metric_thresholds),
+            ),
+        ),
+    )
+    results = [
+        result(1_000_101, RunOutcome.TASK_SUCCESS, case_id=fresh.case_id),
+        result(1_000_102, RunOutcome.TASK_SUCCESS, case_id=fresh.case_id),
+        result(1_000_103, RunOutcome.DEATH, case_id=fresh.case_id),
+    ]
+    acceptance = evaluate_acceptance(
+        sample, results, development_model=False, inputs_unchanged=True
+    )
+    assert acceptance.checks["fresh:min_success_rate"]
+    assert not acceptance.checks["fresh:death:sum:at_most"]
+    assert not acceptance.passed
+
+
+def test_draw_snapshot_reproduces_after_ledger_changes(tmp_path: Path) -> None:
+    from nethack_agent.seed_catalog import used_seeds
+
+    suite = schema_3_suite(tmp_path)
+    payload = json.loads(suite.path.read_text(encoding="utf-8"))
+    payload["fresh_sample"]["range"] = [1, 1000]
+    suite = load_suite(write_suite(tmp_path, payload))
+    draw = evaluation._fresh_draw(suite, 19)
+    assert set(draw.excluded_seeds) == used_seeds(tmp_path) & set(range(1, 1001))
+    assert not set(draw.drawn_seeds) & used_seeds(tmp_path)
+    ledger_path = tmp_path / "seed-ledger.json"
+    ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    ledger["entries"].append(
+        {
+            "source": "later-probe",
+            "seeds": [draw.drawn_seeds[0]],
+            "ranges": [],
+            "note": "Recorded after the first draw.",
+        }
+    )
+    ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+    assert evaluation.DrawProvenance.from_json(draw.to_json()) == draw
+    assert draw.drawn_seeds[0] not in evaluation._fresh_draw(suite, 19).drawn_seeds
+    changed = draw.to_json()
+    changed["drawn_seeds"][0] = draw.excluded_seeds[0]
+    with pytest.raises(ContractError, match="do not reproduce"):
+        evaluation.DrawProvenance.from_json(changed)
+
+
+def test_fresh_draw_is_persisted_before_first_episode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    suite = schema_3_suite(tmp_path)
+    payload = json.loads(suite.path.read_text(encoding="utf-8"))
+    payload.pop("baseline")
+    payload["fresh_sample"]["count"] = 2
+    suite = load_suite(write_suite(tmp_path, payload))
+    report_directory = tmp_path / "out"
+    observed: list[int] = []
+
+    def inspect_creation(self: RunManager, *, seed: int, **_kwargs: object) -> None:
+        paths = list(report_directory.glob("*.json"))
+        assert len(paths) == 1
+        recorded = json.loads(paths[0].read_text(encoding="utf-8"))
+        provenance = evaluation.DrawProvenance.from_json(recorded["draw_provenance"])
+        assert recorded["case_results"][0]["results"] or not observed
+        assert seed == provenance.drawn_seeds[len(observed)]
+        assert recorded["requested_cases"] == [
+            {
+                "case_id": suite.fresh_sample.case_id,
+                "seeds": list(provenance.drawn_seeds),
+            }
+        ]
+        observed.append(seed)
+        raise RuntimeError("stop before NLE reset")
+
+    monkeypatch.setattr(RunManager, "create_run", inspect_creation)
+    run = run_evaluation(
+        EvaluationOptions(
+            suite,
+            tmp_path / "data",
+            report_directory,
+            draw_seed=29,
+            development_scripted_model=True,
+        ),
+        progress=None,
+    )
+    assert tuple(observed) == run.report.draw_provenance.drawn_seeds
+    assert len(observed) == 2
+
+
+def test_baseline_regression_fails_while_fresh_sample_passes(tmp_path: Path) -> None:
+    suite = schema_3_suite(tmp_path)
+    draw = evaluation._fresh_draw(suite, 13)
+    fresh = suite.fresh_sample
+    assert fresh is not None
+    suite = replace(
+        suite,
+        cases=suite.cases
+        + (
+            evaluation.EvaluationCase(
+                fresh.case_id,
+                fresh.task,
+                draw.drawn_seeds,
+                fresh.max_episode_steps,
+                evaluation.CaseAcceptance(0, ()),
+            ),
+        ),
+    )
+    results = [
+        result(6, RunOutcome.DEATH, case_id="staircase-anchor-6"),
+        result(701, RunOutcome.TRUNCATED, case_id="descend-d3-hidden-downstairs-701"),
+        *(
+            result(seed, RunOutcome.TASK_SUCCESS, case_id=fresh.case_id)
+            for seed in draw.drawn_seeds
+        ),
+    ]
+    previous = EvaluationReport(
+        suite,
+        "ollama",
+        "gemma4-nethack:latest",
+        suite.policy_version,
+        "staircase-reviewed-v3+sha256:test",
+        8192,
+        (6, 701, *draw.drawn_seeds),
+        str(tmp_path),
+        "2026-09-30T00:00:00+00:00",
+        results=[
+            result(6, RunOutcome.TASK_SUCCESS, case_id="staircase-anchor-6"),
+            result(701, RunOutcome.DEATH, case_id="descend-d3-hidden-downstairs-701"),
+        ],
+        draw_provenance=draw,
+    )
+    report = replace(previous, results=results, comparison_source=previous.to_json())
+    acceptance = report.acceptance()
+    assert not acceptance.checks["baseline:staircase-anchor-6"]
+    assert acceptance.checks["baseline:descend-d3-hidden-downstairs-701"]
+    assert acceptance.checks["fresh:min_success_rate"]
+    assert not acceptance.passed
+    comparison = report.to_json()["comparison"]["entries"]
+    assert comparison[0]["change"] == "regressed"
+    assert comparison[1]["change"] == "outcome_changed"
+
+
+def test_baseline_does_not_accept_another_seed_under_its_case_id(
+    tmp_path: Path,
+) -> None:
+    suite = schema_3_suite(tmp_path)
+    payload = json.loads(suite.path.read_text(encoding="utf-8"))
+    payload.pop("fresh_sample")
+    suite = load_suite(write_suite(tmp_path, payload))
+    observed = [
+        result(7, RunOutcome.TASK_SUCCESS, case_id="staircase-anchor-6"),
+        result(701, RunOutcome.DEATH, case_id="descend-d3-hidden-downstairs-701"),
+    ]
+    report = EvaluationReport(
+        suite,
+        "ollama",
+        "gemma4-nethack:latest",
+        suite.policy_version,
+        "staircase-reviewed-v3+sha256:test",
+        8192,
+        (6, 701),
+        str(tmp_path),
+        "2026-09-30T00:00:00+00:00",
+        results=observed,
+    )
+    assert not report.acceptance().checks["baseline:staircase-anchor-6"]
+    assert not report.to_json()["baseline"]["passed"]
+
+
+def test_all_committed_reports_render_without_changes() -> None:
+    reports = sorted(REPORT_DIRECTORY.glob("*.json"))
+    assert reports
+    for path in reports:
+        original = path.with_suffix(".md").read_bytes()
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        assert render_report_markdown(payload).encode("utf-8") == original, path

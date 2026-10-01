@@ -774,6 +774,27 @@ expectation; integrity problems, invalid actions, gate rejections, and errors
 always fail. The committed suites, the catalog, and the ledger together define
 the seeds that a fresh sample must exclude.
 
+Suite schema 3 pins the same policy and knowledge, but adds selected
+single-seed baseline cases loaded from the reviewed catalog and a `fresh_sample`
+case whose count, inclusive range, task, cap, minimum success rate, and optional
+metric gates are fixed in the suite. Ordinary fixed-seed cases are still
+supported. The run draws without replacement from seeds outside
+`used_seeds()` and all earlier schema-4 report draws found in the evaluation
+or selected report directory. Before creating the first episode, it persists
+the draw seed, range, sorted excluded-seed snapshot, and drawn seed order to
+the newly reserved report pair. The snapshot lets a reader reproduce the draw
+even after the ledger changes; `--draw-seed` chooses the draw, while `--seeds`
+cannot override a fresh sample. A prior report of the *same suite digest* may
+be supplied with `--compare-report` for per-entry baseline outcome/success
+diffs. Catalog `must_pass` checks and `known_failure` changes, fresh success
+rate with its Wilson 95% interval, optional fresh metric gates, and the
+suite-wide integrity checks are separate report sections. Report schema 4
+keeps this evidence in JSON and rendered Markdown; schemas 1-2 and historical
+reports retain their existing readers and rendering. No milestone-2 survival
+suite or real-model run is created by the schema change
+([note 0022](docs/notes/0022-suite-schema-3-fresh-samples.md)).
+
+
 `nethack-agent eval run` drives every case/seed pair in-process through one
 `RunManager` with `create_run(auto_start=True)`: the same coordinator, worker
 loop, action gate, SQLite store, and ttyrec capture as the HTTP service, without

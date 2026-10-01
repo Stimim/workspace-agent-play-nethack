@@ -303,17 +303,21 @@ class SeedLedger:
         )
 
 
-def _load_object(path: Path, name: str) -> dict[str, object]:
+def _load_object(
+    path: Path, name: str, *, content: bytes | None = None
+) -> dict[str, object]:
     try:
-        return load_json_object(path.read_bytes().decode("utf-8"), name)
+        return load_json_object(
+            (path.read_bytes() if content is None else content).decode("utf-8"), name
+        )
     except (OSError, UnicodeDecodeError) as error:
         raise CatalogError(f"{name} {path} cannot be read: {error}") from error
     except ContractError as error:
         raise CatalogError(f"invalid {name} {path}: {error}") from error
 
 
-def load_catalog(path: Path) -> SeedCatalog:
-    payload = _load_object(path, "seed catalog")
+def load_catalog(path: Path, *, content: bytes | None = None) -> SeedCatalog:
+    payload = _load_object(path, "seed catalog", content=content)
     try:
         return SeedCatalog.from_json(payload)
     except ContractError as error:
@@ -483,6 +487,18 @@ def _check_entry(
             CatalogCheckStatus.FAIL,
             "no result",
         )
+    if result.seed != entry.seed:
+        return CatalogCheck(
+            entry.entry_id,
+            entry.seed,
+            entry.expectation,
+            entry.outcome,
+            result.outcome,
+            False,
+            False,
+            CatalogCheckStatus.FAIL,
+            f"result seed {result.seed} does not match catalog seed {entry.seed}",
+        )
     problems = list(result.integrity_problems)
     if result.invalid_actions:
         problems.append(f"{result.invalid_actions} invalid actions")
@@ -490,6 +506,8 @@ def _check_entry(
         problems.append(f"{result.gate_rejections} gate rejections")
     if result.error is not None:
         problems.append(f"error: {result.error}")
+    if result.ended_by == "interrupted":
+        problems.append("episode interrupted")
     successful = result.successful_for(suite.case(entry.entry_id))
     observed = result.outcome
     if problems:

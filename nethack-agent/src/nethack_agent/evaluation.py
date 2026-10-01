@@ -4,7 +4,9 @@ import hashlib
 import json
 import math
 import os
+import random
 import re
+import secrets
 import sys
 import tempfile
 import time
@@ -14,7 +16,7 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
-from typing import Final, TextIO
+from typing import TYPE_CHECKING, Final, TextIO
 
 from nle import nethack
 
@@ -67,7 +69,12 @@ from nethack_agent.traversal import (
     StairIdentityKind,
 )
 
+if TYPE_CHECKING:
+    from nethack_agent.seed_catalog import CatalogEntry
+
+
 SUITE_SCHEMA_VERSION: Final = 2
+FRESH_SUITE_SCHEMA_VERSION: Final = 3
 LEGACY_SUITE_SCHEMA_VERSION: Final = 1
 # Schema-1 suites (staircase-v1) were fixed for this policy. Later policies
 # change prompts and the model output contract (ADR 0004), so only a checkout
@@ -310,6 +317,163 @@ class EvaluationCase:
 
 
 @dataclass(frozen=True, slots=True)
+class FreshAcceptance:
+    min_success_rate: float
+    metric_thresholds: tuple[MetricThreshold, ...] = ()
+
+    def __post_init__(self) -> None:
+        if (
+            isinstance(self.min_success_rate, bool)
+            or not isinstance(self.min_success_rate, (int, float))
+            or not math.isfinite(self.min_success_rate)
+            or not 0 <= self.min_success_rate <= 1
+        ):
+            raise ContractError(
+                "fresh min_success_rate must be a finite number in [0, 1]"
+            )
+        if not isinstance(self.metric_thresholds, tuple) or not all(
+            isinstance(threshold, MetricThreshold)
+            for threshold in self.metric_thresholds
+        ):
+            raise ContractError("fresh metric_thresholds must contain MetricThreshold")
+        keys = [threshold.key for threshold in self.metric_thresholds]
+        if len(keys) != len(set(keys)):
+            raise ContractError("fresh metric_thresholds must be unique")
+
+    def to_json(self) -> dict[str, object]:
+        payload: dict[str, object] = {"min_success_rate": self.min_success_rate}
+        if self.metric_thresholds:
+            payload["metric_thresholds"] = [
+                threshold.to_json() for threshold in self.metric_thresholds
+            ]
+        return payload
+
+
+@dataclass(frozen=True, slots=True)
+class FreshSample:
+    case_id: str
+    task: TaskSpec
+    max_episode_steps: int
+    count: int
+    seed_range: tuple[int, int]
+    acceptance: FreshAcceptance
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.case_id, str) or not _IDENTIFIER.fullmatch(self.case_id):
+            raise ContractError("fresh case_id must be a kebab-case identifier")
+        if not isinstance(self.task, TaskSpec):
+            raise ContractError("fresh task must be a TaskSpec")
+        if (
+            type(self.max_episode_steps) is not int
+            or not 1 <= self.max_episode_steps <= 100_000
+        ):
+            raise ContractError("fresh max_episode_steps must be in [1, 100000]")
+        if type(self.count) is not int or self.count < 1:
+            raise ContractError("fresh count must be positive")
+        if (
+            not isinstance(self.seed_range, tuple)
+            or len(self.seed_range) != 2
+            or any(type(bound) is not int for bound in self.seed_range)
+            or not 1 <= self.seed_range[0] <= self.seed_range[1] <= 2**31 - 1
+        ):
+            raise ContractError("fresh range must contain ordered positive seed bounds")
+        if self.count > self.seed_range[1] - self.seed_range[0] + 1:
+            raise ContractError("fresh count exceeds available range")
+        if not isinstance(self.acceptance, FreshAcceptance):
+            raise ContractError("fresh acceptance must be FreshAcceptance")
+
+    def to_json(self) -> dict[str, object]:
+        return {
+            "case_id": self.case_id,
+            "task": self.task.to_json(),
+            "max_episode_steps": self.max_episode_steps,
+            "count": self.count,
+            "range": list(self.seed_range),
+            "acceptance": self.acceptance.to_json(),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class DrawProvenance:
+    draw_seed: int
+    seed_range: tuple[int, int]
+    excluded_seeds: tuple[int, ...]
+    drawn_seeds: tuple[int, ...]
+
+    def __post_init__(self) -> None:
+        if type(self.draw_seed) is not int or self.draw_seed < 0:
+            raise ContractError("draw_seed must be a nonnegative integer")
+        if (
+            not isinstance(self.seed_range, tuple)
+            or len(self.seed_range) != 2
+            or any(type(bound) is not int for bound in self.seed_range)
+            or not 1 <= self.seed_range[0] <= self.seed_range[1] <= 2**31 - 1
+        ):
+            raise ContractError("draw range must contain ordered positive seed bounds")
+        if (
+            not isinstance(self.excluded_seeds, tuple)
+            or (tuple(sorted(set(self.excluded_seeds))) != self.excluded_seeds)
+            or not all(
+                self.seed_range[0] <= seed <= self.seed_range[1] and type(seed) is int
+                for seed in self.excluded_seeds
+            )
+        ):
+            raise ContractError(
+                "draw excluded_seeds must be sorted unique in-range seeds"
+            )
+        if (
+            not isinstance(self.drawn_seeds, tuple)
+            or any(type(seed) is not int for seed in self.drawn_seeds)
+            or tuple(self.drawn_seeds)
+            != _draw_available_seeds(
+                self.seed_range,
+                self.excluded_seeds,
+                self.draw_seed,
+                len(self.drawn_seeds),
+            )
+        ):
+            raise ContractError(
+                "drawn_seeds do not reproduce from draw_seed and exclusions"
+            )
+
+    def to_json(self) -> dict[str, object]:
+        return {
+            "draw_seed": self.draw_seed,
+            "range": list(self.seed_range),
+            "exclusion_count": len(self.excluded_seeds),
+            "excluded_seeds": list(self.excluded_seeds),
+            "drawn_seeds": list(self.drawn_seeds),
+        }
+
+    @classmethod
+    def from_json(cls, value: object) -> DrawProvenance:
+        payload = object_value(value, "draw provenance", _DRAW_FIELDS)
+        bounds = array_value(payload["range"], "draw range")
+        excluded = array_value(payload["excluded_seeds"], "draw excluded_seeds")
+        drawn = array_value(payload["drawn_seeds"], "draw drawn_seeds")
+        provenance = cls(
+            draw_seed=integer_value(payload["draw_seed"], "draw_seed", minimum=0),
+            seed_range=tuple(
+                integer_value(bound, "draw range bound", minimum=1, maximum=2**31 - 1)
+                for bound in bounds
+            ),
+            excluded_seeds=tuple(
+                integer_value(seed, "draw excluded seed", minimum=1, maximum=2**31 - 1)
+                for seed in excluded
+            ),
+            drawn_seeds=tuple(
+                integer_value(seed, "draw seed", minimum=1, maximum=2**31 - 1)
+                for seed in drawn
+            ),
+        )
+        if integer_value(
+            payload["exclusion_count"], "draw exclusion_count", minimum=0
+        ) != len(excluded):
+            raise ContractError("draw exclusion_count differs from excluded_seeds")
+        return provenance
+
+
+@dataclass(frozen=True, slots=True)
 class EvaluationSuite:
     schema_version: int
     suite_id: str
@@ -322,6 +486,10 @@ class EvaluationSuite:
     global_acceptance: GlobalAcceptance
     path: Path
     sha256: str
+    baseline: tuple[CatalogEntry, ...] = ()
+    fresh_sample: FreshSample | None = None
+    catalog_path: Path | None = None
+    catalog_sha256: str | None = None
 
     @property
     def legacy(self) -> bool:
@@ -373,7 +541,13 @@ class EvaluationSuite:
                 "acceptance": self.acceptance.to_json(),
             }
         assert self.knowledge_bundle_id is not None
-        return {
+        excluded_case_ids = (
+            {entry.entry_id for entry in self.baseline}
+            | ({self.fresh_sample.case_id} if self.fresh_sample is not None else set())
+            if self.schema_version == FRESH_SUITE_SCHEMA_VERSION
+            else set()
+        )
+        payload: dict[str, object] = {
             "schema_version": self.schema_version,
             "suite_id": self.suite_id,
             "path": str(self.path),
@@ -383,9 +557,21 @@ class EvaluationSuite:
             "knowledge_bundle_id": self.knowledge_bundle_id,
             "seed_selection": self.seed_selection,
             "step_cap_rationale": self.step_cap_rationale,
-            "cases": [case.to_json() for case in self.cases],
+            "cases": [
+                case.to_json()
+                for case in self.cases
+                if case.case_id not in excluded_case_ids
+            ],
             "acceptance": self.global_acceptance.to_json(),
         }
+        if self.schema_version == FRESH_SUITE_SCHEMA_VERSION:
+            if self.baseline:
+                payload["baseline"] = {
+                    "entry_ids": [entry.entry_id for entry in self.baseline]
+                }
+            if self.fresh_sample is not None:
+                payload["fresh_sample"] = self.fresh_sample.to_json()
+        return payload
 
 
 def load_suite(path: Path) -> EvaluationSuite:
@@ -403,16 +589,19 @@ def load_suite(path: Path) -> EvaluationSuite:
         digest = hashlib.sha256(content).hexdigest()
         if schema_version == LEGACY_SUITE_SCHEMA_VERSION:
             return _parse_schema_1_suite(payload, path, digest)
-        if schema_version == SUITE_SCHEMA_VERSION:
+        if schema_version in (SUITE_SCHEMA_VERSION, FRESH_SUITE_SCHEMA_VERSION):
             if "environment" in payload or "seeds" in payload:
                 raise ContractError(
-                    "suite schema_version 2 requires cases rather than "
+                    f"suite schema_version {schema_version} requires cases rather than "
                     "schema-1 environment and seeds"
                 )
-            return _parse_schema_2_suite(payload, path, digest)
+            if schema_version == SUITE_SCHEMA_VERSION:
+                return _parse_schema_2_suite(payload, path, digest)
+            return _parse_schema_3_suite(payload, path, digest)
         raise ContractError(
             "suite schema_version must be "
-            f"{LEGACY_SUITE_SCHEMA_VERSION} or {SUITE_SCHEMA_VERSION}"
+            f"{LEGACY_SUITE_SCHEMA_VERSION}, {SUITE_SCHEMA_VERSION}, "
+            f"or {FRESH_SUITE_SCHEMA_VERSION}"
         )
     except (ContractError, UnicodeDecodeError) as error:
         raise SuiteValidationError(
@@ -553,6 +742,172 @@ def _parse_schema_2_suite(value: object, path: Path, digest: str) -> EvaluationS
         global_acceptance=_global_acceptance(payload["acceptance"], "suite acceptance"),
         path=path,
         sha256=digest,
+    )
+
+
+def _parse_schema_3_suite(value: object, path: Path, digest: str) -> EvaluationSuite:
+    from nethack_agent.seed_catalog import (
+        CATALOG_FILE_NAME,
+        MAX_SEED,
+        CatalogError,
+        load_catalog,
+    )
+
+    payload = object_value(
+        value,
+        "evaluation suite",
+        {
+            "schema_version",
+            "suite_id",
+            "character",
+            "policy_version",
+            "knowledge_bundle_id",
+            "seed_selection",
+            "step_cap_rationale",
+            "acceptance",
+        },
+        optional={"cases", "baseline", "fresh_sample"},
+    )
+    policy_version = _suite_identifier(
+        payload["policy_version"], "suite policy_version"
+    )
+    cases_payload = array_value(payload.get("cases", []), "suite cases")
+    if "cases" in payload and not cases_payload:
+        raise ContractError("suite cases must not be empty")
+    ordinary = tuple(
+        _parse_case(item, index) for index, item in enumerate(cases_payload)
+    )
+    baseline: tuple[CatalogEntry, ...] = ()
+    catalog_path: Path | None = None
+    catalog_sha256: str | None = None
+    if "baseline" in payload:
+        entry_payload = object_value(
+            payload["baseline"], "suite baseline", {"entry_ids"}
+        )
+        entry_ids = tuple(
+            _suite_identifier(item, "suite baseline entry_id")
+            for item in array_value(
+                entry_payload["entry_ids"], "suite baseline entry_ids"
+            )
+        )
+        if not entry_ids:
+            raise ContractError("suite baseline entry_ids must not be empty")
+        if len(entry_ids) != len(set(entry_ids)):
+            raise ContractError("suite baseline entry_ids must be unique")
+        catalog_path = path.parent / CATALOG_FILE_NAME
+        try:
+            content = catalog_path.read_bytes()
+            catalog = load_catalog(catalog_path, content=content)
+        except OSError as error:
+            raise ContractError(
+                f"seed catalog {catalog_path} cannot be read: {error}"
+            ) from error
+        except CatalogError as error:
+            raise ContractError(str(error)) from error
+        if catalog.policy_version != policy_version:
+            raise ContractError(
+                f"suite baseline catalog policy_version {catalog.policy_version} "
+                f"does not match suite policy_version {policy_version}"
+            )
+        catalog_sha256 = hashlib.sha256(content).hexdigest()
+        by_id = {entry.entry_id: entry for entry in catalog.entries}
+        unknown = sorted(set(entry_ids) - by_id.keys())
+        if unknown:
+            raise ContractError(f"suite baseline unknown catalog entry_id: {unknown}")
+        baseline = tuple(by_id[entry_id] for entry_id in entry_ids)
+    fresh: FreshSample | None = None
+    if "fresh_sample" in payload:
+        value = object_value(
+            payload["fresh_sample"],
+            "suite fresh_sample",
+            {"case_id", "task", "max_episode_steps", "count", "range", "acceptance"},
+        )
+        bounds = array_value(value["range"], "suite fresh_sample range")
+        if len(bounds) != 2:
+            raise ContractError("suite fresh_sample range must contain two bounds")
+        first, last = (
+            integer_value(
+                bound, "suite fresh_sample range bound", minimum=1, maximum=MAX_SEED
+            )
+            for bound in bounds
+        )
+        if first > last:
+            raise ContractError("suite fresh_sample range must not be reversed")
+        count = integer_value(value["count"], "suite fresh_sample count", minimum=1)
+        if count > last - first + 1:
+            raise ContractError("suite fresh_sample count exceeds available range")
+        acceptance_payload = object_value(
+            value["acceptance"],
+            "suite fresh_sample acceptance",
+            {"min_success_rate"},
+            optional={"metric_thresholds"},
+        )
+        rate = number_value(
+            acceptance_payload["min_success_rate"],
+            "suite fresh_sample min_success_rate",
+        )
+        if not 0 <= rate <= 1:
+            raise ContractError("suite fresh_sample min_success_rate must be in [0, 1]")
+        fresh = FreshSample(
+            case_id=_suite_identifier(value["case_id"], "suite fresh_sample case_id"),
+            task=TaskSpec.from_json(value["task"], "suite fresh_sample task"),
+            max_episode_steps=_step_cap(
+                value["max_episode_steps"], "suite fresh_sample"
+            ),
+            count=count,
+            seed_range=(first, last),
+            acceptance=FreshAcceptance(
+                min_success_rate=rate,
+                metric_thresholds=(
+                    _metric_thresholds(
+                        acceptance_payload["metric_thresholds"], "suite fresh_sample"
+                    )
+                    if "metric_thresholds" in acceptance_payload
+                    else ()
+                ),
+            ),
+        )
+    if not ordinary and not baseline and fresh is None:
+        raise ContractError("suite requires cases, baseline, or fresh_sample")
+    all_ids = [case.case_id for case in ordinary]
+    all_ids.extend(entry.entry_id for entry in baseline)
+    if fresh is not None:
+        all_ids.append(fresh.case_id)
+    if len(all_ids) != len(set(all_ids)):
+        raise ContractError("suite case_id values must be unique across sections")
+    character = string_value(payload["character"], "suite character")
+    if character != CHARACTER:
+        raise ContractError(f"suite character must be {CHARACTER}")
+    return EvaluationSuite(
+        schema_version=FRESH_SUITE_SCHEMA_VERSION,
+        suite_id=_suite_identifier(payload["suite_id"], "suite_id"),
+        character=character,
+        policy_version=policy_version,
+        knowledge_bundle_id=_suite_identifier(
+            payload["knowledge_bundle_id"], "suite knowledge_bundle_id"
+        ),
+        seed_selection=_suite_text(payload["seed_selection"], "suite seed_selection"),
+        step_cap_rationale=_suite_text(
+            payload["step_cap_rationale"], "suite step_cap_rationale"
+        ),
+        cases=ordinary
+        + tuple(
+            EvaluationCase(
+                entry.entry_id,
+                entry.task,
+                (entry.seed,),
+                entry.max_episode_steps,
+                CaseAcceptance(0, ()),
+            )
+            for entry in baseline
+        ),
+        global_acceptance=_global_acceptance(payload["acceptance"], "suite acceptance"),
+        path=path,
+        sha256=digest,
+        baseline=baseline,
+        fresh_sample=fresh,
+        catalog_path=catalog_path,
+        catalog_sha256=catalog_sha256,
     )
 
 
@@ -1755,6 +2110,180 @@ class AcceptanceResult:
         }
 
 
+def _wilson_95(successes: int, total: int) -> tuple[float, float]:
+    """Wilson score interval for a binomial success rate (z = 1.96)."""
+    if total == 0:
+        return (0.0, 1.0)
+    z = 1.959963984540054
+    rate = successes / total
+    denominator = 1 + z * z / total
+    center = (rate + z * z / (2 * total)) / denominator
+    margin = (
+        z
+        * math.sqrt(rate * (1 - rate) / total + z * z / (4 * total * total))
+        / denominator
+    )
+    return (max(0.0, center - margin), min(1.0, center + margin))
+
+
+def _schema_four_acceptance(
+    suite: EvaluationSuite,
+    results: Sequence[SeedResult],
+    *,
+    development_model: bool,
+    inputs_unchanged: bool,
+) -> AcceptanceResult:
+    """Evaluate ordinary, catalog-baseline, and sampled cases independently."""
+    from nethack_agent.seed_catalog import (
+        CatalogCheckStatus,
+        SeedCatalog,
+        check_catalog,
+    )
+
+    checks: dict[str, bool] = {}
+    reasons: list[str] = []
+    expected = {(case.case_id, seed) for case in suite.cases for seed in case.seeds}
+    evaluated = [(result.case_id, result.seed) for result in results]
+    complete = (
+        len(evaluated) == len(set(evaluated))
+        and set(evaluated) == expected
+        and all(result.ended_by != "interrupted" for result in results)
+    )
+    checks["all_seeds_evaluated"] = complete
+    if not complete:
+        reasons.append(
+            "suite incomplete; missing or interrupted case/seeds "
+            f"{sorted(expected - set(evaluated))}"
+        )
+
+    baseline_ids = {entry.entry_id for entry in suite.baseline}
+    fresh_id = suite.fresh_sample.case_id if suite.fresh_sample else None
+    for case in suite.cases:
+        if case.case_id in baseline_ids or case.case_id == fresh_id:
+            continue
+        case_results = [result for result in results if result.case_id == case.case_id]
+        succeeded = {
+            result.seed for result in case_results if result.successful_for(case)
+        }
+        enough = len(succeeded) >= case.acceptance.min_successes
+        checks[f"{case.case_id}:min_successes"] = enough
+        if not enough:
+            reasons.append(
+                f"case {case.case_id} has {len(succeeded)} successes; at least "
+                f"{case.acceptance.min_successes} required"
+            )
+        missing = [
+            seed
+            for seed in case.acceptance.required_success_seeds
+            if seed not in succeeded
+        ]
+        checks[f"{case.case_id}:required_success_seeds"] = not missing
+        if missing:
+            reasons.append(
+                f"case {case.case_id} required seeds did not succeed: {missing}"
+            )
+        for threshold, observed in _threshold_statistics(case, case_results):
+            passed = threshold.passes(observed)
+            checks[f"{case.case_id}:{threshold.check_name}"] = passed
+            if not passed:
+                observed_text = (
+                    "unavailable" if observed is None else _compact_number(observed)
+                )
+                reasons.append(
+                    f"case {case.case_id}: {threshold.metric.value} "
+                    f"{threshold.statistic.value} is "
+                    f"{observed_text}; "
+                    f"{threshold.bound_text} required"
+                )
+
+    if suite.baseline:
+        catalog = SeedCatalog(
+            policy_version=suite.policy_version, entries=suite.baseline
+        )
+        for check in check_catalog(catalog, suite, results):
+            passed = check.status is not CatalogCheckStatus.FAIL
+            checks[f"baseline:{check.entry_id}"] = passed
+            if not passed:
+                reasons.append(f"baseline {check.entry_id}: {check.detail}")
+    if suite.fresh_sample is not None:
+        fresh = suite.case(suite.fresh_sample.case_id)
+        sampled = [result for result in results if result.case_id == fresh.case_id]
+        successes = sum(result.successful_for(fresh) for result in sampled)
+        rate = successes / suite.fresh_sample.count
+        minimum = suite.fresh_sample.acceptance.min_success_rate
+        checks["fresh:min_success_rate"] = (
+            rate >= minimum
+            and len(sampled) == len(fresh.seeds)
+            and {result.seed for result in sampled} == set(fresh.seeds)
+        )
+        if not checks["fresh:min_success_rate"]:
+            reasons.append(
+                f"fresh sample success rate {rate:.6f} is below required {minimum:.6f}"
+            )
+        for threshold, observed in _threshold_statistics(fresh, sampled):
+            passed = threshold.passes(observed)
+            checks[f"fresh:{threshold.check_name}"] = passed
+            if not passed:
+                observed_text = (
+                    "unavailable" if observed is None else _compact_number(observed)
+                )
+                reasons.append(
+                    f"fresh sample: {threshold.metric.value} "
+                    f"{threshold.statistic.value} is "
+                    f"{observed_text}; "
+                    f"{threshold.bound_text} required"
+                )
+
+    criteria = suite.global_acceptance
+    invalid = sum(result.invalid_actions for result in results)
+    rejections = sum(result.gate_rejections for result in results)
+    incomplete = [
+        (result.case_id, result.seed) for result in results if not result.integrity_ok
+    ]
+    configurations = [result.configuration for result in results]
+    fixed = (
+        bool(configurations)
+        and all(configuration is not None for configuration in configurations)
+        and len(
+            {
+                configuration.shared
+                for configuration in configurations
+                if configuration is not None
+            }
+        )
+        == 1
+    )
+    checks.update(
+        {
+            "invalid_actions": invalid <= criteria.max_invalid_actions,
+            "gate_rejections": rejections <= criteria.max_gate_rejections,
+            "complete_records": not criteria.require_complete_records or not incomplete,
+            "fixed_configuration": fixed,
+            "inputs_unchanged": inputs_unchanged,
+        }
+    )
+    if not checks["invalid_actions"]:
+        reasons.append(f"{invalid} invalid NLE actions recorded")
+    if not checks["gate_rejections"]:
+        reasons.append(f"{rejections} action-gate rejections recorded")
+    if not checks["complete_records"]:
+        reasons.append(
+            f"incomplete SQLite or ttyrec records for case/seeds {incomplete}"
+        )
+    if not fixed:
+        reasons.append(
+            "run configuration was not identical across evaluated episodes "
+            "apart from suite case task and cap"
+        )
+    if not inputs_unchanged:
+        reasons.append("suite or knowledge files changed during evaluation")
+    if development_model:
+        reasons.append(
+            "development scripted model runs are never valid milestone evidence"
+        )
+    return AcceptanceResult(checks, tuple(reasons), development_model)
+
+
 def evaluate_acceptance(
     suite: EvaluationSuite,
     results: Sequence[SeedResult],
@@ -1762,6 +2291,13 @@ def evaluate_acceptance(
     development_model: bool,
     inputs_unchanged: bool,
 ) -> AcceptanceResult:
+    if suite.schema_version == 3:
+        return _schema_four_acceptance(
+            suite,
+            results,
+            development_model=development_model,
+            inputs_unchanged=inputs_unchanged,
+        )
     reasons: list[str] = []
     expected = {(case.case_id, seed) for case in suite.cases for seed in case.seeds}
     evaluated = [(result.case_id, result.seed) for result in results]
@@ -1919,6 +2455,8 @@ class EvaluationReport:
     status_reason: str | None = None
     inputs_unchanged: bool = True
     results: list[SeedResult] = field(default_factory=list)
+    draw_provenance: DrawProvenance | None = None
+    comparison_source: dict[str, object] | None = None
 
     @property
     def development_model(self) -> bool:
@@ -2012,8 +2550,193 @@ class EvaluationReport:
             "acceptance": acceptance,
         }
 
-    def to_json(self) -> dict[str, object]:
+    def _schema_four_json(self, payload: dict[str, object]) -> dict[str, object]:
+        from nethack_agent.seed_catalog import (
+            CatalogCheckStatus,
+            SeedCatalog,
+            check_catalog,
+        )
+
+        checks = (
+            check_catalog(
+                SeedCatalog(self.suite.policy_version, self.suite.baseline),
+                self.suite,
+                self.results,
+            )
+            if self.suite.baseline
+            else ()
+        )
+        payload["report_schema_version"] = 4
+        payload["draw_provenance"] = (
+            self.draw_provenance.to_json() if self.draw_provenance is not None else None
+        )
+        payload["baseline"] = {
+            "catalog": (
+                {
+                    "path": str(self.suite.catalog_path),
+                    "sha256": self.suite.catalog_sha256,
+                }
+                if self.suite.baseline
+                else None
+            ),
+            "entries": [
+                {"entry": entry.to_json(), "check": check.to_json()}
+                for entry, check in zip(self.suite.baseline, checks, strict=True)
+            ],
+            "passed": all(
+                check.status is not CatalogCheckStatus.FAIL for check in checks
+            ),
+        }
+        fresh = self.suite.fresh_sample
+        if fresh is None:
+            payload["fresh"] = None
+        else:
+            case = self.suite.case(fresh.case_id)
+            sampled = self._case_results(case)
+            successes = sum(result.successful_for(case) for result in sampled)
+            statistics = _threshold_statistics(case, sampled)
+            payload["fresh"] = {
+                "case_id": case.case_id,
+                "successes": successes,
+                "sample_size": fresh.count,
+                "success_rate": round(successes / fresh.count, 6),
+                "wilson_95": [
+                    round(bound, 6) for bound in _wilson_95(successes, fresh.count)
+                ],
+                "acceptance": {
+                    "criteria": fresh.acceptance.to_json(),
+                    "passed": (
+                        len(sampled) == fresh.count
+                        and {result.seed for result in sampled} == set(case.seeds)
+                        and successes / fresh.count >= fresh.acceptance.min_success_rate
+                        and all(
+                            threshold.passes(value) for threshold, value in statistics
+                        )
+                    ),
+                    "metrics": [
+                        {
+                            **threshold.to_json(),
+                            "value": None
+                            if value is None
+                            else _json_number(round(value, 6)),
+                            "passed": threshold.passes(value),
+                        }
+                        for threshold, value in statistics
+                    ],
+                },
+            }
+        payload["comparison"] = self._comparison_json()
+        return payload
+
+    def _comparison_json(self) -> dict[str, object] | None:
+        prior = self.comparison_source
+        if prior is None:
+            return None
+        version = integer_value(
+            prior.get("report_schema_version"), "prior report schema"
+        )
+        if version != 4:
+            raise ContractError("comparison requires a report schema 4")
+        prior_suite = object_value(
+            prior.get("suite"),
+            "prior suite",
+            prior["suite"].keys() if isinstance(prior.get("suite"), dict) else (),
+        )
+        if prior_suite.get("suite_id") != self.suite.suite_id:
+            raise ContractError("comparison report suite_id does not match")
+        if prior_suite.get("sha256") != self.suite.sha256:
+            raise ContractError("comparison report suite sha256 does not match")
+        prior_cases: dict[str, dict[str, object]] = {}
+        for item in array_value(prior.get("case_results"), "prior case_results"):
+            if not isinstance(item, dict):
+                raise ContractError("prior case result must be an object")
+            case_id = string_value(item.get("case_id"), "prior case_id")
+            if case_id in prior_cases:
+                raise ContractError("prior case ids must be unique")
+            prior_cases[case_id] = item
+        entries: list[dict[str, object]] = []
+        for entry in self.suite.baseline:
+            current = next(
+                (
+                    result
+                    for result in self.results
+                    if result.case_id == entry.entry_id and result.seed == entry.seed
+                ),
+                None,
+            )
+            old_case = prior_cases.get(entry.entry_id)
+            old = None
+            if old_case is not None and old_case.get("task") != entry.task.to_json():
+                raise ContractError("prior baseline task does not match current suite")
+            if old_case is not None:
+                for item in array_value(
+                    old_case.get("results"), "prior baseline results"
+                ):
+                    if not isinstance(item, dict):
+                        raise ContractError("prior baseline result must be an object")
+                    if (
+                        item.get("seed") == entry.seed
+                        and item.get("case_id") == entry.entry_id
+                    ):
+                        if old is not None:
+                            raise ContractError("duplicate prior baseline entry result")
+                        old = item
+            prior_outcome = (
+                None
+                if old is None
+                else _optional_text(old.get("outcome"), "prior outcome")
+            )
+            if old is not None and prior_outcome is not None:
+                enum_value(prior_outcome, "prior outcome", RunOutcome)
+            prior_success = None
+            if old is not None:
+                metrics = EpisodeMetrics.from_json(old.get("metrics"))
+                prior_success = (
+                    prior_outcome == RunOutcome.TASK_SUCCESS.value
+                    if entry.task.environment is NleTask.STAIRCASE
+                    else metrics.objective_legs_completed
+                    == len(entry.task.objective.legs)
+                )
+            current_success = (
+                None
+                if current is None
+                else current.successful_for(self.suite.case(entry.entry_id))
+            )
+            if current_success is None or prior_success is None:
+                change = "unavailable"
+            elif current_success != prior_success:
+                change = "improved" if current_success else "regressed"
+            elif prior_outcome != (current.outcome.value if current.outcome else None):
+                change = "outcome_changed"
+            else:
+                change = "unchanged"
+            entries.append(
+                {
+                    "entry_id": entry.entry_id,
+                    "seed": entry.seed,
+                    "prior_outcome": prior_outcome,
+                    "prior_successful": prior_success,
+                    "current_outcome": (
+                        None
+                        if current is None or current.outcome is None
+                        else current.outcome.value
+                    ),
+                    "current_successful": current_success,
+                    "change": change,
+                }
+            )
         return {
+            "prior_report": {
+                "report_schema_version": version,
+                "suite_id": self.suite.suite_id,
+                "sha256": string_value(prior_suite.get("sha256"), "prior suite sha256"),
+                "started_at": string_value(prior.get("started_at"), "prior started_at"),
+            },
+            "entries": entries,
+        }
+
+    def to_json(self) -> dict[str, object]:
+        payload: dict[str, object] = {
             "report_schema_version": REPORT_SCHEMA_VERSION,
             "status": self.status.value,
             "status_reason": self.status_reason,
@@ -2039,6 +2762,11 @@ class EvaluationReport:
             "aggregate": self.aggregate_json(),
             "acceptance": self.acceptance().to_json(),
         }
+        return (
+            self._schema_four_json(payload)
+            if self.suite.schema_version == 3
+            else payload
+        )
 
     def to_markdown(self) -> str:
         return render_report_markdown(self.to_json())
@@ -2203,6 +2931,31 @@ _REPORT_FIELDS_V3: Final = frozenset(
         "acceptance",
     }
 )
+_REPORT_FIELDS_V4: Final = _REPORT_FIELDS_V3 | {
+    "draw_provenance",
+    "baseline",
+    "fresh",
+    "comparison",
+}
+_SUITE_FIELDS_V4: Final = _SUITE_FIELDS_V3
+_DRAW_FIELDS: Final = frozenset(
+    {"draw_seed", "range", "exclusion_count", "excluded_seeds", "drawn_seeds"}
+)
+_COMPARISON_FIELDS: Final = frozenset({"prior_report", "entries"})
+_COMPARISON_PRIOR_FIELDS: Final = frozenset(
+    {"report_schema_version", "suite_id", "sha256", "started_at"}
+)
+_COMPARISON_ENTRY_FIELDS: Final = frozenset(
+    {
+        "entry_id",
+        "seed",
+        "prior_outcome",
+        "prior_successful",
+        "current_outcome",
+        "current_successful",
+        "change",
+    }
+)
 _RUN_CONFIGURATION_FIELDS: Final = frozenset(
     {
         "model",
@@ -2218,7 +2971,7 @@ _RUN_CONFIGURATION_FIELDS: Final = frozenset(
 
 
 def render_report_markdown(payload: dict[str, object]) -> str:
-    """Strictly render report schema 2 or 3 from its JSON source of truth."""
+    """Strictly render report schema 2, 3, or 4 from its JSON source of truth."""
     version = integer_value(
         payload.get("report_schema_version"), "report_schema_version"
     )
@@ -2226,9 +2979,11 @@ def render_report_markdown(payload: dict[str, object]) -> str:
         return _render_report_markdown_v2(payload)
     if version == REPORT_SCHEMA_VERSION:
         return _render_report_markdown_v3(payload)
+    if version == 4:
+        return _render_report_markdown_v4(payload)
     raise ContractError(
         "report_schema_version must be "
-        f"{LEGACY_REPORT_SCHEMA_VERSION} or {REPORT_SCHEMA_VERSION}"
+        f"{LEGACY_REPORT_SCHEMA_VERSION}, {REPORT_SCHEMA_VERSION}, or 4"
     )
 
 
@@ -2405,7 +3160,411 @@ def _render_report_markdown_v2(payload: dict[str, object]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _render_report_markdown_v3(payload: dict[str, object]) -> str:
+def _render_report_markdown_v4(payload: dict[str, object]) -> str:
+    """Render all schema-four sections from the persisted JSON, not the suite file."""
+    from nethack_agent.seed_catalog import CatalogCheckStatus, CatalogEntry
+
+    report = object_value(payload, "evaluation report", _REPORT_FIELDS_V4)
+    suite = object_value(
+        report["suite"],
+        "report suite",
+        _SUITE_FIELDS_V4,
+        optional={"baseline", "fresh_sample"},
+    )
+    if integer_value(suite["schema_version"], "suite schema_version") != 3:
+        raise ContractError("report schema 4 requires suite schema 3")
+    ordinary = array_value(suite["cases"], "suite cases")
+    baseline = object_value(
+        report["baseline"], "report baseline", {"catalog", "entries", "passed"}
+    )
+    baseline_rows = array_value(baseline["entries"], "report baseline entries")
+    expected_ids: list[str] = []
+    if "baseline" in suite:
+        definition = object_value(suite["baseline"], "suite baseline", {"entry_ids"})
+        expected_ids = [
+            _suite_identifier(item, "baseline entry id")
+            for item in array_value(definition["entry_ids"], "baseline entry ids")
+        ]
+        if not expected_ids or len(set(expected_ids)) != len(expected_ids):
+            raise ContractError("suite baseline entry ids must be unique and nonempty")
+    if len(baseline_rows) != len(expected_ids):
+        raise ContractError("report baseline entries must match suite baseline")
+    catalog = baseline["catalog"]
+    if expected_ids:
+        catalog_record = object_value(
+            catalog, "report baseline catalog", {"path", "sha256"}
+        )
+        catalog_path = string_value(
+            catalog_record["path"], "report baseline catalog path", minimum=1
+        )
+        catalog_digest = string_value(
+            catalog_record["sha256"],
+            "report baseline catalog sha256",
+            minimum=64,
+            maximum=64,
+        )
+    elif catalog is not None:
+        raise ContractError("report without a baseline must not record a catalog")
+    catalog_cases: list[dict[str, object]] = []
+    section = [
+        "",
+        "## Baseline: "
+        + ("PASS" if boolean_value(baseline["passed"], "baseline passed") else "FAIL"),
+        "",
+    ]
+    if expected_ids:
+        section.extend(
+            [
+                f"- Catalog: `{catalog_path}` (sha256 `{catalog_digest}`)",
+                "",
+            ]
+        )
+    if baseline_rows:
+        section.extend(
+            [
+                "| Entry | Seed | Expectation | Expected | Observed "
+                "| Success | Status | Detail |",
+                "| --- | ---: | --- | --- | --- | --- | --- | --- |",
+            ]
+        )
+    statuses: list[CatalogCheckStatus] = []
+    for index, item in enumerate(baseline_rows):
+        row = object_value(item, "baseline row", {"entry", "check"})
+        entry = CatalogEntry.from_json(row["entry"], "report baseline entry")
+        if entry.entry_id != expected_ids[index]:
+            raise ContractError("baseline entries must match suite entry ids in order")
+        check = object_value(
+            row["check"],
+            "baseline check",
+            {
+                "entry_id",
+                "seed",
+                "expectation",
+                "expected_outcome",
+                "observed_outcome",
+                "successful",
+                "invariants_ok",
+                "status",
+                "detail",
+            },
+        )
+        if (
+            check["entry_id"] != entry.entry_id
+            or check["seed"] != entry.seed
+            or check["expectation"] != entry.expectation.value
+            or check["expected_outcome"] != entry.outcome.value
+        ):
+            raise ContractError("baseline check does not match its catalog entry")
+        observed = _optional_text(
+            check["observed_outcome"], "baseline observed outcome"
+        )
+        if observed is not None:
+            enum_value(observed, "baseline observed outcome", RunOutcome)
+        successful = boolean_value(check["successful"], "baseline successful")
+        boolean_value(check["invariants_ok"], "baseline invariants_ok")
+        status = enum_value(check["status"], "baseline status", CatalogCheckStatus)
+        statuses.append(status)
+        detail = string_value(check["detail"], "baseline detail")
+        section.append(
+            f"| `{entry.entry_id}` | {entry.seed} | {entry.expectation.value} "
+            f"| {entry.outcome.value} | {observed or '-'} "
+            f"| {'yes' if successful else 'no'} | {status.value} | {_md_cell(detail)} |"
+        )
+        catalog_cases.append(
+            {
+                "case_id": entry.entry_id,
+                "task": entry.task.to_json(),
+                "seeds": [entry.seed],
+                "max_episode_steps": entry.max_episode_steps,
+                "acceptance": {"min_successes": 0, "required_success_seeds": []},
+            }
+        )
+    if boolean_value(baseline["passed"], "baseline passed") != all(
+        status is not CatalogCheckStatus.FAIL for status in statuses
+    ):
+        raise ContractError("baseline passed differs from its check statuses")
+
+    sampled = report["fresh"]
+    provenance = report["draw_provenance"]
+    fresh_cases: list[dict[str, object]] = []
+    if "fresh_sample" not in suite:
+        if sampled is not None or provenance is not None:
+            raise ContractError("fresh sample and draw require suite fresh_sample")
+    else:
+        specification = object_value(
+            suite["fresh_sample"],
+            "suite fresh_sample",
+            {"case_id", "task", "max_episode_steps", "count", "range", "acceptance"},
+        )
+        fresh = object_value(
+            sampled,
+            "report fresh",
+            {
+                "case_id",
+                "successes",
+                "sample_size",
+                "success_rate",
+                "wilson_95",
+                "acceptance",
+            },
+        )
+        draw_record = DrawProvenance.from_json(provenance)
+        draw = draw_record.to_json()
+        case_id = _suite_identifier(specification["case_id"], "fresh case_id")
+        if fresh["case_id"] != case_id:
+            raise ContractError("fresh result case_id differs from suite")
+        count = integer_value(specification["count"], "fresh count", minimum=1)
+        if integer_value(fresh["sample_size"], "fresh sample_size") != count:
+            raise ContractError("fresh sample_size differs from suite count")
+        bounds = _integers(specification["range"], "fresh range")
+        if len(bounds) != 2 or bounds[0] > bounds[1]:
+            raise ContractError("fresh range must have ordered bounds")
+        if _integers(draw["range"], "draw range") != bounds:
+            raise ContractError("draw range differs from suite fresh range")
+        integer_value(draw["draw_seed"], "draw seed")
+        integer_value(draw["exclusion_count"], "draw exclusion_count", minimum=0)
+        seeds = _integers(draw["drawn_seeds"], "drawn seeds")
+        if (
+            len(seeds) != count
+            or len(set(seeds)) != count
+            or not all(bounds[0] <= seed <= bounds[1] for seed in seeds)
+        ):
+            raise ContractError("drawn seeds must be unique seeds in fresh range")
+        fresh_criteria = object_value(
+            specification["acceptance"],
+            "suite fresh acceptance",
+            {"min_success_rate"},
+            optional={"metric_thresholds"},
+        )
+        rate_minimum = number_value(
+            fresh_criteria["min_success_rate"], "fresh minimum rate"
+        )
+        if not 0 <= rate_minimum <= 1:
+            raise ContractError("fresh minimum rate must be in [0, 1]")
+        fresh_acceptance = object_value(
+            fresh["acceptance"],
+            "fresh acceptance",
+            {"criteria", "passed", "metrics"},
+        )
+        if fresh_acceptance["criteria"] != fresh_criteria:
+            raise ContractError("fresh acceptance criteria differ from suite")
+        thresholds = (
+            _metric_thresholds(fresh_criteria["metric_thresholds"], "fresh")
+            if "metric_thresholds" in fresh_criteria
+            else ()
+        )
+        metric_rows = (
+            _validated_case_metrics(
+                {"metrics": fresh_acceptance["metrics"]}, thresholds, case_id
+            )
+            if thresholds
+            else []
+        )
+        if not thresholds and array_value(fresh_acceptance["metrics"], "fresh metrics"):
+            raise ContractError("fresh metrics recorded without suite thresholds")
+        successes = integer_value(
+            fresh["successes"], "fresh successes", minimum=0, maximum=count
+        )
+        observed_rate = number_value(fresh["success_rate"], "fresh success_rate")
+        interval = [
+            number_value(value, "fresh Wilson bound")
+            for value in array_value(fresh["wilson_95"], "fresh wilson_95")
+        ]
+        if round(successes / count, 6) != observed_rate or interval != [
+            round(bound, 6) for bound in _wilson_95(successes, count)
+        ]:
+            raise ContractError(
+                "fresh success rate or Wilson interval differs from count"
+            )
+        passed = boolean_value(fresh_acceptance["passed"], "fresh acceptance passed")
+        if passed and (
+            successes / count < rate_minimum
+            or not all(metric_passed for _, _, metric_passed in metric_rows)
+        ):
+            raise ContractError("fresh acceptance passed contradicts its criteria")
+        task = TaskSpec.from_json(specification["task"], "suite fresh task")
+        cap = integer_value(
+            specification["max_episode_steps"], "fresh max_episode_steps", minimum=1
+        )
+        fresh_cases.append(
+            {
+                "case_id": case_id,
+                "task": task.to_json(),
+                "seeds": seeds,
+                "max_episode_steps": cap,
+                "acceptance": {
+                    "min_successes": 0,
+                    "required_success_seeds": [],
+                    **(
+                        {"metric_thresholds": fresh_criteria["metric_thresholds"]}
+                        if thresholds
+                        else {}
+                    ),
+                },
+            }
+        )
+        section.extend(
+            [
+                "",
+                f"## Fresh sample `{case_id}`: {'PASS' if passed else 'FAIL'}",
+                "",
+                f"- Draw seed: {integer_value(draw['draw_seed'], 'draw seed')}",
+                f"- Draw range: {bounds}; excluded: {draw['exclusion_count']}",
+                f"- Drawn seed order: {seeds}",
+                f"- Successes: {successes}/{count}; rate: {observed_rate:.6f} "
+                f"(required {rate_minimum:.6f}).",
+                f"- Wilson 95% interval: [{interval[0]:.6f}, {interval[1]:.6f}]",
+            ]
+        )
+        for threshold, value, metric_passed in metric_rows:
+            section.append(
+                f"- {threshold.metric.value} {threshold.statistic.value} "
+                f"{threshold.bound_text}: "
+                f"{'-' if value is None else _compact_number(value)} "
+                f"({'pass' if metric_passed else 'fail'})"
+            )
+
+    comparison = report["comparison"]
+    if comparison is not None:
+        prior = object_value(comparison, "report comparison", _COMPARISON_FIELDS)
+        source = object_value(
+            prior["prior_report"], "prior report identity", _COMPARISON_PRIOR_FIELDS
+        )
+        version = integer_value(source["report_schema_version"], "prior report schema")
+        if version != 4 or source["suite_id"] != suite["suite_id"]:
+            raise ContractError("comparison requires report schema 4 of this suite")
+        if source["sha256"] != suite["sha256"]:
+            raise ContractError("comparison suite sha256 differs from current suite")
+        string_value(source["started_at"], "prior started_at")
+        comparison_rows = array_value(prior["entries"], "comparison entries")
+        if len(comparison_rows) != len(expected_ids):
+            raise ContractError("comparison entries must pair every baseline entry")
+        section.extend(
+            [
+                "",
+                "## Paired baseline comparison",
+                "",
+                f"- Prior suite sha256: `{source['sha256']}`; "
+                f"started: {source['started_at']}",
+                "",
+                "| Entry | Seed | Prior outcome | Prior success "
+                "| Current outcome | Current success | Change |",
+                "| --- | ---: | --- | --- | --- | --- | --- |",
+            ]
+        )
+        for index, item in enumerate(comparison_rows):
+            row = object_value(item, "comparison entry", _COMPARISON_ENTRY_FIELDS)
+            seed = integer_value(row["seed"], "comparison seed", minimum=1)
+            baseline_entry = CatalogEntry.from_json(
+                object_value(baseline_rows[index], "baseline row", {"entry", "check"})[
+                    "entry"
+                ],
+                "baseline entry",
+            )
+            if row["entry_id"] != expected_ids[index] or seed != baseline_entry.seed:
+                raise ContractError("comparison entries must match baseline in order")
+            values = []
+            for prefix in ("prior", "current"):
+                outcome = _optional_text(row[f"{prefix}_outcome"], f"{prefix} outcome")
+                if outcome is not None:
+                    enum_value(outcome, f"{prefix} outcome", RunOutcome)
+                success = row[f"{prefix}_successful"]
+                if success is not None:
+                    boolean_value(success, f"{prefix} successful")
+                values.append((outcome, success))
+            change = string_value(row["change"], "comparison change")
+            if change not in {
+                "unavailable",
+                "improved",
+                "regressed",
+                "outcome_changed",
+                "unchanged",
+            }:
+                raise ContractError("unknown comparison change")
+            section.append(
+                f"| `{expected_ids[index]}` | {seed} "
+                f"| {values[0][0] or '-'} | {_success_cell(values[0][1])} "
+                f"| {values[1][0] or '-'} | {_success_cell(values[1][1])} "
+                f"| {change} |"
+            )
+
+    case_reports = array_value(report["case_results"], "case_results")
+    by_id: dict[str, dict[str, object]] = {}
+    for item in case_reports:
+        case = object_value(item, "report case", _CASE_REPORT_FIELDS)
+        case_id = string_value(case["case_id"], "report case_id")
+        if case_id in by_id:
+            raise ContractError("report case ids must be unique")
+        by_id[case_id] = case
+    normalized_cases: list[dict[str, object]] = []
+    for case in [*ordinary, *catalog_cases, *fresh_cases]:
+        definition = object_value(case, "suite case", _SUITE_CASE_FIELDS)
+        case_id = string_value(definition["case_id"], "suite case_id")
+        row = by_id.get(case_id)
+        if (
+            row is None
+            or row["task"] != definition["task"]
+            or row["max_episode_steps"] != definition["max_episode_steps"]
+        ):
+            raise ContractError("report case must match its suite case")
+        request = _integers(row["requested_seeds"], "report requested_seeds")
+        if request != definition["seeds"]:
+            raise ContractError("report requested seeds differ from suite/draw")
+        criteria = object_value(
+            row["acceptance"],
+            "case acceptance",
+            _CASE_REPORT_ACCEPTANCE_FIELDS,
+            optional=_CASE_REPORT_ACCEPTANCE_OPTIONAL_FIELDS,
+        )
+        if criteria["criteria"] != definition["acceptance"]:
+            raise ContractError("report case acceptance differs from suite")
+        if case_id in expected_ids:
+            index = expected_ids.index(case_id)
+            row = {
+                **row,
+                "acceptance": {
+                    **criteria,
+                    "passed": statuses[index] is not CatalogCheckStatus.FAIL,
+                },
+            }
+        if fresh_cases and case_id == fresh_cases[0]["case_id"]:
+            assert isinstance(sampled, dict)
+            fresh_info = object_value(
+                sampled["acceptance"],
+                "fresh acceptance",
+                {"criteria", "passed", "metrics"},
+            )
+            row = {**row, "acceptance": {**criteria, "passed": fresh_info["passed"]}}
+        normalized_cases.append(row)
+    if len(normalized_cases) != len(case_reports):
+        raise ContractError("report case_results must contain every suite case once")
+    normalized_suite = {
+        key: value
+        for key, value in suite.items()
+        if key not in ("baseline", "fresh_sample")
+    }
+    normalized_suite["schema_version"] = 2
+    normalized_suite["cases"] = [*ordinary, *catalog_cases, *fresh_cases]
+    normalized = {
+        key: value for key, value in report.items() if key in _REPORT_FIELDS_V3
+    }
+    normalized["report_schema_version"] = REPORT_SCHEMA_VERSION
+    normalized["suite"] = normalized_suite
+    normalized["case_results"] = normalized_cases
+    markdown = _render_report_markdown_v3(normalized, allow_zero_min_successes=True)
+    before, separator, after = markdown.partition("\n## Case ")
+    if not separator:
+        raise ContractError("schema-four report contains no suite cases")
+    return before + "\n".join(section) + "\n" + separator + after
+
+
+def _success_cell(success: object) -> str:
+    return "-" if success is None else ("yes" if success else "no")
+
+
+def _render_report_markdown_v3(
+    payload: dict[str, object], *, allow_zero_min_successes: bool = False
+) -> str:
     report = object_value(payload, "evaluation report", _REPORT_FIELDS_V3)
     if (
         integer_value(report["report_schema_version"], "report_schema_version")
@@ -2417,7 +3576,7 @@ def _render_report_markdown_v3(payload: dict[str, object]) -> str:
     if status is ReportStatus.ABORTED and reason is None:
         raise ContractError("an aborted report requires a status_reason")
     suite, suite_id, policy, knowledge_id, suite_cases = _validated_report_suite_v3(
-        report["suite"]
+        report["suite"], allow_zero_min_successes=allow_zero_min_successes
     )
 
     configuration = object_value(
@@ -2750,7 +3909,7 @@ type _ReportSuiteCase = tuple[
 
 
 def _validated_report_suite_v3(
-    value: object,
+    value: object, *, allow_zero_min_successes: bool = False
 ) -> tuple[
     dict[str, object],
     str,
@@ -2891,7 +4050,7 @@ def _validated_report_suite_v3(
         minimum = integer_value(
             criteria["min_successes"],
             f"report suite case {case_id} min_successes",
-            minimum=_minimum_successes(thresholds),
+            minimum=0 if allow_zero_min_successes else _minimum_successes(thresholds),
             maximum=len(seeds),
         )
         required = _integers(
@@ -3173,10 +4332,10 @@ def finalize_aborted_report(json_path: Path, reason: str) -> ReportPaths:
         version = integer_value(
             payload.get("report_schema_version"), "report_schema_version"
         )
-        if version not in (1, LEGACY_REPORT_SCHEMA_VERSION, REPORT_SCHEMA_VERSION):
+        if version not in (1, LEGACY_REPORT_SCHEMA_VERSION, REPORT_SCHEMA_VERSION, 4):
             raise ContractError(
                 "report_schema_version must be 1, "
-                f"{LEGACY_REPORT_SCHEMA_VERSION}, or {REPORT_SCHEMA_VERSION}"
+                f"{LEGACY_REPORT_SCHEMA_VERSION}, {REPORT_SCHEMA_VERSION}, or 4"
             )
         fields = (
             _REPORT_FIELDS_V1
@@ -3184,6 +4343,8 @@ def finalize_aborted_report(json_path: Path, reason: str) -> ReportPaths:
             else _REPORT_FIELDS_V2
             if version == LEGACY_REPORT_SCHEMA_VERSION
             else _REPORT_FIELDS_V3
+            if version == REPORT_SCHEMA_VERSION
+            else _REPORT_FIELDS_V4
         )
         object_value(payload, "evaluation report", fields)
         status = enum_value(payload["status"], "report status", ReportStatus)
@@ -3218,11 +4379,23 @@ class EvaluationOptions:
     data_directory: Path
     report_directory: Path
     seeds: tuple[int, ...] | None = None
+    draw_seed: int | None = None
+    compare_report: Path | None = None
     development_scripted_model: bool = False
     progress_interval_seconds: float = 30.0
     poll_interval_seconds: float = 0.25
 
     def __post_init__(self) -> None:
+        if self.suite.fresh_sample is not None and self.seeds is not None:
+            raise ValueError("--seeds cannot be combined with a fresh_sample")
+        if self.draw_seed is not None and (
+            type(self.draw_seed) is not int or self.draw_seed < 0
+        ):
+            raise ValueError("draw_seed must be a nonnegative integer")
+        if self.draw_seed is not None and self.suite.fresh_sample is None:
+            raise ValueError("--draw-seed requires a fresh_sample")
+        if self.compare_report is not None and self.suite.schema_version != 3:
+            raise ValueError("--compare-report requires a schema-3 suite")
         if self.seeds is not None:
             if not self.seeds or len(set(self.seeds)) != len(self.seeds):
                 raise ValueError("requested seeds must be unique and nonempty")
@@ -3274,6 +4447,116 @@ def require_suite_configuration(
         )
 
 
+def _prior_drawn_seeds(directory: Path) -> frozenset[int]:
+    seen: set[int] = set()
+    for path in sorted(directory.glob("*.json")):
+        try:
+            payload = load_json_object(
+                path.read_text(encoding="utf-8"), "evaluation report"
+            )
+            if payload.get("report_schema_version") != 4:
+                continue
+            provenance = payload.get("draw_provenance")
+            if provenance is not None:
+                seen.update(DrawProvenance.from_json(provenance).drawn_seeds)
+        except (OSError, UnicodeDecodeError, ContractError, ValueError) as error:
+            raise EvaluationError(
+                f"cannot read previous seed draw {path}: {error}"
+            ) from error
+    return frozenset(seen)
+
+
+def _draw_available_seeds(
+    seed_range: tuple[int, int],
+    excluded: tuple[int, ...],
+    draw_seed: int,
+    count: int,
+) -> tuple[int, ...]:
+    """Map sampled ranks to seed values without materializing the full range."""
+    from bisect import bisect_right
+
+    first, last = seed_range
+    available = last - first + 1 - len(excluded)
+    if available < count:
+        raise EvaluationError(
+            f"fresh_sample needs {count} seeds but only {available} remain "
+            f"in range {first}-{last} after {len(excluded)} exclusions"
+        )
+    ranks = random.Random(draw_seed).sample(range(available), count)
+    drawn: list[int] = []
+    for rank in ranks:
+        low, high = first, last
+        while low < high:
+            mid = (low + high) // 2
+            allowed = mid - first + 1 - bisect_right(excluded, mid)
+            if allowed <= rank:
+                low = mid + 1
+            else:
+                high = mid
+        drawn.append(low)
+    return tuple(drawn)
+
+
+def _fresh_draw(
+    suite: EvaluationSuite, draw_seed: int, report_directory: Path | None = None
+) -> DrawProvenance:
+    from nethack_agent.seed_catalog import used_seeds
+
+    fresh = suite.fresh_sample
+    if fresh is None:
+        raise ValueError("suite has no fresh_sample")
+    if type(draw_seed) is not int or draw_seed < 0:
+        raise ValueError("draw_seed must be a nonnegative integer")
+    directories = {suite.path.parent / "reports"}
+    if report_directory is not None:
+        directories.add(report_directory)
+    prior = set().union(*(_prior_drawn_seeds(directory) for directory in directories))
+    first, last = fresh.seed_range
+    excluded = tuple(
+        sorted(
+            seed
+            for seed in used_seeds(suite.path.parent) | prior
+            if first <= seed <= last
+        )
+    )
+    seeds = _draw_available_seeds(fresh.seed_range, excluded, draw_seed, fresh.count)
+    return DrawProvenance(draw_seed, fresh.seed_range, excluded, seeds)
+
+
+def draw_fresh_seeds(
+    suite: EvaluationSuite, draw_seed: int
+) -> tuple[tuple[int, ...], int]:
+    """Draw reproducible unused seeds and return the exclusion count."""
+    provenance = _fresh_draw(suite, draw_seed)
+    return provenance.drawn_seeds, len(provenance.excluded_seeds)
+
+
+def _load_comparison_report(path: Path, suite: EvaluationSuite) -> dict[str, object]:
+    try:
+        payload = load_json_object(
+            path.read_text(encoding="utf-8"), "comparison report"
+        )
+        prior = object_value(
+            payload.get("suite"),
+            "comparison suite",
+            payload["suite"].keys() if isinstance(payload.get("suite"), dict) else (),
+        )
+        if prior.get("suite_id") != suite.suite_id:
+            raise EvaluationError(
+                f"comparison report suite_id does not match {suite.suite_id}"
+            )
+        if payload.get("report_schema_version") != 4:
+            raise EvaluationError("comparison report must have report schema 4")
+        if prior.get("sha256") != suite.sha256:
+            raise EvaluationError("comparison report suite sha256 does not match")
+        render_report_markdown(payload)
+        return payload
+    except (OSError, UnicodeDecodeError, ContractError) as error:
+        raise EvaluationError(
+            f"cannot read comparison report {path}: {error}"
+        ) from error
+
+
 def run_evaluation(
     options: EvaluationOptions,
     *,
@@ -3283,6 +4566,32 @@ def run_evaluation(
     suite = options.suite
     knowledge_bundle = load_default_knowledge_bundle()
     require_suite_configuration(suite, POLICY_VERSION, knowledge_bundle.bundle_id)
+    comparison_source = (
+        _load_comparison_report(options.compare_report, suite)
+        if options.compare_report is not None
+        else None
+    )
+    draw_provenance: DrawProvenance | None = None
+    if suite.fresh_sample is not None:
+        fresh = suite.fresh_sample
+        draw_seed = (
+            options.draw_seed if options.draw_seed is not None else secrets.randbits(32)
+        )
+        draw_provenance = _fresh_draw(suite, draw_seed, options.report_directory)
+        seeds = draw_provenance.drawn_seeds
+        suite = replace(
+            suite,
+            cases=suite.cases
+            + (
+                EvaluationCase(
+                    fresh.case_id,
+                    fresh.task,
+                    seeds,
+                    fresh.max_episode_steps,
+                    CaseAcceptance(0, (), fresh.acceptance.metric_thresholds),
+                ),
+            ),
+        )
     if options.development_scripted_model:
         config = OllamaConfig(model=DEVELOPMENT_MODEL_NAME)
         model_factory: ModelFactory | None = _development_model
@@ -3313,6 +4622,8 @@ def run_evaluation(
         requested_seeds=options.seeds or suite.seeds,
         data_directory=str(options.data_directory),
         started_at=started_at,
+        draw_provenance=draw_provenance,
+        comparison_source=comparison_source,
     )
     mode_suffix = "-development" if report.development_model else ""
     stem = f"{suite.suite_id}{mode_suffix}-{_compact_timestamp(started_at)}"
@@ -3534,11 +4845,19 @@ def _inputs_unchanged(report: EvaluationReport) -> bool:
     try:
         suite_digest = hashlib.sha256(report.suite.path.read_bytes()).hexdigest()
         knowledge_version = load_default_knowledge_bundle().version
+        catalog_unchanged = True
+        if report.suite.baseline:
+            catalog_path = report.suite.catalog_path
+            if catalog_path is None:
+                return False
+            catalog_digest = hashlib.sha256(catalog_path.read_bytes()).hexdigest()
+            catalog_unchanged = catalog_digest == report.suite.catalog_sha256
     except Exception:
         return False
     return (
         suite_digest == report.suite.sha256
         and knowledge_version == report.knowledge_version
+        and catalog_unchanged
     )
 
 
