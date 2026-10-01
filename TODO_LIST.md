@@ -39,7 +39,7 @@ Work, in order:
 - [x] Representative-seed catalog: strict `evaluation/representative-seeds.json` rendered to `representative-seeds.md` (seed, task, cap, represented behavior, provenance, `must_pass` or `known_failure`, linked test). Seed it from existing evidence: 6; 5; 1, 2, 4; 4 and 7; 53; 701 and 702; 824. Add a scripted-model catalog check that asserts outcome class and key invariants, not step counts ([0020](docs/notes/0020-representative-seed-catalog.md)).
 - [x] Used-seed ledger covering committed suites, probes, development runs, and the catalog.
 - [x] Suite schema 3 (a baseline case from the catalog and a `fresh_sample` block) and report changes (draw provenance, separate baseline and fresh-sample acceptance, paired baseline diff). Schemas 1-2 and existing reports stay readable and unchanged ([0022](docs/notes/0022-suite-schema-3-fresh-samples.md)).
-- [ ] Failure diagnostics: per-episode steps by skill and by search, first Hungry turn, and a `hunger_at_death` metric; a note analyzing the 18 Fainting episodes.
+- [x] Failure diagnostics: per-episode steps by skill and by search, first Hungry turn, and a `hunger_at_death` metric; a note analyzing the 18 Fainting episodes ([0023](docs/notes/0023-early-hunger-failure-diagnostics.md)).
 - [ ] Reviewed, cited knowledge cards for prayer and hunger and for safe corpse eating (new bundle).
 - [ ] Survival action profile and gate roles: PRAY, eating, and the prayer and eating confirmations accepted only as offered answers; the evaluator audits them with the same predicate.
 - [ ] Deterministic prayer skill: pray when Weak and the tracked prayer timeout is safe; record the prayer and its outcome in the intent.

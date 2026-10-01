@@ -14,6 +14,8 @@ from nle import nethack
 from nethack_agent import evaluation, run_manager
 from nethack_agent.contracts import ContractError
 from nethack_agent.decision import (
+    ActionCandidate,
+    ActionDecision,
     ActionSelection,
     ActionSelectionSource,
     DecisionMetrics,
@@ -2364,3 +2366,197 @@ def test_all_committed_reports_render_without_changes() -> None:
         original = path.with_suffix(".md").read_bytes()
         payload = json.loads(path.read_text(encoding="utf-8"))
         assert render_report_markdown(payload).encode("utf-8") == original, path
+
+
+def diagnostic_metrics(
+    *,
+    hunger: HungerState | None = HungerState.FAINTING,
+    search_steps: int = 1,
+) -> EpisodeMetrics:
+    return replace(
+        EpisodeMetrics.empty(),
+        steps=2,
+        steps_by_skill=((Skill.EXPLORE_LEVEL, 2),),
+        search_steps=search_steps,
+        first_hungry_turn=12,
+        hunger_at_death=hunger,
+    )
+
+
+def test_failure_diagnostics_use_executed_actions_and_last_live_hunger() -> None:
+    level = LevelKey(0, 1)
+    initial = synthetic_observation(0, level, 2, hunger=1)
+    hungry = synthetic_observation(1, level, 3, hunger=2)
+    weak = synthetic_observation(2, level, 4, hunger=3)
+    terminal = synthetic_observation(3, None, 0, hunger=6)
+    search = LegalAction(0, ord("s"), "Command.SEARCH")
+    steps = (
+        replace(synthetic_step(hungry), action=search),
+        replace(
+            synthetic_step(weak),
+            selection=replace(
+                synthetic_step(weak).selection,
+                skill=Skill.STAIRCASE_NAVIGATION,
+                source=ActionSelectionSource.DETERMINISTIC_PROMPT,
+            ),
+        ),
+        replace(
+            synthetic_step(terminal, RunOutcome.DEATH),
+            action=search,
+            selection=replace(
+                synthetic_step(terminal, RunOutcome.DEATH).selection,
+                skill=Skill.HUNGER,
+                source=ActionSelectionSource.MODEL_FALLBACK,
+            ),
+            action_decision=ActionDecision(
+                (ActionCandidate(0, 1.0, "Search"),), 0, "Search for stairs"
+            ),
+            action_metrics=DecisionMetrics(100, 10, 1.0, False),
+        ),
+    )
+    metrics = evaluation._episode_metrics(
+        initial, steps, STAIRCASE_TASK, RunOutcome.DEATH, None
+    )
+    assert metrics.steps_by_skill == (
+        (Skill.STAIRCASE_NAVIGATION, 1),
+        (Skill.EXPLORE_LEVEL, 1),
+        (Skill.HUNGER, 1),
+    )
+    assert metrics.search_steps == 2
+    assert metrics.first_hungry_turn == hungry.player.turn
+    assert metrics.hunger_at_death is HungerState.WEAK
+    assert EpisodeMetrics.from_json(metrics.to_json()) == metrics
+
+    truncated = evaluation._episode_metrics(
+        initial, steps, STAIRCASE_TASK, RunOutcome.TRUNCATED, None
+    )
+    assert truncated.hunger_at_death is None
+    no_live = evaluation._episode_metrics(
+        None, (steps[-1],), STAIRCASE_TASK, RunOutcome.DEATH, None
+    )
+    assert no_live.first_hungry_turn is None
+    assert no_live.hunger_at_death is None
+    assert no_live.steps_by_skill == ((Skill.HUNGER, 1),)
+    starts_weak = evaluation._episode_metrics(
+        replace(initial, player=replace(initial.player, hunger=3)),
+        (),
+        STAIRCASE_TASK,
+        RunOutcome.TRUNCATED,
+        None,
+    )
+    assert starts_weak.first_hungry_turn == initial.player.turn
+    assert starts_weak.steps_by_skill == ()
+    assert starts_weak.search_steps == 0
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("steps_by_skill", {"unrecognized": 2}),
+        ("steps_by_skill", {"explore_level": -1}),
+        ("steps_by_skill", {"explore_level": 1}),
+        ("search_steps", 3),
+        ("first_hungry_turn", True),
+        ("hunger_at_death", "unrecognized"),
+    ],
+)
+def test_failure_diagnostic_contract_rejects_invalid_values(
+    field: str, value: object
+) -> None:
+    stored = diagnostic_metrics().to_json()
+    stored[field] = value
+    with pytest.raises(ContractError):
+        EpisodeMetrics.from_json(stored)
+
+
+@pytest.mark.parametrize(
+    "field", ["steps_by_skill", "search_steps", "first_hungry_turn", "hunger_at_death"]
+)
+def test_failure_diagnostic_fields_must_appear_together(field: str) -> None:
+    stored = diagnostic_metrics().to_json()
+    del stored[field]
+    with pytest.raises(ContractError, match="recorded together"):
+        EpisodeMetrics.from_json(stored)
+
+
+def test_hunger_at_death_threshold_gates_weak_deaths_and_missing_evidence(
+    tmp_path: Path,
+) -> None:
+    suite = threshold_suite(
+        tmp_path, [metric_threshold("hunger_at_death", "maximum", "at_most", 2)]
+    )
+    results = [
+        result(
+            1, RunOutcome.DEATH, metrics=diagnostic_metrics(hunger=HungerState.HUNGRY)
+        ),
+        result(2, RunOutcome.TRUNCATED, metrics=diagnostic_metrics(hunger=None)),
+    ]
+    check = "staircase:hunger_at_death:maximum:at_most"
+    assert evaluate_acceptance(
+        suite, results, development_model=False, inputs_unchanged=True
+    ).checks[check]
+    results[0] = replace(
+        results[0], metrics=diagnostic_metrics(hunger=HungerState.FAINTING)
+    )
+    assert not evaluate_acceptance(
+        suite, results, development_model=False, inputs_unchanged=True
+    ).checks[check]
+    results[0] = replace(results[0], metrics=diagnostic_metrics(hunger=None))
+    assert not evaluate_acceptance(
+        suite, results, development_model=False, inputs_unchanged=True
+    ).checks[check]
+    results[0] = replace(results[0], metrics=EpisodeMetrics.empty())
+    assert not evaluate_acceptance(
+        suite, results, development_model=False, inputs_unchanged=True
+    ).checks[check]
+
+
+def test_schema_four_failure_diagnostics_render_without_changing_old_reports(
+    tmp_path: Path,
+) -> None:
+    payload = suite_2_payload()
+    payload["schema_version"] = 3
+    payload["policy_version"] = run_manager.POLICY_VERSION
+    payload["knowledge_bundle_id"] = "staircase-reviewed-v3"
+    suite = load_suite(write_suite(tmp_path, payload))
+    case = suite.cases[0]
+    recorded = diagnostic_metrics()
+    report = EvaluationReport(
+        suite,
+        "ollama",
+        "gemma4-nethack:latest",
+        suite.policy_version,
+        "staircase-reviewed-v3+sha256:test",
+        8192,
+        suite.seeds,
+        str(tmp_path),
+        "2026-10-02T00:00:00+00:00",
+        results=[
+            result(
+                case.seeds[0],
+                RunOutcome.DEATH,
+                case_id=case.case_id,
+                steps=2,
+                metrics=recorded,
+            )
+        ],
+    )
+    markdown = report.to_markdown()
+    assert markdown == render_report_markdown(json.loads(json.dumps(report.to_json())))
+    assert "## Failure diagnostics" in markdown
+    assert "| 1 | explore_level: 2 | 1 | 12 | fainting |" in markdown
+    report.results[0] = replace(
+        report.results[0], steps=0, metrics=EpisodeMetrics.empty()
+    )
+    assert "## Failure diagnostics" not in report.to_markdown()
+    report.results.append(
+        result(
+            case.seeds[1],
+            RunOutcome.DEATH,
+            case_id=case.case_id,
+            steps=2,
+            metrics=recorded,
+        )
+    )
+    with pytest.raises(ContractError, match="all record failure diagnostics"):
+        report.to_markdown()

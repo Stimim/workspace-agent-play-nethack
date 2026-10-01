@@ -547,6 +547,19 @@ keep both files together. Historical schema-2 reports and schema-3 reports
 written before these fields remain renderable, byte for byte, without
 rewriting them.
 
+Newly recorded episode metrics additionally contain the all-or-none
+`steps_by_skill` (executed selection skill, including prompts and fallbacks),
+`search_steps` (executed `Command.SEARCH` actions), `first_hungry_turn` (first
+live Hungry-or-worse turn), and `hunger_at_death` (last live hunger before a
+death, null for nondeath or no live evidence). Older reports omit all four,
+which is different from recording zero SEARCH steps. A `hunger_at_death`
+maximum `at_most: 2` gate rejects Weak/Fainting-or-worse deaths, and a required
+gate fails for missing evidence; recorded nondeaths count as zero. Report
+schema 4 renders a per-case diagnostics table only for uniformly newly
+recorded results, not for historical results. See
+[note 0023](notes/0023-early-hunger-failure-diagnostics.md) for the read-only
+event-log analysis of the 18 failed episodes.
+
 If an interrupted (or crashed, still `running`) suite will not be finished, for
 example because the policy changed, finalize its report instead of deleting it:
 

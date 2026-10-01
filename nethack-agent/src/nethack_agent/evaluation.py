@@ -38,6 +38,7 @@ from nethack_agent.decision import (
     DestinationKind,
     RunOutcome,
     RunState,
+    Skill,
     level_change_error,
 )
 from nethack_agent.environment import CHARACTER, LegalAction
@@ -150,6 +151,9 @@ class MetricName(Enum):
     DEATH = "death"
     # 1 for an episode whose recorded death cause is starvation, else 0.
     STARVATION_DEATH = "starvation_death"
+    # NLE hunger index at the last live observation preceding death; non-deaths
+    # contribute 0 to allow a maximum at_most 2 gate. Missing evidence fails.
+    HUNGER_AT_DEATH = "hunger_at_death"
 
 
 class MetricStatistic(Enum):
@@ -1150,7 +1154,11 @@ class HungerState(Enum):
 
 
 _HUNGER_STATES: Final = tuple(HungerState)
+_HUNGRY_ORDINAL: Final = _HUNGER_STATES.index(HungerState.HUNGRY)
 _EXPLORATION_METRIC_FIELDS: Final = frozenset({"explored_cells", "worst_hunger_state"})
+_FAILURE_DIAGNOSTIC_FIELDS: Final = frozenset(
+    {"steps_by_skill", "search_steps", "first_hungry_turn", "hunger_at_death"}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1181,6 +1189,14 @@ class EpisodeMetrics:
     # The worst live hunger state in NLE hunger order; for recorded metrics
     # None means the episode had no live observation.
     worst_hunger_state: HungerState | None
+    # None for reports predating these diagnostics; a recorded empty map and
+    # zero search steps are distinct from missing historical evidence.
+    steps_by_skill: tuple[tuple[Skill, int], ...] | None = None
+    search_steps: int | None = None
+    first_hungry_turn: int | None = None
+    # The last *live* hunger observation before death, not a zeroed terminal
+    # observation or an unobservable claim about the exact death instant.
+    hunger_at_death: HungerState | None = None
 
     def __post_init__(self) -> None:
         for name in (
@@ -1239,6 +1255,47 @@ class EpisodeMetrics:
             raise TypeError(
                 "episode metrics worst_hunger_state must be a HungerState or None"
             )
+        if (self.steps_by_skill is None) != (self.search_steps is None):
+            raise ContractError(
+                "episode metrics steps_by_skill and search_steps must appear together"
+            )
+        if self.steps_by_skill is None:
+            if self.first_hungry_turn is not None or self.hunger_at_death is not None:
+                raise ContractError("legacy episode metrics cannot record diagnostics")
+        else:
+            if not isinstance(self.steps_by_skill, tuple) or any(
+                not isinstance(skill, Skill) or type(count) is not int or count < 0
+                for skill, count in self.steps_by_skill
+            ):
+                raise ContractError(
+                    "episode metrics steps_by_skill must count typed skills"
+                )
+            skills = [skill for skill, _ in self.steps_by_skill]
+            if (
+                len(skills) != len(set(skills))
+                or sum(count for _, count in self.steps_by_skill) != self.steps
+            ):
+                raise ContractError(
+                    "episode metrics skill counts must uniquely total steps"
+                )
+            integer_value(
+                self.search_steps,
+                "episode metrics search_steps",
+                minimum=0,
+                maximum=self.steps,
+            )
+            if self.first_hungry_turn is not None:
+                integer_value(
+                    self.first_hungry_turn,
+                    "episode metrics first_hungry_turn",
+                    minimum=0,
+                )
+            if self.hunger_at_death is not None and not isinstance(
+                self.hunger_at_death, HungerState
+            ):
+                raise ContractError(
+                    "episode metrics hunger_at_death must be a HungerState or None"
+                )
 
     @classmethod
     def empty(cls) -> EpisodeMetrics:
@@ -1297,6 +1354,15 @@ class EpisodeMetrics:
                 if self.worst_hunger_state is None
                 else self.worst_hunger_state.value
             )
+        if self.steps_by_skill is not None:
+            payload["steps_by_skill"] = {
+                skill.value: count for skill, count in self.steps_by_skill
+            }
+            payload["search_steps"] = self.search_steps
+            payload["first_hungry_turn"] = self.first_hungry_turn
+            payload["hunger_at_death"] = (
+                None if self.hunger_at_death is None else self.hunger_at_death.value
+            )
         return payload
 
     @classmethod
@@ -1324,13 +1390,21 @@ class EpisodeMetrics:
         # Reports written before exploration and worst hunger were recorded
         # lack both keys; one without the other is malformed.
         payload = object_value(
-            value, "episode metrics", fields, optional=_EXPLORATION_METRIC_FIELDS
+            value,
+            "episode metrics",
+            fields,
+            optional=_EXPLORATION_METRIC_FIELDS | _FAILURE_DIAGNOSTIC_FIELDS,
         )
         recorded = _EXPLORATION_METRIC_FIELDS & payload.keys()
         if recorded and recorded != _EXPLORATION_METRIC_FIELDS:
             raise ContractError(
                 "episode metrics explored_cells and worst_hunger_state must be "
                 "recorded together"
+            )
+        diagnostics = _FAILURE_DIAGNOSTIC_FIELDS & payload.keys()
+        if diagnostics and diagnostics != _FAILURE_DIAGNOSTIC_FIELDS:
+            raise ContractError(
+                "episode metrics failure diagnostics must be recorded together"
             )
         deepest = payload["deepest_level"]
         worst = payload.get("worst_hunger_state")
@@ -1426,6 +1500,47 @@ class EpisodeMetrics:
                 if worst is None
                 else enum_value(
                     worst, "episode metrics worst_hunger_state", HungerState
+                )
+            ),
+            steps_by_skill=(
+                tuple(
+                    (
+                        enum_value(name, "episode metrics skill", Skill),
+                        integer_value(count, "episode metrics skill steps", minimum=0),
+                    )
+                    for name, count in object_value(
+                        payload["steps_by_skill"],
+                        "episode metrics steps_by_skill",
+                        set(),
+                        optional={skill.value for skill in Skill},
+                    ).items()
+                )
+                if diagnostics
+                else None
+            ),
+            search_steps=(
+                integer_value(
+                    payload["search_steps"], "episode metrics search_steps", minimum=0
+                )
+                if diagnostics
+                else None
+            ),
+            first_hungry_turn=(
+                None
+                if not diagnostics or payload["first_hungry_turn"] is None
+                else integer_value(
+                    payload["first_hungry_turn"],
+                    "episode metrics first_hungry_turn",
+                    minimum=0,
+                )
+            ),
+            hunger_at_death=(
+                None
+                if not diagnostics or payload["hunger_at_death"] is None
+                else enum_value(
+                    payload["hunger_at_death"],
+                    "episode metrics hunger_at_death",
+                    HungerState,
                 )
             ),
         )
@@ -1740,7 +1855,19 @@ def _episode_metrics(
     probes = 0
     misses = 0
     changes_without_stairs = 0
+    skill_counts: Counter[Skill] = Counter()
+    search_steps = 0
+    first_hungry_turn = next(
+        (
+            observation.player.turn
+            for observation in live
+            if observation.player.hunger >= _HUNGRY_ORDINAL
+        ),
+        None,
+    )
     for payload, levels_explored in zip(steps, confirmed, strict=True):
+        skill_counts[payload.selection.skill] += 1
+        search_steps += payload.action.name == "Command.SEARCH"
         direction = LEVEL_CHANGE_ACTIONS.get(payload.action.name)
         intent = payload.selection.intent
         destination = None if intent is None else intent.destination
@@ -1757,6 +1884,8 @@ def _episode_metrics(
             continue
         live.append(after)
         samples.append((after, levels_explored))
+        if first_hungry_turn is None and after.player.hunger >= _HUNGRY_ORDINAL:
+            first_hungry_turn = after.player.turn
         if previous is not None:
             changed = _observation_level(previous) != _observation_level(after)
             if changed and direction is StairDirection.UP:
@@ -1817,6 +1946,18 @@ def _episode_metrics(
         death_cause=_death_cause(outcome, ttyrec_path),
         explored_cells=_explored_cells(live),
         worst_hunger_state=worst_hunger,
+        steps_by_skill=tuple(
+            (skill, skill_counts[skill]) for skill in Skill if skill_counts[skill]
+        ),
+        search_steps=search_steps,
+        first_hungry_turn=first_hungry_turn,
+        hunger_at_death=(
+            _HUNGER_STATES[final.hunger]
+            if outcome is RunOutcome.DEATH
+            and final is not None
+            and 0 <= final.hunger < len(_HUNGER_STATES)
+            else None
+        ),
     )
 
 
@@ -2038,6 +2179,13 @@ def _episode_metric_value(metric: MetricName, result: SeedResult) -> float | Non
         case MetricName.STARVATION_DEATH:
             # NetHack's xlog death text for starving is "died of starvation".
             return 1 if died and "starvation" in metrics.death_cause else 0
+        case MetricName.HUNGER_AT_DEATH:
+            if metrics.steps_by_skill is None:
+                return None
+            if not died:
+                return 0
+            hunger = metrics.hunger_at_death
+            return None if hunger is None else _HUNGER_STATES.index(hunger)
 
 
 def _metric_statistic(
@@ -3555,7 +3703,77 @@ def _render_report_markdown_v4(payload: dict[str, object]) -> str:
     before, separator, after = markdown.partition("\n## Case ")
     if not separator:
         raise ContractError("schema-four report contains no suite cases")
-    return before + "\n".join(section) + "\n" + separator + after
+    combined = before + "\n".join(section) + "\n" + separator + after
+    return _append_schema_four_diagnostics(combined, normalized_cases)
+
+
+def _append_schema_four_diagnostics(
+    markdown: str, case_reports: Sequence[dict[str, object]]
+) -> str:
+    """Only reports with newly recorded diagnostics gain a case-by-case table."""
+    rows: list[tuple[str, list[tuple[int, EpisodeMetrics]]]] = []
+    recorded: set[bool] = set()
+    for case in case_reports:
+        case_id = string_value(case["case_id"], "diagnostics case_id")
+        episodes = []
+        for item in array_value(case["results"], "diagnostics results"):
+            result = object_value(item, "diagnostics result", _RESULT_FIELDS_V3)
+            metrics = EpisodeMetrics.from_json(result["metrics"])
+            recorded.add(metrics.steps_by_skill is not None)
+            episodes.append(
+                (integer_value(result["seed"], "diagnostics seed"), metrics)
+            )
+        rows.append((case_id, episodes))
+    if len(recorded) > 1:
+        raise ContractError(
+            "report results must all record failure diagnostics or all omit them"
+        )
+    if recorded != {True}:
+        return markdown
+    lines = [
+        "## Failure diagnostics",
+        "",
+        "Hunger at death is the last live observation before the terminal step; "
+        "NLE zeroes terminal statistics.",
+    ]
+    for case_id, episodes in rows:
+        if not episodes:
+            continue
+        lines.extend(
+            [
+                "",
+                f"### `{case_id}`",
+                "",
+                "| Seed | Skill steps | SEARCH steps | First Hungry turn "
+                "| Hunger before death |",
+                "| ---: | --- | ---: | ---: | --- |",
+            ]
+        )
+        for seed, metrics in episodes:
+            assert metrics.steps_by_skill is not None
+            skills = (
+                ", ".join(
+                    f"{skill.value}: {count}" for skill, count in metrics.steps_by_skill
+                )
+                or "-"
+            )
+            hungry = (
+                "-"
+                if metrics.first_hungry_turn is None
+                else str(metrics.first_hungry_turn)
+            )
+            hunger = (
+                "-"
+                if metrics.hunger_at_death is None
+                else metrics.hunger_at_death.value
+            )
+            lines.append(
+                f"| {seed} | {skills} | {metrics.search_steps} | {hungry} | {hunger} |"
+            )
+    before, separator, after = markdown.partition("\n## Aggregate\n")
+    if not separator:
+        raise ContractError("schema-four report contains no aggregate")
+    return before + "\n\n" + "\n".join(lines) + "\n" + separator + after
 
 
 def _success_cell(success: object) -> str:

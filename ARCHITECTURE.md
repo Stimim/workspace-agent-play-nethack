@@ -840,6 +840,21 @@ rederived from stored public observations and confirmed markers rather than
 trusted from the run outcome. A zeroed terminal NLE observation is not treated
 as final player state; the last live observation remains authoritative.
 
+Episodes evaluated since the failure-diagnostics change additionally record
+four optional, all-or-none JSON metrics fields: executed `steps_by_skill`
+(including prompt, fallback, and terminal steps), executed
+`Command.SEARCH` `search_steps`, the first live observation's
+`first_hungry_turn` at Hungry or worse, and `hunger_at_death` from the last
+live preterminal observation. The last field is null for nondeath or death
+without live evidence; old reports omit all four fields, including when
+rendered again. `hunger_at_death` is an ordinal threshold metric where 0
+means Satiated, 1 Not Hungry, 2 Hungry, and 3 or higher Weak or worse. Nondeath
+with recorded diagnostics evaluates as zero; missing evidence does not satisfy
+a required threshold. Schema-4 Markdown prints a per-case diagnostic table
+only if every result has the group, leaving historical schema-2/3/4 reports
+byte-for-byte unchanged
+([note 0023](docs/notes/0023-early-hunger-failure-diagnostics.md)).
+
 Acceptance requires every requested case/seed pair without interruption,
 the per-case thresholds, fixed shared configuration across cases (model,
 policy, knowledge, NLE version, character, and `ollama_num_ctx`), the declared
