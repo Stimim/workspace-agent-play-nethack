@@ -130,6 +130,66 @@ def _scratch_repository(tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
     return repository, check_log, environment
 
 
+def _set_omp_ancestor(proc_root: Path, omp_pid: int) -> None:
+    for pid, parent in ((os.getpid(), omp_pid), (omp_pid, 1)):
+        process = proc_root / str(pid)
+        process.mkdir(parents=True, exist_ok=True)
+        (process / "stat").write_text(
+            f"{pid} (test process (with parens)) S {parent} 0 0\n",
+            encoding="utf-8",
+        )
+
+
+@pytest.mark.parametrize(
+    ("ancestor_pid", "expected"),
+    [(601, CONVERSATION), (602, OTHER_CONVERSATION)],
+)
+def test_resolve_prefers_omp_ancestor_over_other_live_clients(
+    tmp_path: Path, ancestor_pid: int, expected: str
+) -> None:
+    repository = tmp_path / "repo"
+    repository.mkdir()
+    omp_root = tmp_path / "omp"
+    proc_root = tmp_path / "proc"
+    _add_client(omp_root, proc_root, repository, pid=601, conversation=CONVERSATION)
+    _add_client(
+        omp_root, proc_root, repository, pid=602, conversation=OTHER_CONVERSATION
+    )
+    _set_omp_ancestor(proc_root, ancestor_pid)
+
+    completed = _skill(repository, omp_root, proc_root, "resolve")
+
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.strip() == expected
+
+
+def test_resolve_does_not_fall_back_when_ancestor_session_is_invalid(
+    tmp_path: Path,
+) -> None:
+    repository = tmp_path / "repo"
+    repository.mkdir()
+    omp_root = tmp_path / "omp"
+    proc_root = tmp_path / "proc"
+    _add_client(
+        omp_root,
+        proc_root,
+        repository,
+        pid=701,
+        conversation=CONVERSATION,
+        duplicate_session=True,
+    )
+    _add_client(
+        omp_root, proc_root, repository, pid=702, conversation=OTHER_CONVERSATION
+    )
+    _set_omp_ancestor(proc_root, 701)
+
+    completed = _skill(repository, omp_root, proc_root, "resolve")
+
+    assert completed.returncode == 2
+    assert "OMP ancestor resolution" in completed.stderr
+    assert "ambiguous OMP session evidence" in completed.stderr
+
+
 def test_resolve_uses_one_live_client_and_validated_session(tmp_path: Path) -> None:
     repository = tmp_path / "repo"
     repository.mkdir()

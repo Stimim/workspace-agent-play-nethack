@@ -92,6 +92,7 @@ Dependency order for the four capability items below: traversal goals, then NLE 
 - [x] Add the `omp-commit` skill: derive the active conversation UUID from
   unambiguous live OMP evidence, normalize its Git trailer, and run format/lint
   checks before allowing a commit.
+- [x] omp-commit resolves the active conversation from its OMP ancestor process, so commits work while several OMP sessions run.
 
 - [x] Tune the local coding workers and consolidate every local OMP role on one
   64k-context `omp-coder` model (gemma4:26b) with the `replace` edit tool

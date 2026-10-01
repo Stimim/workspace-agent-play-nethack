@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -61,6 +62,27 @@ def _command_line(proc_root: Path, pid: int) -> list[str] | None:
         raise CommitSkillError(
             f"active process {pid} has a non-UTF-8 command line"
         ) from error
+
+
+def _parent_pid(proc_root: Path, pid: int) -> int | None:
+    try:
+        stat = (proc_root / str(pid) / "stat").read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    except (OSError, UnicodeError) as error:
+        raise CommitSkillError(
+            f"cannot read process ancestry for {pid}: {error}"
+        ) from error
+    closing = stat.rfind(")")
+    if closing < 0:
+        raise CommitSkillError(f"invalid process stat for {pid}")
+    fields = stat[closing + 1 :].split()
+    if len(fields) < 2:
+        raise CommitSkillError(f"invalid process stat for {pid}")
+    try:
+        return int(fields[1])
+    except ValueError as error:
+        raise CommitSkillError(f"invalid process stat for {pid}") from error
 
 
 def _resume_uuid(command: list[str]) -> str:
@@ -124,7 +146,7 @@ def active_conversation_uuid(repository: Path, omp_root: Path, proc_root: Path) 
     except OSError as error:
         raise CommitSkillError(f"repository does not exist: {repository}") from error
     client_root = omp_root / "run" / "daemons"
-    candidates: list[tuple[Path, list[str]]] = []
+    candidates: list[tuple[int, list[str]]] = []
     for client_file in sorted(client_root.glob("*/clients/*.json")):
         record = _read_json(client_file)
         pid = record.get("pid")
@@ -144,15 +166,52 @@ def active_conversation_uuid(repository: Path, omp_root: Path, proc_root: Path) 
         command = _command_line(proc_root, pid)
         if command is None or not command or Path(command[0]).name != "omp":
             continue
-        candidates.append((client_file, command))
+        candidates.append((pid, command))
+
+    pid = os.getppid()
+    visited: set[int] = set()
+    while pid > 1 and pid not in visited:
+        visited.add(pid)
+        command = next(
+            (
+                candidate
+                for candidate_pid, candidate in candidates
+                if candidate_pid == pid
+            ),
+            None,
+        )
+        if command is not None:
+            try:
+                conversation = _resume_uuid(command)
+                _validate_session_file(omp_root, repository, conversation)
+            except CommitSkillError as error:
+                raise CommitSkillError(
+                    f"OMP ancestor resolution for PID {pid} failed: {error}"
+                ) from error
+            return conversation
+        parent = _parent_pid(proc_root, pid)
+        if parent is None:
+            break
+        pid = parent
+
     if not candidates:
-        raise CommitSkillError(f"no active OMP client matches repository {repository}")
+        raise CommitSkillError(
+            "global live-client scan found no active OMP client matches "
+            f"repository {repository}"
+        )
     if len(candidates) != 1:
         raise CommitSkillError(
-            f"ambiguous active OMP clients for {repository}: {len(candidates)} matches"
+            "no matching OMP ancestor; global live-client scan found ambiguous "
+            f"active OMP clients for {repository}: {len(candidates)} matches"
         )
-    conversation = _resume_uuid(candidates[0][1])
-    _validate_session_file(omp_root, repository, conversation)
+    pid, command = candidates[0]
+    try:
+        conversation = _resume_uuid(command)
+        _validate_session_file(omp_root, repository, conversation)
+    except CommitSkillError as error:
+        raise CommitSkillError(
+            f"global single-client resolution for PID {pid} failed: {error}"
+        ) from error
     return conversation
 
 
