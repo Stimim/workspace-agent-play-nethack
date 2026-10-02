@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from enum import Enum
 from typing import Final, Self
@@ -40,6 +41,12 @@ LEVEL_CHANGE_ACTIONS: Final[dict[str, StairDirection]] = {
     "MiscDirection.DOWN": StairDirection.DOWN,
 }
 
+PRAY_ACTION_NAME: Final = "Command.PRAY"
+YES_COMMAND: Final = ord("y")
+_PRAYER_CONFIRMATION: Final = "Are you sure you want to pray? [yn] (n) "
+_FLOOR_CORPSE_CONFIRMATION: Final = re.compile(
+    r"There is a [a-z][a-z -]* corpse here; eat it\? \[ynq\] \(n\) "
+)
 EAT_ACTION_NAME: Final = "Command.EAT"
 ESC_COMMAND: Final = 27
 
@@ -48,6 +55,8 @@ class Skill(Enum):
     STAIRCASE_NAVIGATION = "staircase_navigation"
     EXPLORE_LEVEL = "explore_level"
     HUNGER = "hunger"
+    # Reserved for the deterministic prayer skill; no issuer exists yet.
+    PRAYER = "prayer"
     # Route to visible gold on NetHackGold-v0; deterministic, never offered to
     # the model.
     GOLD_NAVIGATION = "gold_navigation"
@@ -835,31 +844,139 @@ class HungerPermit:
 
 
 @dataclass(frozen=True, slots=True)
+class PrayerPermit:
+    """One deterministic prayer command for the observed game turn."""
+
+    turn: int
+
+    def __post_init__(self) -> None:
+        integer_value(self.turn, "prayer permit turn", minimum=0)
+
+
+class PromptKind(Enum):
+    ITEM = "item"
+    PRAYER_CONFIRMATION = "prayer_confirmation"
+    CORPSE_CONFIRMATION = "corpse_confirmation"
+
+
+@dataclass(frozen=True, slots=True)
 class PromptPermit:
     """Authorization for one command that answers or cancels an item prompt."""
 
     command: int
+    kind: PromptKind = PromptKind.ITEM
 
     def __post_init__(self) -> None:
         integer_value(self.command, "prompt permit command", minimum=0, maximum=255)
+        if not isinstance(self.kind, PromptKind):
+            raise TypeError("prompt permit kind must be a PromptKind")
 
 
 def survival_action_selection_error(
     action_name: str, selection: ActionSelection
 ) -> str | None:
-    """Why a hunger-only action is invalid from its recorded selection fields."""
+    """Why a restricted action is invalid from its recorded selection fields."""
     if action_name == EAT_ACTION_NAME and (
         selection.source is not ActionSelectionSource.DETERMINISTIC_SKILL
         or selection.skill is not Skill.HUNGER
         or selection.intent is not None
     ):
         return "only the deterministic hunger skill may select EAT"
+    if action_name == PRAY_ACTION_NAME and (
+        selection.source is not ActionSelectionSource.DETERMINISTIC_SKILL
+        or selection.skill is not Skill.PRAYER
+        or selection.intent is not None
+    ):
+        return "only the deterministic prayer skill may select PRAY"
     if action_name in PROMPT_KEY_ACTION_NAMES and (
         selection.source is not ActionSelectionSource.DETERMINISTIC_PROMPT
         or selection.skill is not Skill.HUNGER
         or selection.intent is not None
     ):
         return "prompt-key actions require the deterministic hunger prompt flow"
+    if (
+        action_name == "CompassDirection.NW"
+        and (selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT)
+        and (
+            selection.skill not in (Skill.PRAYER, Skill.HUNGER)
+            or selection.intent is not None
+        )
+    ):
+        return "yes answers require a deterministic prayer or hunger prompt skill"
+    return None
+
+
+def confirmation_prompt_kind(
+    message: str,
+    *,
+    single_choice: bool,
+    offered_item_commands: frozenset[int] | None = None,
+) -> PromptKind | None:
+    """Recognize observed confirmation text or an offered eat-item letter."""
+    if not single_choice:
+        return None
+    if message == _PRAYER_CONFIRMATION:
+        return PromptKind.PRAYER_CONFIRMATION
+    if _FLOOR_CORPSE_CONFIRMATION.fullmatch(message):
+        return PromptKind.CORPSE_CONFIRMATION
+    if offered_item_commands is not None and YES_COMMAND in offered_item_commands:
+        return PromptKind.ITEM
+    return None
+
+
+def prayer_action_error(
+    action_name: str,
+    selection: ActionSelection,
+    *,
+    permit: PrayerPermit | None,
+    turn: int | None,
+) -> str | None:
+    """The same prayer authorization predicate used at execution and audit."""
+    if action_name != PRAY_ACTION_NAME:
+        return None
+    error = survival_action_selection_error(action_name, selection)
+    if error is not None:
+        return error
+    if permit is None or turn is None or permit.turn != turn:
+        return "PRAY requires a matching deterministic prayer permit"
+    return None
+
+
+def confirmation_answer_error(
+    command: int,
+    selection: ActionSelection,
+    *,
+    prompt_active: bool,
+    prompt_kind: PromptKind | None,
+    permit: PromptPermit | None,
+) -> str | None:
+    """Reject ambiguous `y` unless the recognized prompt and permit agree."""
+    if command != YES_COMMAND:
+        return None
+    if selection.source is ActionSelectionSource.MODEL_FALLBACK:
+        return "the model cannot choose the ambiguous yes/movement key"
+    if (
+        not prompt_active
+        and selection.source is not ActionSelectionSource.DETERMINISTIC_PROMPT
+    ):
+        return None  # Ordinary deterministic northwest movement.
+    if prompt_kind is None:
+        return "yes requires an exact recognized confirmation prompt"
+    skill = (
+        Skill.PRAYER if prompt_kind is PromptKind.PRAYER_CONFIRMATION else Skill.HUNGER
+    )
+    if (
+        selection.source is not ActionSelectionSource.DETERMINISTIC_PROMPT
+        or selection.skill is not skill
+        or selection.intent is not None
+    ):
+        return "yes requires the matching deterministic prompt skill"
+    if (
+        permit is None
+        or permit.command != YES_COMMAND
+        or permit.kind is not prompt_kind
+    ):
+        return "yes requires a matching active confirmation prompt permit"
     return None
 
 

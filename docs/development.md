@@ -660,6 +660,38 @@ The default remains fixed until a later policy version explicitly adopts the
 survival bundle. Source revisions and the corrected <=19-turn corpse age rule
 are reviewed in [note 0024](notes/0024-reviewed-survival-knowledge.md).
 
+### Survival action profile and prompt gate (milestone 2, item 6)
+
+Choose `nle-survival-actions` in a `TaskSpec` to keep all 58
+`nle-hunger-actions` members, then append `Command.PRAY` (59 indexed actions).
+The profile preserves ration handling and the existing task objective. It does
+not enable the prayer or corpse-eating skill, change the active knowledge bundle
+or policy version, or alter the published evaluation suites.
+
+In NLE 1.3.0, the exact observed confirmation messages (the space before each
+closing quote is part of the raw observation) are:
+
+```text
+"Are you sure you want to pray? [yn] (n) "
+"There is a lichen corpse here; eat it? [ynq] (n) "
+```
+
+Both have a single-character-choice prompt. The floor-corpse string was
+captured after killing a seed-10 lichen, moving onto its corpse, then issuing
+EAT; the prayer string was captured by issuing PRAY on seed 6 in a direct
+NLE-environment test. These tests bypass the agent gate to inspect NLE, not to
+grant the policy permission to answer. The gate never allows PRAY until the
+deterministic prayer skill issues a permit in item 7; the event contract also
+rejects PRAY records. The coordinator continues to decline prayer and corpse
+yes/no confirmations by default. In the survival profile, a deterministic
+`y` answer to either recognized confirmation requires its matching typed
+prompt permit; the model is not offered the ambiguous `y`/northwest action.
+An exact eat-item prompt can still offer inventory letter `y`, and ordinary
+deterministic northwest movement outside a prompt remains legal. The evaluator
+replays the gate predicates against the prior recorded observation, including
+the offered item-letter and ration evidence. See
+[note 0025](notes/0025-survival-action-profile-and-prayer-gate.md).
+
 ## Dependency policy
 
 `pyproject.toml` declares direct requirements; `uv.lock` is the reproducible full resolution. NLE is consumed as a package from the maintained `NetHack-LE/nle` project. Do not add a fork or submodule until a concrete engine change requires it.

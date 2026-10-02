@@ -33,13 +33,21 @@ from nethack_agent.contracts import (
 )
 from nethack_agent.decision import (
     LEVEL_CHANGE_ACTIONS,
+    YES_COMMAND,
     ActionSelectionSource,
     DecisionMetrics,
     DestinationKind,
+    PromptKind,
+    PromptPermit,
     RunOutcome,
     RunState,
     Skill,
+    confirmation_answer_error,
+    confirmation_prompt_kind,
+    hunger_action_error,
     level_change_error,
+    prayer_action_error,
+    prompt_response_error,
 )
 from nethack_agent.environment import CHARACTER, LegalAction
 from nethack_agent.events import (
@@ -56,8 +64,15 @@ from nethack_agent.observation import ProjectedObservation
 from nethack_agent.ollama import OllamaClient, OllamaConfig, OllamaError
 from nethack_agent.replay import ExplorationReplay
 from nethack_agent.run_manager import POLICY_VERSION, ModelFactory, RunManager
+from nethack_agent.skills import item_selection_commands, safe_food_rations
 from nethack_agent.storage import MAX_EVENT_PAGE_LIMIT, RunRecord, RunStore
-from nethack_agent.tasks import STAIRCASE_TASK, NleTask, TaskSpec
+from nethack_agent.tasks import (
+    STAIRCASE_TASK,
+    ActionProfile,
+    ActionRole,
+    NleTask,
+    TaskSpec,
+)
 from nethack_agent.traversal import (
     EnterDungeonLeg,
     ExploreDungeonLeg,
@@ -1667,7 +1682,11 @@ def summarize_run(
             if payload.action_metrics is not None:
                 successful.append(payload.action_metrics)
             if not _action_is_valid(
-                payload, legal_actions, decided_on, level_changes_allowed
+                payload,
+                legal_actions,
+                decided_on,
+                level_changes_allowed,
+                task.action_profile,
             ):
                 invalid_actions += 1
             gold_error = _gold_intent_error(payload, decided_on)
@@ -2066,6 +2085,7 @@ def _action_is_valid(
     legal_actions: object,
     decided_on: ProjectedObservation | None,
     level_changes_allowed: bool,
+    action_profile: ActionProfile,
 ) -> bool:
     if not isinstance(legal_actions, tuple):
         return False
@@ -2076,6 +2096,88 @@ def _action_is_valid(
         and payload.selection.action_index == action.index
     ):
         return False
+    selection = payload.selection
+    if (
+        action.name == "Command.PRAY"
+        and prayer_action_error(
+            action.name,
+            selection,
+            permit=None,  # No deterministic prayer skill has issued one yet.
+            turn=None if decided_on is None else decided_on.player.turn,
+        )
+        is not None
+    ):
+        return False
+    if action.name == "Command.EAT" and (
+        decided_on is None
+        or hunger_action_error(
+            action.name,
+            selection,
+            hunger=decided_on.player.hunger,
+            prompt_active=decided_on.prompt.active,
+            safe_ration_available=bool(safe_food_rations(decided_on)),
+        )
+        is not None
+    ):
+        return False
+    if (
+        action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
+        and action.command == YES_COMMAND
+    ):
+        if decided_on is None:
+            return False
+        offered = item_selection_commands(decided_on)
+        prompt_kind = confirmation_prompt_kind(
+            decided_on.message,
+            single_choice=decided_on.prompt.single_character_choice,
+            offered_item_commands=offered,
+        )
+        item_permit = (
+            PromptPermit(YES_COMMAND, PromptKind.ITEM)
+            if prompt_kind is PromptKind.ITEM
+            and prompt_response_error(
+                action.name,
+                action.command,
+                selection,
+                prompt_active=decided_on.prompt.active,
+                item_selection=True,
+                offered_commands=offered or frozenset(),
+            )
+            is None
+            else None
+        )
+        if (
+            confirmation_answer_error(
+                action.command,
+                selection,
+                prompt_active=decided_on.prompt.active,
+                prompt_kind=prompt_kind,
+                permit=item_permit,
+            )
+            is not None
+        ):
+            return False
+    if (
+        action_profile is not ActionProfile.NLE_TASK_ACTIONS
+        and action.index < len(action_profile.actions)
+        and action_profile.role(action_profile.actions[action.index])
+        is ActionRole.PROMPT_KEY
+    ):
+        if decided_on is None:
+            return False
+        offered = item_selection_commands(decided_on)
+        if (
+            prompt_response_error(
+                action.name,
+                action.command,
+                selection,
+                prompt_active=decided_on.prompt.active,
+                item_selection=offered is not None,
+                offered_commands=offered or frozenset(),
+            )
+            is not None
+        ):
+            return False
     if action.name not in LEVEL_CHANGE_ACTIONS:
         return True
     return decided_on is not None and _level_change_allowed(

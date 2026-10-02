@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -15,14 +16,20 @@ from nethack_agent.decision import (
     DestinationKind,
     IntentDestination,
     MapCell,
+    PrayerPermit,
+    PromptKind,
+    PromptPermit,
     Skill,
     SkillSelectionSource,
     StuckReason,
+    confirmation_answer_error,
+    confirmation_prompt_kind,
     hunger_action_error,
     level_change_error,
     model_selectable_skills,
     parse_action_decision,
     parse_skill_decision,
+    prayer_action_error,
     prompt_response_error,
     skill_decision_schema,
 )
@@ -329,6 +336,91 @@ def test_survival_permit_predicates_require_hunger_and_matching_prompt_evidence(
             offered_commands=frozenset({ord("h")}),
         )
         is None
+    )
+
+
+def test_prayer_permit_and_confirmation_predicates_require_matching_evidence() -> None:
+    prayer = ActionSelection(
+        ActionSelectionSource.DETERMINISTIC_SKILL,
+        STAND_ON_DOWNSTAIRS,
+        Skill.PRAYER,
+        SkillSelectionSource.ARBITER,
+        None,
+        58,
+        "Authorized prayer.",
+        None,
+    )
+    assert (
+        prayer_action_error("Command.PRAY", prayer, permit=None, turn=101)
+        == "PRAY requires a matching deterministic prayer permit"
+    )
+    assert (
+        prayer_action_error("Command.PRAY", prayer, permit=PrayerPermit(100), turn=101)
+        == "PRAY requires a matching deterministic prayer permit"
+    )
+    assert (
+        prayer_action_error("Command.PRAY", prayer, permit=PrayerPermit(101), turn=101)
+        is None
+    )
+    assert (
+        prayer_action_error(
+            "Command.PRAY",
+            replace(prayer, source=ActionSelectionSource.MODEL_FALLBACK),
+            permit=PrayerPermit(101),
+            turn=101,
+        )
+        == "only the deterministic prayer skill may select PRAY"
+    )
+
+    answer = replace(
+        prayer,
+        source=ActionSelectionSource.DETERMINISTIC_PROMPT,
+    )
+    kind = confirmation_prompt_kind(
+        "Are you sure you want to pray? [yn] (n) ",
+        single_choice=True,
+    )
+    assert kind is PromptKind.PRAYER_CONFIRMATION
+    assert (
+        confirmation_prompt_kind(
+            "Are you sure you want to pray? [yn] (n)",
+            single_choice=True,
+        )
+        is None
+    )
+    assert (
+        confirmation_prompt_kind(
+            "There is a lichen corpse here; eat it? [ynq] (n) ",
+            single_choice=True,
+        )
+        is PromptKind.CORPSE_CONFIRMATION
+    )
+    assert (
+        confirmation_prompt_kind(
+            "There is a lichen corpse here; eat it? [ynq] (n) extra",
+            single_choice=True,
+        )
+        is None
+    )
+    assert (
+        confirmation_answer_error(
+            ord("y"),
+            answer,
+            prompt_active=True,
+            prompt_kind=kind,
+            permit=PromptPermit(ord("y"), kind),
+        )
+        is None
+    )
+    assert (
+        confirmation_answer_error(
+            ord("y"),
+            answer,
+            prompt_active=True,
+            prompt_kind=kind,
+            permit=PromptPermit(ord("y"), PromptKind.ITEM),
+        )
+        == "yes requires a matching active confirmation prompt permit"
     )
 
 

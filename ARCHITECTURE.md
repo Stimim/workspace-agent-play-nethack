@@ -61,8 +61,12 @@ members. `nle-task-actions` is NLE's 23 `TASK_ACTIONS`.
 `nle-hunger-actions` keeps those actions in order, then adds ESC and one enum
 member for every otherwise-missing `a-z`/`A-Z` inventory letter, deduplicated
 by integer command value. The additions have static role `prompt_key`; existing
-movement-letter collisions keep their routine movement role. The adapter
-passes the selected tuple as NLE's `actions=` argument and fails construction
+movement-letter collisions keep their routine movement role.
+`nle-survival-actions` retains that complete ordered hunger action tuple and
+appends the otherwise-absent `Command.PRAY` (59 actions total). Its PRAY role is
+distinct from EAT's hunger role. The `y` command is already
+`CompassDirection.NW`, so the new profile does not duplicate it.
+The adapter passes the selected tuple as NLE's `actions=` argument and fails construction
 unless the raw environment's action table equals it. A suite seed is
 deterministically expanded into separate core, display, and level-generation
 seeds; NLE reseeding is disabled and time-derived effects use the seed. The
@@ -186,9 +190,10 @@ choices. Per step, in
 order:
 
 1. a pending direction prompt from exploration's own kick is answered;
-2. on `nle-hunger-actions` runs, `HungerSkill` continues its one-prompt
-   sequence or, with no prompt active, proposes `EAT` only at NLE hunger value
-   2 (Hungry) or worse and only for the first inventory-letter-sorted item
+2. on `nle-hunger-actions` and `nle-survival-actions` runs, `HungerSkill`
+   continues its one-prompt sequence or, with no prompt active, proposes `EAT`
+   only at NLE hunger value 2 (Hungry) or worse and only for the first
+   inventory-letter-sorted item
    whose typed letter, food object class, exact normalized food-ration
    description, and BUC evidence agree;
 3. `SafePromptHandler` acknowledges wait-for-space prompts, cancels text input,
@@ -298,6 +303,22 @@ one-step pending ration is cleared after the next observation; changed,
 missing, or unoffered item evidence cancels the recognized prompt with ESC.
 The shared structural predicate also rejects invalid persisted EAT and added
 prompt-key selections during event construction.
+
+The survival profile also excludes PRAY and the ambiguous `y`/northwest command
+from model fallback. PRAY requires a deterministic prayer permit, but no skill
+issues one in this milestone item: the gate and the persisted-step contract
+reject every proposed PRAY, including a selection claiming the prayer skill.
+The `y` command remains available for deterministic northwest movement outside
+prompts. Within a prompt it requires a matching typed `PromptPermit`, a
+`deterministic_prompt` selection by the corresponding skill, and the exact
+recognized NLE prayer confirmation, floor-corpse confirmation, or eat-item
+prompt that literally offers inventory letter `y`. The coordinator currently
+issues only eat-item permits; its conservative prompt handler declines the
+prayer and corpse confirmations. The event contract checks selection provenance
+and rejects unauthorized prayer; the evaluator replays the same pure
+authorization predicates against the decided-on observation, including hunger
+and item-letter evidence. Neither a prayer skill nor corpse eating is enabled
+by this profile change.
 
 The traversal permit remains as in ADR 0004. The shared
 `decision.level_change_error` predicate requires a level-changing objective,

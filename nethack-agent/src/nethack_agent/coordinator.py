@@ -9,12 +9,14 @@ from typing import Final
 from nethack_agent.decision import (
     EAT_ACTION_NAME,
     LEVEL_CHANGE_ACTIONS,
+    YES_COMMAND,
     ActionSelection,
     ActionSelectionSource,
     HungerPermit,
     MapCell,
     ModelActionDecision,
     ModelSkillDecision,
+    PromptKind,
     PromptPermit,
     RunOutcome,
     RunState,
@@ -23,9 +25,12 @@ from nethack_agent.decision import (
     SkillSelectionSource,
     StuckReason,
     TraversalPermit,
+    confirmation_answer_error,
+    confirmation_prompt_kind,
     hunger_action_error,
     level_change_error,
     model_selectable_skills,
+    prayer_action_error,
     prompt_response_error,
 )
 from nethack_agent.environment import LegalAction, NleEnvironment, StepTransition
@@ -110,11 +115,21 @@ class ActionGate:
         roles = tuple(action_profile.role(action) for action in profile_actions)
         self._legal_actions = legal_actions
         self._roles = roles
+        self._profile = action_profile
         self._allowed_actions = tuple(
             action
             for action, role in zip(legal_actions, roles, strict=True)
             if action.name not in LEVEL_CHANGE_ACTIONS
-            and role not in {ActionRole.HUNGER, ActionRole.PROMPT_KEY}
+            and role
+            not in {
+                ActionRole.HUNGER,
+                ActionRole.PROMPT_KEY,
+                ActionRole.PRAYER,
+            }
+            and not (
+                action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
+                and action.command == YES_COMMAND
+            )
         )
         self.actions_by_name = routine_actions(legal_actions)
         self.actions_by_command = {
@@ -141,6 +156,8 @@ class ActionGate:
         *,
         hunger_permit: HungerPermit | None = None,
         prompt_permit: PromptPermit | None = None,
+        before: ProjectedObservation | None = None,
+        selection: ActionSelection | None = None,
     ) -> LegalAction:
         if isinstance(action_index, bool) or not isinstance(action_index, int):
             raise ActionGateError("action index must be an integer")
@@ -160,13 +177,48 @@ class ActionGate:
             raise ActionGateError(
                 f"{action.name} is forbidden: EAT requires a hunger permit"
             )
+        if role is ActionRole.PRAYER:
+            if selection is None:
+                raise ActionGateError("PRAY requires a deterministic prayer skill")
+            # No prayer skill issues permits until milestone item 7.
+            error = prayer_action_error(
+                action.name,
+                selection,
+                permit=None,
+                turn=None if before is None else before.player.turn,
+            )
+            assert error is not None
+            raise ActionGateError(error)
         if role is ActionRole.PROMPT_KEY and (
-            prompt_permit is None or prompt_permit.command != action.command
+            prompt_permit is None
+            or prompt_permit.command != action.command
+            or prompt_permit.kind is not PromptKind.ITEM
         ):
             raise ActionGateError(
                 f"{action.name} is forbidden: prompt keys require a matching "
                 "active item-selection prompt permit"
             )
+        if (
+            self._profile is ActionProfile.NLE_SURVIVAL_ACTIONS
+            and action.command == YES_COMMAND
+        ):
+            if selection is None or before is None:
+                raise ActionGateError(
+                    "yes requires a decided-on observation and selection"
+                )
+            error = confirmation_answer_error(
+                action.command,
+                selection,
+                prompt_active=before.prompt.active,
+                prompt_kind=confirmation_prompt_kind(
+                    before.message,
+                    single_choice=before.prompt.single_character_choice,
+                    offered_item_commands=item_selection_commands(before),
+                ),
+                permit=prompt_permit,
+            )
+            if error is not None:
+                raise ActionGateError(error)
         return action
 
 
@@ -247,7 +299,11 @@ class AgentCoordinator:
         self._gold = GoldNavigationSkill() if task.environment is NleTask.GOLD else None
         self._hunger = (
             HungerSkill()
-            if task.action_profile is ActionProfile.NLE_HUNGER_ACTIONS
+            if task.action_profile
+            in (
+                ActionProfile.NLE_HUNGER_ACTIONS,
+                ActionProfile.NLE_SURVIVAL_ACTIONS,
+            )
             else None
         )
         self._dungeon = DungeonMemory()
@@ -387,6 +443,8 @@ class AgentCoordinator:
                         traversal_permit,
                         hunger_permit=hunger_permit,
                         prompt_permit=prompt_permit,
+                        before=before,
+                        selection=selection,
                     )
                 except ActionGateError as error:
                     self._state = RunState.PAUSED

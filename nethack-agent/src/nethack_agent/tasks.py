@@ -66,6 +66,7 @@ class ActionRole(Enum):
     ROUTINE = "routine"
     HUNGER = "hunger"
     PROMPT_KEY = "prompt_key"
+    PRAYER = "prayer"
 
 
 class ActionProfile(Enum):
@@ -75,6 +76,8 @@ class ActionProfile(Enum):
     NLE_TASK_ACTIONS = "nle-task-actions"
     # The task actions plus ESC and every a-z/A-Z inventory-selection key.
     NLE_HUNGER_ACTIONS = "nle-hunger-actions"
+    # The hunger actions plus NLE's prayer command.
+    NLE_SURVIVAL_ACTIONS = "nle-survival-actions"
 
     @property
     def actions(self) -> tuple[IntEnum, ...]:
@@ -86,6 +89,10 @@ class ActionProfile(Enum):
             return ActionRole.PROMPT_KEY
         if command == int(nethack.Command.EAT):
             return ActionRole.HUNGER
+        if self is ActionProfile.NLE_SURVIVAL_ACTIONS and command == int(
+            nethack.Command.PRAY
+        ):
+            return ActionRole.PRAYER
         return ActionRole.ROUTINE
 
 
@@ -104,14 +111,19 @@ _HUNGER_ADDITIONS: Final = (
     ),
 )
 _HUNGER_ACTIONS: Final = (*_TASK_ACTIONS, *_HUNGER_ADDITIONS)
+_SURVIVAL_ACTIONS: Final = (*_HUNGER_ACTIONS, nethack.Command.PRAY)
 
 _PROFILE_ACTIONS: Final[dict[ActionProfile, tuple[IntEnum, ...]]] = {
     ActionProfile.NLE_TASK_ACTIONS: _TASK_ACTIONS,
     ActionProfile.NLE_HUNGER_ACTIONS: _HUNGER_ACTIONS,
+    ActionProfile.NLE_SURVIVAL_ACTIONS: _SURVIVAL_ACTIONS,
 }
 _PROFILE_PROMPT_KEY_COMMANDS: Final[dict[ActionProfile, frozenset[int]]] = {
     ActionProfile.NLE_TASK_ACTIONS: frozenset(),
     ActionProfile.NLE_HUNGER_ACTIONS: frozenset(
+        int(action) for action in _HUNGER_ADDITIONS
+    ),
+    ActionProfile.NLE_SURVIVAL_ACTIONS: frozenset(
         int(action) for action in _HUNGER_ADDITIONS
     ),
 }

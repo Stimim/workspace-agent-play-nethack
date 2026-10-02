@@ -17,16 +17,21 @@ from nethack_agent.contracts import (
 )
 from nethack_agent.decision import (
     LEVEL_CHANGE_ACTIONS,
+    PRAY_ACTION_NAME,
+    YES_COMMAND,
     ActionDecision,
     ActionSelection,
     ActionSelectionSource,
     DecisionMetrics,
+    PromptKind,
     RunOutcome,
     RunState,
     Skill,
     SkillDecision,
     SkillSelectionSource,
+    confirmation_answer_error,
     level_change_selection_error,
+    prayer_action_error,
     survival_action_selection_error,
 )
 from nethack_agent.environment import LegalAction
@@ -241,9 +246,26 @@ class StepPayload:
                 cell.y >= len(rows) or cell.x >= len(rows[0]) for cell in intent.cells()
             ):
                 raise ContractError("step intent cell is outside the observation map")
-        survival_error = survival_action_selection_error(
-            self.action.name, self.selection
+        survival_error = (
+            prayer_action_error(
+                self.action.name, self.selection, permit=None, turn=None
+            )
+            if self.action.name == PRAY_ACTION_NAME
+            else survival_action_selection_error(self.action.name, self.selection)
         )
+        if (
+            survival_error is None
+            and self.action.command == YES_COMMAND
+            and self.selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
+            and self.selection.skill is Skill.PRAYER
+        ):
+            survival_error = confirmation_answer_error(
+                self.action.command,
+                self.selection,
+                prompt_active=True,
+                prompt_kind=PromptKind.PRAYER_CONFIRMATION,
+                permit=None,
+            )
         if survival_error is not None:
             raise ContractError(f"step survival action is invalid: {survival_error}")
         direction = LEVEL_CHANGE_ACTIONS.get(self.action.name)

@@ -7,6 +7,7 @@ from nle.env.tasks import TASK_ACTIONS
 
 from nethack_agent.contracts import ContractError
 from nethack_agent.tasks import (
+    PROMPT_KEY_ACTION_NAMES,
     STAIRCASE_TASK,
     ActionProfile,
     ActionRole,
@@ -77,6 +78,62 @@ def test_hunger_profile_adds_only_esc_and_deduplicated_inventory_keys() -> None:
     assert profile.role(movement) is ActionRole.ROUTINE
     eat = next(action for action in profile.actions if int(action) == ord("e"))
     assert profile.role(eat) is ActionRole.HUNGER
+
+
+def test_survival_profile_adds_only_prayer_without_changing_legacy_profiles() -> None:
+    task = ActionProfile.NLE_TASK_ACTIONS
+    hunger = ActionProfile.NLE_HUNGER_ACTIONS
+    survival = ActionProfile.NLE_SURVIVAL_ACTIONS
+    task_commands = tuple(int(action) for action in TASK_ACTIONS)
+    hunger_commands = tuple(int(action) for action in hunger.actions)
+    survival_commands = tuple(int(action) for action in survival.actions)
+    inventory_keys = set(
+        map(ord, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+    )
+    task_command_set = set(task_commands)
+    expected_hunger = task_command_set | inventory_keys | {int(nethack.Command.ESC)}
+
+    assert tuple(int(action) for action in task.actions) == task_commands
+    assert set(hunger_commands) == expected_hunger
+    assert len(hunger_commands) == len(expected_hunger)
+    assert survival_commands[: len(hunger_commands)] == hunger_commands
+    assert set(survival_commands) - set(hunger_commands) == {int(nethack.Command.PRAY)}
+    assert set(survival_commands) == expected_hunger | {int(nethack.Command.PRAY)}
+    assert len(survival_commands) == len(set(survival_commands)) == 59
+    assert (
+        sum(int(action) == int(nethack.Command.PRAY) for action in survival.actions)
+        == 1
+    )
+
+    added_prompt_values = (
+        inventory_keys | {int(nethack.Command.ESC)}
+    ) - task_command_set
+    assert {
+        f"Command.{nethack.Command(value).name}" for value in added_prompt_values
+    } == PROMPT_KEY_ACTION_NAMES
+    assert "Command.PRAY" not in PROMPT_KEY_ACTION_NAMES
+    assert all(
+        survival.role(action)
+        is (
+            ActionRole.PRAYER
+            if int(action) == int(nethack.Command.PRAY)
+            else hunger.role(action)
+        )
+        for action in survival.actions
+    )
+    assert survival.role(nethack.Command.EAT) is ActionRole.HUNGER
+    assert hunger.role(nethack.Command.PRAY) is ActionRole.ROUTINE
+    assert task.role(nethack.Command.PRAY) is ActionRole.ROUTINE
+
+
+def test_score_task_round_trips_with_survival_profile() -> None:
+    task = TaskSpec.from_json(
+        spec_json(action_profile=ActionProfile.NLE_SURVIVAL_ACTIONS.value)
+    )
+
+    assert task.environment is NleTask.SCORE
+    assert task.action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
+    assert TaskSpec.from_json(json.loads(task.canonical_json())) == task
 
 
 def test_score_task_accepts_any_objective_legs() -> None:

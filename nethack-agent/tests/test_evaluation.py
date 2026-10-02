@@ -53,6 +53,8 @@ from nethack_agent.evaluation import (
 from nethack_agent.events import EventKind, RunEvent, RunStartedPayload, StepPayload
 from nethack_agent.model import ScriptedDevelopmentModel
 from nethack_agent.observation import (
+    BucStatus,
+    InventoryItem,
     MapView,
     PlayerStats,
     ProjectedObservation,
@@ -1068,6 +1070,78 @@ def synthetic_step(
         is_ascended=False,
         outcome=outcome,
         observation=observation,
+    )
+
+
+def test_survival_audit_rechecks_prayer_yes_and_ration_evidence() -> None:
+    before = synthetic_observation(0, LevelKey(0, 1), 1, hunger=2)
+    after = synthetic_observation(1, LevelKey(0, 1), 1, hunger=2)
+    step = synthetic_step(after)
+    profile = ActionProfile.NLE_SURVIVAL_ACTIONS
+
+    pray = LegalAction(0, 240, "Command.PRAY")
+    prayer = replace(step.selection, skill=Skill.PRAYER)
+    with pytest.raises(ContractError, match="matching deterministic prayer permit"):
+        replace(step, action=pray, selection=prayer)
+    with pytest.raises(ContractError, match="only the deterministic prayer skill"):
+        replace(step, action=pray)
+
+    yes = LegalAction(0, ord("y"), "CompassDirection.NW")
+    with pytest.raises(ContractError, match="active confirmation prompt permit"):
+        replace(
+            step,
+            action=yes,
+            selection=replace(
+                step.selection,
+                source=ActionSelectionSource.DETERMINISTIC_PROMPT,
+                skill=Skill.PRAYER,
+            ),
+        )
+    corpse_choice = replace(
+        before,
+        prompt=PromptState(True, False, False),
+        message="There is a lichen corpse here; eat it? [ynq] (n) ",
+    )
+    corpse_answer = replace(
+        step.selection,
+        source=ActionSelectionSource.DETERMINISTIC_PROMPT,
+        skill=Skill.HUNGER,
+    )
+    yes_step = replace(step, action=yes, selection=corpse_answer)
+    assert not evaluation._action_is_valid(
+        yes_step, (yes,), corpse_choice, True, profile
+    )
+    item_choice = replace(
+        corpse_choice,
+        message="What do you want to eat? [y or ?*]",
+    )
+    assert evaluation._action_is_valid(yes_step, (yes,), item_choice, True, profile)
+    assert evaluation._action_is_valid(
+        replace(step, action=yes), (yes,), before, True, profile
+    )  # Out-of-prompt northwest movement remains legal.
+
+    eat = LegalAction(0, ord("e"), "Command.EAT")
+    eat_step = replace(
+        step,
+        action=eat,
+        selection=replace(step.selection, skill=Skill.HUNGER),
+    )
+    assert not evaluation._action_is_valid(eat_step, (eat,), before, True, profile)
+    ration = InventoryItem(
+        "d",
+        "a food ration",
+        int(nethack.GLYPH_OBJ_OFF),
+        int(nethack.FOOD_CLASS),
+        BucStatus.UNKNOWN,
+    )
+    with_ration = replace(before, inventory=(ration,))
+    assert evaluation._action_is_valid(eat_step, (eat,), with_ration, True, profile)
+    assert not evaluation._action_is_valid(
+        eat_step,
+        (eat,),
+        replace(with_ration, player=replace(before.player, hunger=1)),
+        True,
+        profile,
     )
 
 

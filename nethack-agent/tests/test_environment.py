@@ -3,6 +3,7 @@ from pathlib import Path
 import gymnasium as gym
 import numpy as np
 import pytest
+from nle import nethack
 
 from nethack_agent.environment import (
     EnvironmentState,
@@ -12,7 +13,13 @@ from nethack_agent.environment import (
     ScenarioConfig,
     make_nle_environment,
 )
-from nethack_agent.tasks import ActionProfile, NleTask
+from nethack_agent.observation import ObservationProjector, PromptState
+from nethack_agent.tasks import (
+    STAIRCASE_TASK,
+    ActionProfile,
+    NleTask,
+    TaskSpec,
+)
 
 
 def scenario(directory: Path, *, seed: int = 6, max_steps: int = 20) -> ScenarioConfig:
@@ -173,3 +180,57 @@ def test_reusing_artifact_root_keeps_ttyrecs_isolated(tmp_path: Path) -> None:
     assert first_files[0] != second_files[0]
     assert first_files[0].parent != second_files[0].parent
     assert set(first_files).isdisjoint(second_files)
+
+
+def _survival_scenario(directory: Path, *, seed: int) -> ScenarioConfig:
+    return ScenarioConfig(
+        seed=seed,
+        artifact_directory=directory,
+        max_episode_steps=5,
+        task=TaskSpec(
+            NleTask.STAIRCASE,
+            ActionProfile.NLE_SURVIVAL_ACTIONS,
+            STAIRCASE_TASK.objective,
+        ),
+    )
+
+
+def test_pray_confirmation_is_the_real_nle_prompt(tmp_path: Path) -> None:
+    with NleEnvironment(_survival_scenario(tmp_path, seed=6)) as environment:
+        projector = ObservationProjector()
+        projector.project(environment.reset(), step_index=0)
+        pray = next(
+            action.index
+            for action in environment.legal_actions
+            if action.command == int(nethack.Command.PRAY)
+        )
+
+        transition = environment.step(pray)
+        observation = projector.project(
+            transition.observation, step_index=transition.step_index
+        )
+
+        assert observation.message == "Are you sure you want to pray? [yn] (n) "
+        assert observation.prompt == PromptState(True, False, False)
+
+
+def test_eat_confirmation_on_a_newly_killed_floor_lichen(tmp_path: Path) -> None:
+    # Seed 10 starts next to a lichen. A southeast melee kill leaves its
+    # corpse on that square; walk onto it before issuing EAT.
+    with NleEnvironment(_survival_scenario(tmp_path, seed=10)) as environment:
+        projector = ObservationProjector()
+        projector.project(environment.reset(), step_index=0)
+        actions = {action.command: action.index for action in environment.legal_actions}
+
+        kill = environment.step(actions[int(nethack.CompassDirection.SE)])
+        killed = projector.project(kill.observation, step_index=kill.step_index)
+        assert killed.message == "You kill the lichen!"
+
+        move = environment.step(actions[int(nethack.CompassDirection.SE)])
+        on_corpse = projector.project(move.observation, step_index=move.step_index)
+        assert on_corpse.message == "You see here a lichen corpse."
+
+        eat = environment.step(actions[int(nethack.Command.EAT)])
+        offered = projector.project(eat.observation, step_index=eat.step_index)
+        assert offered.message == "There is a lichen corpse here; eat it? [ynq] (n) "
+        assert offered.prompt == PromptState(True, False, False)

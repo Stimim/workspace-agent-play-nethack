@@ -1,4 +1,5 @@
 import threading
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -14,12 +15,14 @@ from nethack_agent.decision import (
     LEVEL_CHANGE_ACTIONS,
     ActionCandidate,
     ActionDecision,
+    ActionSelection,
     ActionSelectionSource,
     DecisionMetrics,
     HungerPermit,
     MapCell,
     ModelActionDecision,
     ModelSkillDecision,
+    PromptKind,
     PromptPermit,
     RunOutcome,
     RunState,
@@ -37,7 +40,7 @@ from nethack_agent.model import (
     ScriptedDevelopmentModel,
 )
 from nethack_agent.navigation import GOLD_GLYPH, ActionRecord, LevelMemory
-from nethack_agent.observation import ObservationProjector
+from nethack_agent.observation import ObservationProjector, PromptState
 from nethack_agent.replay import ExplorationReplay
 from nethack_agent.tasks import STAIRCASE_TASK, ActionProfile, NleTask, TaskSpec
 from nethack_agent.traversal import (
@@ -349,6 +352,154 @@ def test_action_gate_keeps_hunger_commands_out_of_model_fallbacks(
         assert movement_h in gate.allowed_actions
         assert eat not in gate.allowed_actions
         assert prompt_d not in gate.allowed_actions
+    finally:
+        environment.close()
+
+
+def test_survival_gate_requires_prayer_permit_and_exact_yes_prompt(
+    tmp_path: Path,
+) -> None:
+    task = TaskSpec(
+        NleTask.SCORE,
+        ActionProfile.NLE_SURVIVAL_ACTIONS,
+        Objective((ReachLevelLeg(LevelKey(0, 2)),)),
+    )
+    environment = NleEnvironment(
+        ScenarioConfig(
+            seed=6,
+            artifact_directory=tmp_path,
+            max_episode_steps=20,
+            task=task,
+        )
+    )
+    try:
+        before = ObservationProjector().project(environment.reset(), step_index=0)
+        gate = ActionGate(environment.legal_actions, task.action_profile)
+        pray = next(
+            action
+            for action in environment.legal_actions
+            if action.name == "Command.PRAY"
+        )
+        yes = next(
+            action for action in environment.legal_actions if action.command == ord("y")
+        )
+        assert pray not in gate.allowed_actions
+        assert yes not in gate.allowed_actions
+        prayer = ActionSelection(
+            ActionSelectionSource.DETERMINISTIC_SKILL,
+            STAND_ON_DOWNSTAIRS,
+            Skill.PRAYER,
+            SkillSelectionSource.ARBITER,
+            None,
+            pray.index,
+            "Pray only with authorization.",
+            None,
+        )
+        with pytest.raises(ActionGateError, match="prayer permit"):
+            gate.resolve(pray.index, before=before, selection=prayer)
+        with pytest.raises(ActionGateError, match="deterministic prayer skill"):
+            gate.resolve(
+                pray.index,
+                before=before,
+                selection=replace(
+                    prayer,
+                    source=ActionSelectionSource.MODEL_FALLBACK,
+                    skill=Skill.STAIRCASE_NAVIGATION,
+                ),
+            )
+        with pytest.raises(ActionGateError, match="deterministic prayer skill"):
+            gate.resolve(
+                pray.index,
+                before=before,
+                selection=replace(prayer, skill=Skill.HUNGER),
+            )
+
+        choice = PromptState(True, False, False)
+        prayer_prompt = replace(
+            before,
+            prompt=choice,
+            message="Are you sure you want to pray? [yn] (n) ",
+        )
+        corpse_prompt = replace(
+            before,
+            prompt=choice,
+            message="There is a lichen corpse here; eat it? [ynq] (n) ",
+        )
+        for prompted, kind, skill in (
+            (prayer_prompt, PromptKind.PRAYER_CONFIRMATION, Skill.PRAYER),
+            (corpse_prompt, PromptKind.CORPSE_CONFIRMATION, Skill.HUNGER),
+        ):
+            answer = replace(
+                prayer,
+                source=ActionSelectionSource.DETERMINISTIC_PROMPT,
+                skill=skill,
+                action_index=yes.index,
+            )
+            with pytest.raises(ActionGateError, match="confirmation prompt permit"):
+                gate.resolve(yes.index, before=prompted, selection=answer)
+            with pytest.raises(ActionGateError, match="confirmation prompt permit"):
+                gate.resolve(
+                    yes.index,
+                    before=prompted,
+                    selection=answer,
+                    prompt_permit=PromptPermit(ord("y")),
+                )
+            assert (
+                gate.resolve(
+                    yes.index,
+                    before=prompted,
+                    selection=answer,
+                    prompt_permit=PromptPermit(ord("y"), kind),
+                )
+                == yes
+            )
+            with pytest.raises(ActionGateError, match="exact recognized"):
+                gate.resolve(
+                    yes.index,
+                    before=replace(prompted, message=prompted.message + "unexpected"),
+                    selection=answer,
+                    prompt_permit=PromptPermit(ord("y"), kind),
+                )
+
+        item_prompt = replace(
+            before,
+            prompt=choice,
+            message="What do you want to eat? [y or ?*]",
+        )
+        item_answer = replace(
+            prayer,
+            source=ActionSelectionSource.DETERMINISTIC_PROMPT,
+            skill=Skill.HUNGER,
+            action_index=yes.index,
+        )
+        assert (
+            gate.resolve(
+                yes.index,
+                before=item_prompt,
+                selection=item_answer,
+                prompt_permit=PromptPermit(ord("y")),
+            )
+            == yes
+        )
+        with pytest.raises(ActionGateError, match="confirmation prompt permit"):
+            gate.resolve(
+                yes.index,
+                before=item_prompt,
+                selection=item_answer,
+                prompt_permit=PromptPermit(ord("y"), PromptKind.CORPSE_CONFIRMATION),
+            )
+
+        northwest = replace(prayer, skill=Skill.EXPLORE_LEVEL, action_index=yes.index)
+        assert gate.resolve(yes.index, before=before, selection=northwest) == yes
+        with pytest.raises(ActionGateError, match="ambiguous yes"):
+            gate.resolve(
+                yes.index,
+                before=before,
+                selection=replace(
+                    northwest,
+                    source=ActionSelectionSource.MODEL_FALLBACK,
+                ),
+            )
     finally:
         environment.close()
 
