@@ -9,6 +9,8 @@ from nethack_agent.coordinator import ActionGate
 from nethack_agent.decision import (
     MAX_CANDIDATE_REASON_LENGTH,
     MAX_FALLBACK_CANDIDATES,
+    PRAYER_FIRST_SAFE_TURN,
+    PRAYER_REPEAT_WAIT_TURNS,
     ActionIntent,
     ActionSelection,
     ActionSelectionSource,
@@ -16,12 +18,16 @@ from nethack_agent.decision import (
     DestinationKind,
     IntentDestination,
     MapCell,
+    PrayerEvidence,
+    PrayerOutcome,
+    PrayerOutcomeKind,
     PrayerPermit,
     PromptKind,
     PromptPermit,
     Skill,
     SkillSelectionSource,
     StuckReason,
+    classify_prayer_outcome,
     confirmation_answer_error,
     confirmation_prompt_kind,
     hunger_action_error,
@@ -340,6 +346,8 @@ def test_survival_permit_predicates_require_hunger_and_matching_prompt_evidence(
 
 
 def test_prayer_permit_and_confirmation_predicates_require_matching_evidence() -> None:
+    evidence = PrayerEvidence(3, 100, PRAYER_FIRST_SAFE_TURN, kill_count=7)
+    intent = ActionIntent(None, None, None, prayer=evidence)
     prayer = ActionSelection(
         ActionSelectionSource.DETERMINISTIC_SKILL,
         STAND_ON_DOWNSTAIRS,
@@ -348,34 +356,125 @@ def test_prayer_permit_and_confirmation_predicates_require_matching_evidence() -
         None,
         58,
         "Authorized prayer.",
-        None,
+        intent,
     )
-    assert (
-        prayer_action_error("Command.PRAY", prayer, permit=None, turn=101)
-        == "PRAY requires a matching deterministic prayer permit"
-    )
-    assert (
-        prayer_action_error("Command.PRAY", prayer, permit=PrayerPermit(100), turn=101)
-        == "PRAY requires a matching deterministic prayer permit"
-    )
-    assert (
-        prayer_action_error("Command.PRAY", prayer, permit=PrayerPermit(101), turn=101)
-        is None
+
+    def allowed(turn: int = 100, hunger: int = 3, **changes: object) -> str | None:
+        values = dict(
+            permit=PrayerPermit(turn),
+            turn=turn,
+            hunger=hunger,
+            prompt_active=False,
+            ration_available=False,
+            prior_prayers=0,
+            on_altar=False,
+        )
+        values.update(changes)
+        return prayer_action_error("Command.PRAY", prayer, **values)
+
+    assert allowed() is None
+    assert allowed(permit=None) is not None
+    assert allowed(permit=PrayerPermit(99)) is not None
+    before = replace(
+        prayer, intent=replace(intent, prayer=PrayerEvidence(3, 99, 100, 7))
     )
     assert (
         prayer_action_error(
             "Command.PRAY",
-            replace(prayer, source=ActionSelectionSource.MODEL_FALLBACK),
-            permit=PrayerPermit(101),
-            turn=101,
+            before,
+            permit=PrayerPermit(99),
+            turn=99,
+            hunger=3,
+            prompt_active=False,
+            ration_available=False,
+            prior_prayers=0,
+            on_altar=False,
         )
-        == "only the deterministic prayer skill may select PRAY"
+        is not None
+    )
+    assert allowed(hunger=2) is not None
+    assert allowed(ration_available=True) is not None
+    assert allowed(prompt_active=True) is not None
+    assert allowed(on_altar=True) is not None
+    repeat_turn = 100 + PRAYER_REPEAT_WAIT_TURNS
+    repeat = replace(
+        prayer,
+        intent=replace(intent, prayer=PrayerEvidence(3, repeat_turn, repeat_turn, 7)),
     )
 
+    def repeat_error(turn: int, selection: ActionSelection) -> str | None:
+        return prayer_action_error(
+            "Command.PRAY",
+            selection,
+            permit=PrayerPermit(turn),
+            turn=turn,
+            hunger=3,
+            prompt_active=False,
+            ration_available=False,
+            prior_prayers=1,
+            last_prayer_turn=100,
+            on_altar=False,
+        )
+
+    assert repeat_error(repeat_turn, repeat) is None
+    assert (
+        repeat_error(
+            repeat_turn - 1,
+            replace(
+                repeat,
+                intent=replace(
+                    intent, prayer=PrayerEvidence(3, repeat_turn - 1, repeat_turn, 7)
+                ),
+            ),
+        )
+        is not None
+    )
+    assert (
+        repeat_error(
+            repeat_turn,
+            replace(
+                repeat,
+                intent=replace(intent, prayer=PrayerEvidence(3, repeat_turn, 100, 7)),
+            ),
+        )
+        is not None
+    )
+    with pytest.raises(ContractError, match="only deterministic"):
+        replace(prayer, source=ActionSelectionSource.MODEL_FALLBACK)
+    legacy_intent = ActionIntent(
+        IntentDestination(DestinationKind.GOLD, 1, 1), None, None
+    )
+    legacy = legacy_intent.to_json()
+    assert "prayer" not in legacy
+    assert ActionIntent.from_json(legacy) == legacy_intent
+    assert ActionIntent.from_json(intent.to_json()) == intent
+    with pytest.raises(TypeError, match="PrayerEvidence"):
+        replace(intent, prayer={"reason_hunger": 3})
+    outcome = PrayerOutcome(
+        103, 1, "Your stomach feels content.", PrayerOutcomeKind.FIXED
+    )
     answer = replace(
         prayer,
         source=ActionSelectionSource.DETERMINISTIC_PROMPT,
+        intent=replace(intent, prayer=replace(evidence, outcome=outcome)),
     )
+    assert ActionSelection.from_json(answer.to_json()) == answer
+    assert (
+        classify_prayer_outcome(
+            3, "You finish your prayer.  You feel that Tyr is satisfied."
+        )
+        is PrayerOutcomeKind.NOT_FIXED
+    )
+    assert (
+        classify_prayer_outcome(
+            3, '"Thou must relearn thy lessons!"  You feel foolish!'
+        )
+        is PrayerOutcomeKind.DISPLEASED_OR_PUNISHED
+    )
+    with pytest.raises(ContractError, match="kind does not match"):
+        PrayerOutcome(
+            103, 1, "Your stomach feels content.", PrayerOutcomeKind.NOT_FIXED
+        )
     kind = confirmation_prompt_kind(
         "Are you sure you want to pray? [yn] (n) ",
         single_choice=True,

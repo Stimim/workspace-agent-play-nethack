@@ -185,27 +185,30 @@ or implement a deterministic skill for a simple recurring case.
 offering exactly the planner's goal and the skills that can serve it
 (`decision.model_selectable_skills`): staircase navigation and exploration for
 a stair goal, exploration alone for an `explore_level` goal. A deterministic
-arbiter owns execution; the hunger and gold-navigation skills are never model
-choices. Per step, in
-order:
+arbiter owns execution; the hunger, prayer, and gold-navigation skills are
+never model choices. Per step, in order:
 
-1. a pending direction prompt from exploration's own kick is answered;
-2. on `nle-hunger-actions` and `nle-survival-actions` runs, `HungerSkill`
+1. on `nle-hunger-actions` and `nle-survival-actions` runs, `HungerSkill`
    continues its one-prompt sequence or, with no prompt active, proposes `EAT`
    only at NLE hunger value 2 (Hungry) or worse and only for the first
    inventory-letter-sorted item
    whose typed letter, food object class, exact normalized food-ration
    description, and BUC evidence agree;
-3. `SafePromptHandler` acknowledges wait-for-space prompts, cancels text input,
-   and declines recognizable yes/no prompts, including peaceful attacks and
-   floor-food `eat it?`;
-4. any other prompt goes to the model as a fallback action;
-5. `StaircaseNavigationSkill` ranks remembered compatible staircases by
+2. a pending direction prompt from exploration's own kick is answered;
+3. on `nle-survival-actions`, `PrayerSkill` answers an exact pending prayer
+   confirmation, fights a safely attackable adjacent hostile before praying,
+   then considers PRAY for Weak-or-worse hunger without a verified ration,
+   a prompt, or an observed altar, after its conservatively estimated timeout;
+4. `SafePromptHandler` acknowledges wait-for-space prompts, cancels text input,
+   and declines other recognizable yes/no prompts, including peaceful attacks
+   and floor-food `eat it?`;
+5. any other prompt goes to the model as a fallback action;
+6. `StaircaseNavigationSkill` ranks remembered compatible staircases by
    established identity before a probe, then route distance, row, and column.
    On the chosen staircase it fights an adjacent safe-to-melee hostile before
    either waiting or traversing. Stepping onto an adjacent staircase still
    completes or enables the goal immediately;
-6. on `NetHackGold-v0` under an `explore_level` goal, `GoldNavigationSkill`
+7. on `NetHackGold-v0` under an `explore_level` goal, `GoldNavigationSkill`
    routes onto the reachable cell whose current glyph is exactly the gold-piece
    glyph (`LevelMemory.gold`, rederived from every observation and never
    remembered), ranked by route distance, row, and column and skipping goals
@@ -214,7 +217,7 @@ order:
    Its intent has a `gold` destination, only `gold_navigation` steps may carry
    one, and the evaluator reports an integrity problem when that cell did not
    show the gold glyph on the level of the observation the step was decided on;
-7. `ExploreLevelSkill` acts, biased toward unreachable compatible staircases
+8. `ExploreLevelSkill` acts, biased toward unreachable compatible staircases
    of a stair goal, or reports a typed `StuckReason`. The first
    `search_exhausted` report at the level's current knowledge marks the level
    exhausted and explored and records `selection.exhausted_level` on that
@@ -304,21 +307,24 @@ missing, or unoffered item evidence cancels the recognized prompt with ESC.
 The shared structural predicate also rejects invalid persisted EAT and added
 prompt-key selections during event construction.
 
-The survival profile also excludes PRAY and the ambiguous `y`/northwest command
-from model fallback. PRAY requires a deterministic prayer permit, but no skill
-issues one in this milestone item: the gate and the persisted-step contract
-reject every proposed PRAY, including a selection claiming the prayer skill.
+The survival profile excludes PRAY and ambiguous `y`/northwest from model
+fallback. Prayer needs a `deterministic_skill` selection, a one-turn
+`PrayerPermit`, Weak-or-worse hunger, no verified ration, no active prompt, no
+observed altar under the hero, and a conservative timeout estimate: first
+PRAY from game turn 100 (initial 300 minus 100 = 200, below the major-trouble
+limit of 201); later prayers only after at least 1,229 further game turns.
+The latter bound covers at most 95% of post-prayer resets and leaves residual
+hidden-state risk. The count of literal `You kill` messages is recorded as
+evidence but never used as a gate: it is not the hidden alignment record.
 The `y` command remains available for deterministic northwest movement outside
-prompts. Within a prompt it requires a matching typed `PromptPermit`, a
-`deterministic_prompt` selection by the corresponding skill, and the exact
-recognized NLE prayer confirmation, floor-corpse confirmation, or eat-item
-prompt that literally offers inventory letter `y`. The coordinator currently
-issues only eat-item permits; its conservative prompt handler declines the
-prayer and corpse confirmations. The event contract checks selection provenance
-and rejects unauthorized prayer; the evaluator replays the same pure
-authorization predicates against the decided-on observation, including hunger
-and item-letter evidence. Neither a prayer skill nor corpse eating is enabled
-by this profile change.
+prompts. During the exact NLE prayer confirmation, it needs a pending PRAY and
+matching typed `PromptPermit(y, PRAYER_CONFIRMATION)`. The hunger item prompt
+can still literally offer inventory letter `y`; a corpse `eat it?` confirmation
+is still declined until the separate corpse-eating skill exists. The event
+contract validates typed prayer evidence and following outcome, while the
+evaluator reconstructs prayer history from stored steps and replays the shared
+predicate against each decided-on observation (including the known ration and
+literal kill-message count). See [note 0026](docs/notes/0026-deterministic-prayer-and-probe-evidence.md).
 
 The traversal permit remains as in ADR 0004. The shared
 `decision.level_change_error` predicate requires a level-changing objective,
@@ -332,9 +338,10 @@ decisions and metrics. This is an auditable decision trace, not
 chain-of-thought.
 
 The map intent (`decision.ActionIntent`) comes from the deterministic skill's
-own routing data, never from the action direction or rationale text. It has an
-optional `destination` with a `DestinationKind` and zero-based map
-coordinates, and an optional `attack_target` cell; at least one is present:
+own routing data, never from the action direction or rationale text. A
+map-target intent has an optional `destination` with a `DestinationKind` and
+zero-based map coordinates and an optional `attack_target` cell; at least one
+map target is present:
 
 - `downstairs` and `upstairs`: the remembered `>` or `<` staircase navigation
   routes to, steps onto, waits on, uses, or keeps while it first fights an
@@ -351,6 +358,12 @@ coordinates, and an optional `attack_target` cell; at least one is present:
 - `attack_target`: the displayed hostile monster the action attacks by moving
   into it. Exploration fights before choosing a frontier, so its attacks carry
   no destination.
+
+Prayer uses a separate typed, map-free intent: the observed Weak-or-worse
+trigger, game turn, timeout bound, and count of literal `You kill` messages;
+its exact confirmation step records the first live outcome and message. A
+terminal/truncated confirmation has no reliable live outcome because NLE
+zeroes the bottom-line stats, so the outcome remains absent.
 
 The destination is usually not the adjacent cell the action steps into. The
 coordinator stamps every skill intent with the `level` (dungeon number and

@@ -33,15 +33,20 @@ from nethack_agent.contracts import (
 )
 from nethack_agent.decision import (
     LEVEL_CHANGE_ACTIONS,
+    PRAY_ACTION_NAME,
     YES_COMMAND,
     ActionSelectionSource,
     DecisionMetrics,
     DestinationKind,
+    PrayerEvidence,
+    PrayerOutcome,
+    PrayerPermit,
     PromptKind,
     PromptPermit,
     RunOutcome,
     RunState,
     Skill,
+    classify_prayer_outcome,
     confirmation_answer_error,
     confirmation_prompt_kind,
     hunger_action_error,
@@ -59,7 +64,7 @@ from nethack_agent.events import (
 )
 from nethack_agent.knowledge import load_default_knowledge_bundle
 from nethack_agent.model import ScriptedDevelopmentModel
-from nethack_agent.navigation import GOLD_GLYPH
+from nethack_agent.navigation import GOLD_GLYPH, DungeonMemory
 from nethack_agent.observation import ProjectedObservation
 from nethack_agent.ollama import OllamaClient, OllamaConfig, OllamaError
 from nethack_agent.replay import ExplorationReplay
@@ -1657,6 +1662,11 @@ def summarize_run(
     level_changes_allowed = task.objective.changes_level
     decided_on: ProjectedObservation | None = None
     initial_observation: ProjectedObservation | None = None
+    prior_prayers = 0
+    last_prayer_turn: int | None = None
+    kill_count = 0
+    pending_prayer: PrayerEvidence | None = None
+    prayer_memory = DungeonMemory()
 
     sequences = [event.sequence for event in events]
     if sequences != list(range(len(events))):
@@ -1670,6 +1680,9 @@ def summarize_run(
         legal_actions = started[0].payload.legal_actions
         decided_on = started[0].payload.observation
         initial_observation = decided_on
+        kill_count = decided_on.message.count("You kill")
+        if _observation_is_live(decided_on):
+            prayer_memory.observe(decided_on)
 
     terminal_step_index: int | None = None
     for position, event in enumerate(events):
@@ -1681,18 +1694,45 @@ def summarize_run(
                 successful.append(payload.skill_metrics)
             if payload.action_metrics is not None:
                 successful.append(payload.action_metrics)
-            if not _action_is_valid(
+            valid = _action_is_valid(
                 payload,
                 legal_actions,
                 decided_on,
                 level_changes_allowed,
                 task.action_profile,
-            ):
+                prior_prayers=prior_prayers,
+                last_prayer_turn=last_prayer_turn,
+                kill_count=kill_count,
+                pending_prayer=pending_prayer,
+                on_altar=(
+                    prayer_memory.current.cmap(prayer_memory.current.position) == 27
+                    or (
+                        decided_on is not None and "altar" in decided_on.message.lower()
+                    )
+                )
+                if decided_on is not None and _observation_is_live(decided_on)
+                else False,
+            )
+            if not valid:
                 invalid_actions += 1
+            pending_prayer = (
+                payload.selection.intent.prayer
+                if valid
+                and payload.action.name == PRAY_ACTION_NAME
+                and payload.selection.intent is not None
+                else None
+            )
+            if payload.action.name == PRAY_ACTION_NAME:
+                prior_prayers += 1
+                if decided_on is not None:
+                    last_prayer_turn = decided_on.player.turn
+            kill_count += payload.observation.message.count("You kill")
             gold_error = _gold_intent_error(payload, decided_on)
             if gold_error is not None:
                 problems.append(f"step {len(step_payloads)} {gold_error}")
             decided_on = payload.observation
+            if _observation_is_live(decided_on):
+                prayer_memory.observe(decided_on)
             if payload.observation.step_index != len(step_payloads):
                 problems.append(
                     f"step event {event.sequence} has step_index "
@@ -2086,6 +2126,12 @@ def _action_is_valid(
     decided_on: ProjectedObservation | None,
     level_changes_allowed: bool,
     action_profile: ActionProfile,
+    *,
+    prior_prayers: int = 0,
+    last_prayer_turn: int | None = None,
+    kill_count: int = 0,
+    pending_prayer: PrayerEvidence | None = None,
+    on_altar: bool = False,
 ) -> bool:
     if not isinstance(legal_actions, tuple):
         return False
@@ -2097,15 +2143,26 @@ def _action_is_valid(
     ):
         return False
     selection = payload.selection
-    if (
-        action.name == "Command.PRAY"
-        and prayer_action_error(
+    if action.name == PRAY_ACTION_NAME and (
+        action_profile is not ActionProfile.NLE_SURVIVAL_ACTIONS
+        or decided_on is None
+        or not _observation_is_live(decided_on)
+        or prayer_action_error(
             action.name,
             selection,
-            permit=None,  # No deterministic prayer skill has issued one yet.
-            turn=None if decided_on is None else decided_on.player.turn,
+            permit=PrayerPermit(decided_on.player.turn),
+            turn=decided_on.player.turn,
+            hunger=decided_on.player.hunger,
+            prompt_active=decided_on.prompt.active,
+            ration_available=bool(safe_food_rations(decided_on)),
+            prior_prayers=prior_prayers,
+            last_prayer_turn=last_prayer_turn,
+            on_altar=on_altar,
         )
         is not None
+        or selection.intent is None
+        or selection.intent.prayer is None
+        or selection.intent.prayer.kill_count != kill_count
     ):
         return False
     if action.name == "Command.EAT" and (
@@ -2132,6 +2189,42 @@ def _action_is_valid(
             single_choice=decided_on.prompt.single_character_choice,
             offered_item_commands=offered,
         )
+        outcome_kind = (
+            None
+            if payload.terminated
+            or payload.truncated
+            or not _observation_is_live(payload.observation)
+            else classify_prayer_outcome(
+                payload.observation.player.hunger,
+                payload.observation.message,
+            )
+        )
+        prayer_outcome = (
+            PrayerOutcome(
+                payload.observation.player.turn,
+                payload.observation.player.hunger,
+                payload.observation.message,
+                outcome_kind,
+            )
+            if outcome_kind is not None
+            else None
+        )
+        prayer_permit = (
+            PromptPermit(YES_COMMAND, PromptKind.PRAYER_CONFIRMATION)
+            if _observation_is_live(decided_on)
+            and prompt_kind is PromptKind.PRAYER_CONFIRMATION
+            and pending_prayer is not None
+            and selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
+            and selection.skill is Skill.PRAYER
+            and selection.intent is not None
+            and (payload.terminated or payload.truncated or prayer_outcome is not None)
+            and selection.intent.prayer
+            == replace(
+                pending_prayer,
+                outcome=prayer_outcome,
+            )
+            else None
+        )
         item_permit = (
             PromptPermit(YES_COMMAND, PromptKind.ITEM)
             if prompt_kind is PromptKind.ITEM
@@ -2152,7 +2245,7 @@ def _action_is_valid(
                 selection,
                 prompt_active=decided_on.prompt.active,
                 prompt_kind=prompt_kind,
-                permit=item_permit,
+                permit=prayer_permit or item_permit,
             )
             is not None
         ):

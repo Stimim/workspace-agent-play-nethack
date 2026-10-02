@@ -75,6 +75,17 @@
         ]
       ],
       "note": "Scout and Eat development smoke, the seed search that found seed 53, and scripted trace seed 58 (note 0017, ADR 0004)."
+    },
+    {
+      "source": "note-0026-prayer-development-probes",
+      "seeds": [],
+      "ranges": [
+        [
+          1100,
+          1129
+        ]
+      ],
+      "note": "Real NLE prayer probes: SEARCH-only first-Weak seeds 1100-1109; scripted coordinator combat first-Weak seeds 1110-1129; early-turn controls on 1110-1112 (note 0026)."
     }
   ]
 }

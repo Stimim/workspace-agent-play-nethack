@@ -7,11 +7,14 @@ from nle import nethack
 from nethack_agent.coordinator import AgentCoordinator
 from nethack_agent.decision import (
     LEVEL_CHANGE_ACTIONS,
+    PRAYER_FIRST_SAFE_TURN,
+    PRAYER_REPEAT_WAIT_TURNS,
     ActionIntent,
     ActionSelectionSource,
     DestinationKind,
     IntentDestination,
     MapCell,
+    PrayerEvidence,
     RunOutcome,
     Skill,
     StuckReason,
@@ -43,6 +46,7 @@ from nethack_agent.skills import (
     ExploreLevelSkill,
     GoldNavigationSkill,
     HungerSkill,
+    PrayerSkill,
     SafePromptHandler,
     SkillAction,
     StaircaseNavigationSkill,
@@ -86,6 +90,7 @@ _GLYPHS = {
     "#": _CMAP + 21,
     "<": _CMAP + 23,
     ">": _CMAP + 24,
+    "_": _CMAP + 27,
     "0": nethack.GLYPH_OBJ_OFF + _BOULDER,
     "%": nethack.GLYPH_OBJ_OFF + _FOOD,
     "$": GOLD_GLYPH,
@@ -1311,3 +1316,150 @@ def test_unknown_food_is_not_eaten_and_floor_corpse_prompt_is_declined(
     )
     assert declined is not None
     assert declined.action_index == _HUNGER_BY_COMMAND[ord("n")].index
+
+
+def test_prayer_skill_requires_weak_safe_turn_no_ration_or_altar(
+    template: ProjectedObservation,
+) -> None:
+    skill = PrayerSkill()
+    pray = LegalAction(0, int(nethack.Command.PRAY), "Command.PRAY")
+    yes = LegalAction(1, ord("y"), "CompassDirection.NW")
+    actions = {pray.name: pray}
+    commands = {yes.command: yes}
+    base = sketch(template, ("|.@..|",))
+    memory = LevelMemory()
+    memory.observe(base)
+    weak = replace(
+        base,
+        player=replace(base.player, hunger=3, turn=PRAYER_FIRST_SAFE_TURN),
+        inventory=(),
+    )
+    selected = skill.select_action(
+        weak, memory, actions, commands, prior_prayers=0, pending=None
+    )
+    assert selected is not None and selected.action_index == pray.index
+    assert selected.intent == ActionIntent(
+        None,
+        None,
+        None,
+        prayer=PrayerEvidence(3, PRAYER_FIRST_SAFE_TURN, PRAYER_FIRST_SAFE_TURN),
+    )
+    for blocked in (
+        replace(weak, player=replace(weak.player, hunger=2)),
+        replace(weak, player=replace(weak.player, turn=PRAYER_FIRST_SAFE_TURN - 1)),
+        replace(weak, inventory=(_ration(template),)),
+        replace(weak, prompt=PromptState(True, False, False)),
+        replace(weak, message="There is an altar here."),
+    ):
+        assert (
+            skill.select_action(
+                blocked, memory, actions, commands, prior_prayers=0, pending=None
+            )
+            is None
+        )
+    assert (
+        skill.select_action(
+            weak, memory, actions, commands, prior_prayers=1, pending=None
+        )
+        is None
+    )
+    memory.observe(sketch(template, ("|_@..|",), step=1))
+    on_altar = sketch(template, ("|@...|",), step=2)
+    memory.observe(on_altar)
+    assert memory.cmap(memory.position) == 27
+    assert (
+        skill.select_action(
+            replace(
+                on_altar,
+                player=replace(on_altar.player, hunger=3, turn=PRAYER_FIRST_SAFE_TURN),
+                inventory=(),
+            ),
+            memory,
+            actions,
+            commands,
+            prior_prayers=0,
+            pending=None,
+        )
+        is None
+    )
+
+
+def test_prayer_skill_repeat_wait_boundary_preserves_observed_kill_count(
+    template: ProjectedObservation,
+) -> None:
+    skill = PrayerSkill()
+    pray = LegalAction(0, int(nethack.Command.PRAY), "Command.PRAY")
+    base = sketch(template, ("|.@..|",))
+    memory = LevelMemory()
+    memory.observe(base)
+    last = 101
+    safe = last + PRAYER_REPEAT_WAIT_TURNS
+    weak = replace(
+        base,
+        player=replace(base.player, hunger=3, turn=safe - 1),
+        inventory=(),
+    )
+    args = (memory, {pray.name: pray}, {})
+    assert (
+        skill.select_action(
+            weak,
+            *args,
+            prior_prayers=1,
+            last_prayer_turn=last,
+            kill_count=7,
+            pending=None,
+        )
+        is None
+    )
+    ready = replace(weak, player=replace(weak.player, turn=safe))
+    selected = skill.select_action(
+        ready, *args, prior_prayers=1, last_prayer_turn=last, kill_count=7, pending=None
+    )
+    assert selected is not None and selected.action_index == pray.index
+    assert selected.intent == ActionIntent(
+        None, None, None, prayer=PrayerEvidence(3, safe, safe, 7)
+    )
+
+
+def test_prayer_skill_defends_and_confirms_only_exact_pending_prompt(
+    template: ProjectedObservation,
+) -> None:
+    skill = PrayerSkill()
+    pray = LegalAction(0, int(nethack.Command.PRAY), "Command.PRAY")
+    yes = LegalAction(1, ord("y"), "CompassDirection.NW")
+    east = LegalAction(2, ord("l"), "CompassDirection.E")
+    base = sketch(template, ("|@j..|",))
+    weak = replace(base, player=replace(base.player, hunger=3, turn=101), inventory=())
+    memory = LevelMemory()
+    memory.observe(weak)
+    actions = {item.name: item for item in (pray, yes, east)}
+    commands = {item.command: item for item in (pray, yes, east)}
+    defend = skill.select_action(
+        weak, memory, actions, commands, prior_prayers=0, pending=None
+    )
+    assert defend is not None and defend.action_index == east.index
+    assert defend.intent is not None and defend.intent.attack_target == MapCell(2, 0)
+
+    evidence = PrayerEvidence(3, 101, PRAYER_FIRST_SAFE_TURN)
+    confirmed = replace(
+        weak,
+        step_index=1,
+        prompt=PromptState(True, False, False),
+        message="Are you sure you want to pray? [yn] (n) ",
+    )
+    answer = skill.select_action(
+        confirmed, memory, actions, commands, prior_prayers=1, pending=evidence
+    )
+    assert answer is not None and answer.action_index == yes.index
+    assert answer.intent == ActionIntent(None, None, None, prayer=evidence)
+    assert (
+        skill.select_action(
+            replace(confirmed, message=confirmed.message + " "),
+            memory,
+            actions,
+            commands,
+            prior_prayers=1,
+            pending=evidence,
+        )
+        is None
+    )

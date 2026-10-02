@@ -664,9 +664,10 @@ are reviewed in [note 0024](notes/0024-reviewed-survival-knowledge.md).
 
 Choose `nle-survival-actions` in a `TaskSpec` to keep all 58
 `nle-hunger-actions` members, then append `Command.PRAY` (59 indexed actions).
-The profile preserves ration handling and the existing task objective. It does
-not enable the prayer or corpse-eating skill, change the active knowledge bundle
-or policy version, or alter the published evaluation suites.
+The profile preserves ration handling and the existing task objective. Item 6
+defined the gate without a prayer-skill issuer; item 7 enables that deterministic
+skill. The active knowledge bundle, `POLICY_VERSION`, and published evaluation
+suites remain unchanged; floor-corpse eating is not yet enabled.
 
 In NLE 1.3.0, the exact observed confirmation messages (the space before each
 closing quote is part of the raw observation) are:
@@ -679,18 +680,48 @@ closing quote is part of the raw observation) are:
 Both have a single-character-choice prompt. The floor-corpse string was
 captured after killing a seed-10 lichen, moving onto its corpse, then issuing
 EAT; the prayer string was captured by issuing PRAY on seed 6 in a direct
-NLE-environment test. These tests bypass the agent gate to inspect NLE, not to
-grant the policy permission to answer. The gate never allows PRAY until the
-deterministic prayer skill issues a permit in item 7; the event contract also
-rejects PRAY records. The coordinator continues to decline prayer and corpse
-yes/no confirmations by default. In the survival profile, a deterministic
-`y` answer to either recognized confirmation requires its matching typed
-prompt permit; the model is not offered the ambiguous `y`/northwest action.
+NLE-environment test. Those tests bypass the agent gate to inspect NLE, not to
+grant the policy permission to answer. The item-7 gate now allows PRAY only
+with the coordinator's evidence-backed prayer permit, and only answers the
+exact pending prayer confirmation with a matching typed prompt permit. The
+coordinator still declines floor-corpse yes/no confirmations by default. In
+the survival profile, the model is not offered ambiguous `y`/northwest.
 An exact eat-item prompt can still offer inventory letter `y`, and ordinary
 deterministic northwest movement outside a prompt remains legal. The evaluator
 replays the gate predicates against the prior recorded observation, including
 the offered item-letter and ration evidence. See
 [note 0025](notes/0025-survival-action-profile-and-prayer-gate.md).
+
+### Deterministic Weak-hunger prayer (milestone 2, item 7)
+
+On `nle-survival-actions`, a verified inventory food ration is eaten first;
+safe adjacent-hostile defense takes precedence over PRAY to avoid praying for
+three helpless turns under attack. With no safe ration, prompt, or observed
+altar, `PrayerSkill` may pray at Weak-or-worse hunger from game turn 100:
+the nominal initial timeout is 300, and `300 - 100 = 200 < 201`, the major
+trouble threshold. Any repeat must wait at least 1,229 game turns after the
+previous PRAY, regardless of the previous result. That post-prayer bound
+covers only 95% of resets and is not a guarantee about hidden timeout, Luck,
+alignment record, or divine anger. No model prompt offers PRAY.
+
+The coordinator records prayer count and most recent PRAY turn, plus the count
+of literal observed `You kill` messages as an **ungated** proxy for hidden
+alignment record. A typed intent records the Weak trigger, prayer turn, bound,
+proxy count, and first live confirmation outcome. The outcome is `fixed` if
+hunger drops below Weak or the stomach-content message appears,
+`displeased/punished` for the observed anger or punishment messages, or
+`not fixed` when prayer finishes without fixing hunger. Terminal/truncated
+confirmations have no live outcome because NLE zeroes terminal statistics.
+The evaluator rebuilds the history from events and independently checks each
+PRAY and exact `y` response against the gate's predicates.
+
+Real NLE development probes on seeds 1100–1109 fixed hunger on 2/5
+SEARCH-only first-Weak prayers with no kills; 1110–1129 fixed it on 11/11
+first-Weak prayers reached by the fighting coordinator (9 died before Weak).
+Both groups are development evidence, not a success-rate promise or fresh
+evaluation seeds. See [note 0026](notes/0026-deterministic-prayer-and-probe-evidence.md)
+for per-seed outcomes, turn-50 and immediate-repeat controls, the reviewed
+Prayer-page explanation, and the residual uncertainty.
 
 ## Dependency policy
 

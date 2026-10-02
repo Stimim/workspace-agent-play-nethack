@@ -23,15 +23,18 @@ from nethack_agent.decision import (
     ActionSelection,
     ActionSelectionSource,
     DecisionMetrics,
+    PrayerOutcome,
     PromptKind,
+    PromptPermit,
     RunOutcome,
     RunState,
     Skill,
     SkillDecision,
     SkillSelectionSource,
+    classify_prayer_outcome,
     confirmation_answer_error,
+    confirmation_prompt_kind,
     level_change_selection_error,
-    prayer_action_error,
     survival_action_selection_error,
 )
 from nethack_agent.environment import LegalAction
@@ -246,26 +249,61 @@ class StepPayload:
                 cell.y >= len(rows) or cell.x >= len(rows[0]) for cell in intent.cells()
             ):
                 raise ContractError("step intent cell is outside the observation map")
-        survival_error = (
-            prayer_action_error(
-                self.action.name, self.selection, permit=None, turn=None
-            )
-            if self.action.name == PRAY_ACTION_NAME
-            else survival_action_selection_error(self.action.name, self.selection)
+        survival_error = survival_action_selection_error(
+            self.action.name, self.selection
         )
-        if (
-            survival_error is None
-            and self.action.command == YES_COMMAND
+        prayer = None if intent is None else intent.prayer
+        if self.action.name == PRAY_ACTION_NAME:
+            if (
+                survival_error is None
+                and confirmation_prompt_kind(
+                    self.observation.message,
+                    single_choice=self.observation.prompt.single_character_choice,
+                )
+                is not PromptKind.PRAYER_CONFIRMATION
+            ):
+                survival_error = "PRAY must produce its exact confirmation prompt"
+        elif (
+            self.action.command == YES_COMMAND
             and self.selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
             and self.selection.skill is Skill.PRAYER
         ):
-            survival_error = confirmation_answer_error(
-                self.action.command,
-                self.selection,
-                prompt_active=True,
-                prompt_kind=PromptKind.PRAYER_CONFIRMATION,
-                permit=None,
-            )
+            if survival_error is None:
+                survival_error = confirmation_answer_error(
+                    self.action.command,
+                    self.selection,
+                    prompt_active=True,
+                    prompt_kind=PromptKind.PRAYER_CONFIRMATION,
+                    permit=PromptPermit(YES_COMMAND, PromptKind.PRAYER_CONFIRMATION),
+                )
+            if survival_error is None:
+                if self.terminated or self.truncated:
+                    if prayer is None or prayer.outcome is not None:
+                        survival_error = (
+                            "terminal prayer yes cannot claim an observed outcome"
+                        )
+                else:
+                    kind = classify_prayer_outcome(
+                        self.observation.player.hunger,
+                        self.observation.message,
+                    )
+                    if (
+                        self.observation.player.dungeon_level < 1
+                        or kind is None
+                        or prayer is None
+                        or prayer.outcome
+                        != PrayerOutcome(
+                            self.observation.player.turn,
+                            self.observation.player.hunger,
+                            self.observation.message,
+                            kind,
+                        )
+                    ):
+                        survival_error = (
+                            "prayer yes requires the matching observed outcome"
+                        )
+        elif prayer is not None:
+            survival_error = "prayer evidence requires PRAY or its confirmation answer"
         if survival_error is not None:
             raise ContractError(f"step survival action is invalid: {survival_error}")
         direction = LEVEL_CHANGE_ACTIONS.get(self.action.name)

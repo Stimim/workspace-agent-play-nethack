@@ -55,7 +55,6 @@ class Skill(Enum):
     STAIRCASE_NAVIGATION = "staircase_navigation"
     EXPLORE_LEVEL = "explore_level"
     HUNGER = "hunger"
-    # Reserved for the deterministic prayer skill; no issuer exists yet.
     PRAYER = "prayer"
     # Route to visible gold on NetHackGold-v0; deterministic, never offered to
     # the model.
@@ -532,9 +531,126 @@ class IntentDestination:
         )
 
 
+PRAYER_FIRST_SAFE_TURN: Final = 100
+PRAYER_REPEAT_WAIT_TURNS: Final = 1229
+
+
+class PrayerOutcomeKind(Enum):
+    FIXED = "fixed"
+    NOT_FIXED = "not_fixed"
+    DISPLEASED_OR_PUNISHED = "displeased_or_punished"
+
+
+def classify_prayer_outcome(hunger: int, message: str) -> PrayerOutcomeKind | None:
+    """Classify a live prayer result, without treating hidden favor as evidence."""
+    if (
+        "displeased" in message
+        or "Thou must relearn thy lessons!" in message
+        or "You feel foolish!" in message
+    ):
+        return PrayerOutcomeKind.DISPLEASED_OR_PUNISHED
+    if hunger < 3 or "Your stomach feels content." in message:
+        return PrayerOutcomeKind.FIXED
+    if "You finish your prayer." in message or "You feel that" in message:
+        return PrayerOutcomeKind.NOT_FIXED
+    return None
+
+
+@dataclass(frozen=True, slots=True)
+class PrayerOutcome:
+    turn: int
+    hunger: int
+    message: str
+    kind: PrayerOutcomeKind
+
+    def __post_init__(self) -> None:
+        integer_value(self.turn, "prayer outcome turn", minimum=0)
+        integer_value(self.hunger, "prayer outcome hunger", minimum=0)
+        string_value(self.message, "prayer outcome message", maximum=4096)
+        if not isinstance(self.kind, PrayerOutcomeKind):
+            raise TypeError("prayer outcome kind must be a PrayerOutcomeKind")
+        if self.kind is not classify_prayer_outcome(self.hunger, self.message):
+            raise ContractError(
+                "prayer outcome kind does not match observed hunger and message"
+            )
+
+    def to_json(self) -> dict[str, object]:
+        return {
+            "turn": self.turn,
+            "hunger": self.hunger,
+            "message": self.message,
+            "kind": self.kind.value,
+        }
+
+    @classmethod
+    def from_json(cls, value: object) -> Self:
+        payload = object_value(
+            value, "prayer outcome", {"turn", "hunger", "message", "kind"}
+        )
+        return cls(
+            turn=integer_value(payload["turn"], "prayer outcome turn", minimum=0),
+            hunger=integer_value(payload["hunger"], "prayer outcome hunger", minimum=0),
+            message=string_value(
+                payload["message"], "prayer outcome message", maximum=4096
+            ),
+            kind=enum_value(payload["kind"], "prayer outcome kind", PrayerOutcomeKind),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class PrayerEvidence:
+    reason_hunger: int
+    prayer_turn: int
+    safe_turn: int
+    kill_count: int = 0
+    outcome: PrayerOutcome | None = None
+
+    def __post_init__(self) -> None:
+        integer_value(self.reason_hunger, "prayer reason_hunger", minimum=0)
+        integer_value(self.prayer_turn, "prayer prayer_turn", minimum=0)
+        integer_value(self.safe_turn, "prayer safe_turn", minimum=0)
+        integer_value(self.kill_count, "prayer kill_count", minimum=0)
+        if self.outcome is not None and not isinstance(self.outcome, PrayerOutcome):
+            raise TypeError("prayer outcome must be a PrayerOutcome or None")
+
+    def to_json(self) -> dict[str, object]:
+        return {
+            "reason_hunger": self.reason_hunger,
+            "prayer_turn": self.prayer_turn,
+            "safe_turn": self.safe_turn,
+            "kill_count": self.kill_count,
+            "outcome": None if self.outcome is None else self.outcome.to_json(),
+        }
+
+    @classmethod
+    def from_json(cls, value: object) -> Self:
+        payload = object_value(
+            value,
+            "prayer evidence",
+            {"reason_hunger", "prayer_turn", "safe_turn", "kill_count"},
+            optional={"outcome"},
+        )
+        outcome = payload.get("outcome")
+        return cls(
+            reason_hunger=integer_value(
+                payload["reason_hunger"], "prayer reason_hunger", minimum=0
+            ),
+            prayer_turn=integer_value(
+                payload["prayer_turn"], "prayer prayer_turn", minimum=0
+            ),
+            safe_turn=integer_value(
+                payload["safe_turn"], "prayer safe_turn", minimum=0
+            ),
+            kill_count=integer_value(
+                payload["kill_count"], "prayer kill_count", minimum=0
+            ),
+            outcome=None if outcome is None else PrayerOutcome.from_json(outcome),
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class ActionIntent:
-    """The map targets a deterministic skill chose for one action.
+    """The route, attack target, or prayer evidence for one deterministic action.
 
     `destination` is the skill's route goal (or, for kicking, the locked
     door), usually not the adjacent cell the action steps into.
@@ -544,7 +660,9 @@ class ActionIntent:
     moves into and ending at the destination (for a locked door, at the cell
     orthogonally beside it where the hero kicks). It is None when the action
     does not step along a route (waiting, searching, kicking, and adjacent-
-    hostile defense). All values come from the skill's own routing data.
+    hostile defense). `prayer` records the observed basis and, after an
+    answered confirmation, the observed result. Map values come from the
+    skill's own routing data.
     """
 
     destination: IntentDestination | None
@@ -553,6 +671,7 @@ class ActionIntent:
     # The level the cells belong to; the coordinator stamps it. None for
     # intents recorded before levels were.
     level: LevelKey | None = None
+    prayer: PrayerEvidence | None = None
 
     def __post_init__(self) -> None:
         if self.destination is not None and not isinstance(
@@ -565,8 +684,16 @@ class ActionIntent:
             raise TypeError("intent attack_target must be a MapCell")
         if self.level is not None and not isinstance(self.level, LevelKey):
             raise TypeError("intent level must be a LevelKey")
-        if self.destination is None and self.attack_target is None:
-            raise ContractError("intent requires a destination or an attack target")
+        if self.prayer is not None and not isinstance(self.prayer, PrayerEvidence):
+            raise TypeError("intent prayer must be a PrayerEvidence or None")
+        if (
+            self.destination is None
+            and self.attack_target is None
+            and self.prayer is None
+        ):
+            raise ContractError(
+                "intent requires a destination, attack target, or prayer evidence"
+            )
         if self.path is not None:
             _validate_path(self.path, self.destination, self.attack_target)
 
@@ -578,7 +705,7 @@ class ActionIntent:
         )
 
     def to_json(self) -> dict[str, object]:
-        return {
+        payload = {
             "destination": self.destination.to_json() if self.destination else None,
             "attack_target": (
                 self.attack_target.to_json() if self.attack_target else None
@@ -588,6 +715,9 @@ class ActionIntent:
             ),
             "level": self.level.to_json() if self.level else None,
         }
+        if self.prayer is not None:
+            payload["prayer"] = self.prayer.to_json()
+        return payload
 
     @classmethod
     def from_json(cls, value: object) -> Self:
@@ -598,12 +728,13 @@ class ActionIntent:
             value,
             "intent",
             {"destination", "attack_target"},
-            optional={"path", "level"},
+            optional={"path", "level", "prayer"},
         )
         destination = payload["destination"]
         attack_target = payload["attack_target"]
         path = payload.get("path")
         level = payload.get("level")
+        prayer = payload.get("prayer")
         if path is not None:
             path = array_value(path, "intent path")
             if len(path) > MAX_INTENT_PATH_LENGTH:
@@ -627,6 +758,7 @@ class ActionIntent:
                 else tuple(MapCell.from_json(cell, "intent path cell") for cell in path)
             ),
             level=None if level is None else LevelKey.from_json(level, "intent level"),
+            prayer=None if prayer is None else PrayerEvidence.from_json(prayer),
         )
 
 
@@ -705,8 +837,17 @@ class ActionSelection:
         if self.intent is not None:
             if not isinstance(self.intent, ActionIntent):
                 raise TypeError("intent must be an ActionIntent or None")
-            if self.source is not ActionSelectionSource.DETERMINISTIC_SKILL:
-                raise ContractError("only deterministic skill selections carry intent")
+            if self.source is not ActionSelectionSource.DETERMINISTIC_SKILL and not (
+                self.source is ActionSelectionSource.DETERMINISTIC_PROMPT
+                and self.skill is Skill.PRAYER
+                and self.intent.prayer is not None
+                and self.intent.destination is None
+                and self.intent.attack_target is None
+                and self.intent.path is None
+            ):
+                raise ContractError(
+                    "only deterministic skill or prayer prompt selections carry intent"
+                )
         gold_intent = (
             self.intent is not None
             and self.intent.destination is not None
@@ -885,9 +1026,17 @@ def survival_action_selection_error(
     if action_name == PRAY_ACTION_NAME and (
         selection.source is not ActionSelectionSource.DETERMINISTIC_SKILL
         or selection.skill is not Skill.PRAYER
-        or selection.intent is not None
+        or selection.intent is None
+        or selection.intent.prayer is None
+        or selection.intent.destination is not None
+        or selection.intent.attack_target is not None
+        or selection.intent.path is not None
+        or selection.intent.prayer.outcome is not None
     ):
-        return "only the deterministic prayer skill may select PRAY"
+        return (
+            "only the deterministic prayer skill with pending prayer evidence "
+            "may select PRAY"
+        )
     if action_name in PROMPT_KEY_ACTION_NAMES and (
         selection.source is not ActionSelectionSource.DETERMINISTIC_PROMPT
         or selection.skill is not Skill.HUNGER
@@ -896,10 +1045,20 @@ def survival_action_selection_error(
         return "prompt-key actions require the deterministic hunger prompt flow"
     if (
         action_name == "CompassDirection.NW"
-        and (selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT)
+        and selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
         and (
             selection.skill not in (Skill.PRAYER, Skill.HUNGER)
-            or selection.intent is not None
+            or (selection.skill is Skill.HUNGER and selection.intent is not None)
+            or (
+                selection.skill is Skill.PRAYER
+                and (
+                    selection.intent is None
+                    or selection.intent.prayer is None
+                    or selection.intent.destination is not None
+                    or selection.intent.attack_target is not None
+                    or selection.intent.path is not None
+                )
+            )
         )
     ):
         return "yes answers require a deterministic prayer or hunger prompt skill"
@@ -930,6 +1089,12 @@ def prayer_action_error(
     *,
     permit: PrayerPermit | None,
     turn: int | None,
+    hunger: int | None,
+    prompt_active: bool,
+    ration_available: bool,
+    prior_prayers: int,
+    on_altar: bool,
+    last_prayer_turn: int | None = None,
 ) -> str | None:
     """The same prayer authorization predicate used at execution and audit."""
     if action_name != PRAY_ACTION_NAME:
@@ -937,8 +1102,26 @@ def prayer_action_error(
     error = survival_action_selection_error(action_name, selection)
     if error is not None:
         return error
-    if permit is None or turn is None or permit.turn != turn:
-        return "PRAY requires a matching deterministic prayer permit"
+    evidence = selection.intent.prayer
+    safe_turn = max(
+        PRAYER_FIRST_SAFE_TURN,
+        (last_prayer_turn + PRAYER_REPEAT_WAIT_TURNS)
+        if last_prayer_turn is not None
+        else PRAYER_FIRST_SAFE_TURN,
+    )
+    if (
+        not isinstance(permit, PrayerPermit)
+        or turn is None
+        or hunger is None
+        or permit.turn != turn
+        or evidence.reason_hunger != hunger
+        or evidence.prayer_turn != turn
+        or evidence.safe_turn != safe_turn
+        or (prior_prayers > 0) != (last_prayer_turn is not None)
+    ):
+        return "PRAY requires a matching deterministic prayer permit and evidence"
+    if hunger < 3 or turn < safe_turn or prompt_active or ration_available or on_altar:
+        return "PRAY requires Weak+ hunger, safe turn, and no prompt, ration, or altar"
     return None
 
 
@@ -968,7 +1151,17 @@ def confirmation_answer_error(
     if (
         selection.source is not ActionSelectionSource.DETERMINISTIC_PROMPT
         or selection.skill is not skill
-        or selection.intent is not None
+        or (skill is Skill.HUNGER and selection.intent is not None)
+        or (
+            skill is Skill.PRAYER
+            and (
+                selection.intent is None
+                or selection.intent.prayer is None
+                or selection.intent.destination is not None
+                or selection.intent.attack_target is not None
+                or selection.intent.path is not None
+            )
+        )
     ):
         return "yes requires the matching deterministic prompt skill"
     if (

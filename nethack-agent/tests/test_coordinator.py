@@ -13,8 +13,11 @@ from nethack_agent.coordinator import (
 )
 from nethack_agent.decision import (
     LEVEL_CHANGE_ACTIONS,
+    PRAYER_FIRST_SAFE_TURN,
+    PRAYER_REPEAT_WAIT_TURNS,
     ActionCandidate,
     ActionDecision,
+    ActionIntent,
     ActionSelection,
     ActionSelectionSource,
     DecisionMetrics,
@@ -22,6 +25,10 @@ from nethack_agent.decision import (
     MapCell,
     ModelActionDecision,
     ModelSkillDecision,
+    PrayerEvidence,
+    PrayerOutcome,
+    PrayerOutcomeKind,
+    PrayerPermit,
     PromptKind,
     PromptPermit,
     RunOutcome,
@@ -33,6 +40,7 @@ from nethack_agent.decision import (
     TraversalPermit,
 )
 from nethack_agent.environment import LegalAction, NleEnvironment, ScenarioConfig
+from nethack_agent.evaluation import _action_is_valid
 from nethack_agent.events import StepPayload
 from nethack_agent.model import (
     DecisionFailure,
@@ -385,6 +393,12 @@ def test_survival_gate_requires_prayer_permit_and_exact_yes_prompt(
         )
         assert pray not in gate.allowed_actions
         assert yes not in gate.allowed_actions
+        before = replace(
+            before,
+            player=replace(before.player, hunger=3, turn=PRAYER_FIRST_SAFE_TURN),
+            inventory=(),
+        )
+        evidence = PrayerEvidence(3, PRAYER_FIRST_SAFE_TURN, PRAYER_FIRST_SAFE_TURN)
         prayer = ActionSelection(
             ActionSelectionSource.DETERMINISTIC_SKILL,
             STAND_ON_DOWNSTAIRS,
@@ -393,10 +407,19 @@ def test_survival_gate_requires_prayer_permit_and_exact_yes_prompt(
             None,
             pray.index,
             "Pray only with authorization.",
-            None,
+            ActionIntent(None, None, None, prayer=evidence),
         )
         with pytest.raises(ActionGateError, match="prayer permit"):
             gate.resolve(pray.index, before=before, selection=prayer)
+        assert (
+            gate.resolve(
+                pray.index,
+                before=before,
+                selection=prayer,
+                prayer_permit=PrayerPermit(PRAYER_FIRST_SAFE_TURN),
+            )
+            == pray
+        )
         with pytest.raises(ActionGateError, match="deterministic prayer skill"):
             gate.resolve(
                 pray.index,
@@ -405,6 +428,7 @@ def test_survival_gate_requires_prayer_permit_and_exact_yes_prompt(
                     prayer,
                     source=ActionSelectionSource.MODEL_FALLBACK,
                     skill=Skill.STAIRCASE_NAVIGATION,
+                    intent=None,
                 ),
             )
         with pytest.raises(ActionGateError, match="deterministic prayer skill"):
@@ -413,6 +437,25 @@ def test_survival_gate_requires_prayer_permit_and_exact_yes_prompt(
                 before=before,
                 selection=replace(prayer, skill=Skill.HUNGER),
             )
+        for kwargs in (
+            {"prior_prayers": 1},
+            {"on_altar": True},
+            {"before": replace(before, prompt=PromptState(True, False, False))},
+            {"before": replace(before, player=replace(before.player, hunger=2))},
+            {
+                "before": replace(
+                    before,
+                    player=replace(before.player, turn=PRAYER_FIRST_SAFE_TURN - 1),
+                )
+            },
+        ):
+            with pytest.raises(ActionGateError):
+                gate.resolve(
+                    pray.index,
+                    selection=prayer,
+                    prayer_permit=PrayerPermit(PRAYER_FIRST_SAFE_TURN),
+                    **({"before": before} | kwargs),
+                )
 
         choice = PromptState(True, False, False)
         prayer_prompt = replace(
@@ -434,6 +477,7 @@ def test_survival_gate_requires_prayer_permit_and_exact_yes_prompt(
                 source=ActionSelectionSource.DETERMINISTIC_PROMPT,
                 skill=skill,
                 action_index=yes.index,
+                intent=prayer.intent if skill is Skill.PRAYER else None,
             )
             with pytest.raises(ActionGateError, match="confirmation prompt permit"):
                 gate.resolve(yes.index, before=prompted, selection=answer)
@@ -471,6 +515,7 @@ def test_survival_gate_requires_prayer_permit_and_exact_yes_prompt(
             source=ActionSelectionSource.DETERMINISTIC_PROMPT,
             skill=Skill.HUNGER,
             action_index=yes.index,
+            intent=None,
         )
         assert (
             gate.resolve(
@@ -489,7 +534,9 @@ def test_survival_gate_requires_prayer_permit_and_exact_yes_prompt(
                 prompt_permit=PromptPermit(ord("y"), PromptKind.CORPSE_CONFIRMATION),
             )
 
-        northwest = replace(prayer, skill=Skill.EXPLORE_LEVEL, action_index=yes.index)
+        northwest = replace(
+            prayer, skill=Skill.EXPLORE_LEVEL, action_index=yes.index, intent=None
+        )
         assert gate.resolve(yes.index, before=before, selection=northwest) == yes
         with pytest.raises(ActionGateError, match="ambiguous yes"):
             gate.resolve(
@@ -502,6 +549,306 @@ def test_survival_gate_requires_prayer_permit_and_exact_yes_prompt(
             )
     finally:
         environment.close()
+
+
+def test_real_nle_pray_confirmation_y_exposes_outcome_on_y_step(
+    tmp_path: Path,
+) -> None:
+    task = TaskSpec(
+        NleTask.SCORE,
+        ActionProfile.NLE_SURVIVAL_ACTIONS,
+        Objective((ReachLevelLeg(LevelKey(0, 2)),)),
+    )
+    environment = NleEnvironment(
+        ScenarioConfig(
+            seed=6, artifact_directory=tmp_path, max_episode_steps=20, task=task
+        )
+    )
+    projector = ObservationProjector()
+    try:
+        initial = projector.project(environment.reset(), step_index=0)
+        pray = next(
+            action
+            for action in environment.legal_actions
+            if action.name == "Command.PRAY"
+        )
+        yes = next(
+            action for action in environment.legal_actions if action.command == ord("y")
+        )
+        first = environment.step(pray.index)
+        prompt = projector.project(first.observation, step_index=first.step_index)
+        assert prompt.message == "Are you sure you want to pray? [yn] (n) "
+        assert prompt.prompt.single_character_choice
+        assert prompt.player.turn == initial.player.turn
+        second = environment.step(yes.index)
+        after = projector.project(second.observation, step_index=second.step_index)
+        assert not second.is_terminal
+        assert after.player.turn > prompt.player.turn
+        assert after.message == '"Thou must relearn thy lessons!"  You feel foolish!'
+    finally:
+        environment.close()
+
+
+def test_prayer_prompt_permit_requires_exact_pending_previous_step(
+    tmp_path: Path,
+) -> None:
+    task = TaskSpec(
+        NleTask.SCORE,
+        ActionProfile.NLE_SURVIVAL_ACTIONS,
+        Objective((ReachLevelLeg(LevelKey(0, 2)),)),
+    )
+    environment = NleEnvironment(
+        ScenarioConfig(
+            seed=6, artifact_directory=tmp_path, max_episode_steps=20, task=task
+        )
+    )
+    agent = AgentCoordinator(environment, ObservationProjector(), FixedModel(2))
+    try:
+        before = agent.start()
+        prompt = replace(
+            before,
+            step_index=1,
+            prompt=PromptState(True, False, False),
+            message="Are you sure you want to pray? [yn] (n) ",
+        )
+        yes = next(
+            action for action in agent.legal_actions if action.command == ord("y")
+        )
+        evidence = PrayerEvidence(3, 101, PRAYER_FIRST_SAFE_TURN)
+        answer = ActionSelection(
+            ActionSelectionSource.DETERMINISTIC_PROMPT,
+            STAND_ON_DOWNSTAIRS,
+            Skill.PRAYER,
+            SkillSelectionSource.ARBITER,
+            None,
+            yes.index,
+            "Confirm pending prayer.",
+            ActionIntent(None, None, None, prayer=evidence),
+        )
+        with pytest.raises(ActionGateError, match="preceding prayer evidence"):
+            agent._prompt_permit(answer, prompt)
+        agent._pending_prayer = evidence
+        agent._pending_prayer_step = 0
+        agent._prayer_count = 1
+        permit = agent._prompt_permit(answer, prompt)
+        assert permit == PromptPermit(ord("y"), PromptKind.PRAYER_CONFIRMATION)
+        with pytest.raises(ActionGateError, match="preceding prayer evidence"):
+            agent._prompt_permit(
+                replace(
+                    answer,
+                    intent=ActionIntent(
+                        None, None, None, prayer=replace(evidence, prayer_turn=102)
+                    ),
+                ),
+                prompt,
+            )
+        with pytest.raises(ActionGateError, match="exact recognized"):
+            agent._prompt_permit(answer, replace(prompt, message=prompt.message + " "))
+        with pytest.raises(ActionGateError, match="preceding prayer evidence"):
+            agent._prompt_permit(answer, replace(prompt, step_index=3))
+    finally:
+        agent.stop()
+
+
+def test_coordinator_prayer_records_outcome_and_enforces_repeat_wait(
+    tmp_path: Path,
+) -> None:
+    task = TaskSpec(
+        NleTask.SCORE,
+        ActionProfile.NLE_SURVIVAL_ACTIONS,
+        Objective((ReachLevelLeg(LevelKey(0, 2)),)),
+    )
+    agent = AgentCoordinator(
+        NleEnvironment(
+            ScenarioConfig(
+                seed=6, artifact_directory=tmp_path, max_episode_steps=20, task=task
+            )
+        ),
+        ObservationProjector(),
+        ScriptedDevelopmentModel(),
+    )
+    try:
+        initial = agent.start()
+        # Isolate the coordinator's observed threshold and ration guards while
+        # still exercising actual NLE PRAY and confirmation transitions.
+        agent._observation = replace(
+            initial,
+            player=replace(initial.player, hunger=3, turn=PRAYER_FIRST_SAFE_TURN),
+            inventory=(),
+        )
+        first = agent.advance(single_step=True)
+        assert first is not None and first.action.name == "Command.PRAY"
+        assert first.selection.intent is not None
+        evidence = first.selection.intent.prayer
+        assert evidence == PrayerEvidence(
+            3, PRAYER_FIRST_SAFE_TURN, PRAYER_FIRST_SAFE_TURN
+        )
+        assert first.after.message == "Are you sure you want to pray? [yn] (n) "
+        assert agent._prayer_count == 1
+        assert agent._last_prayer_turn == PRAYER_FIRST_SAFE_TURN
+
+        confirmed = agent.advance(single_step=True)
+        assert confirmed is not None and confirmed.action.command == ord("y")
+        assert confirmed.selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
+        assert confirmed.selection.intent is not None
+        assert confirmed.selection.intent.prayer == replace(
+            evidence,
+            outcome=PrayerOutcome(
+                confirmed.after.player.turn,
+                confirmed.after.player.hunger,
+                confirmed.after.message,
+                PrayerOutcomeKind.DISPLEASED_OR_PUNISHED,
+            ),
+        )
+        assert agent._pending_prayer is None
+        assert agent._prayer_count == 1
+        safe_turn = PRAYER_FIRST_SAFE_TURN + PRAYER_REPEAT_WAIT_TURNS
+        too_early = replace(
+            confirmed.after,
+            player=replace(confirmed.after.player, hunger=3, turn=safe_turn - 1),
+            inventory=(),
+        )
+        early_selection = replace(
+            first.selection,
+            intent=ActionIntent(
+                None, None, None, prayer=PrayerEvidence(3, safe_turn - 1, safe_turn)
+            ),
+        )
+        with pytest.raises(ActionGateError, match="safe turn"):
+            agent._prayer_permit(early_selection, too_early)
+        ready = replace(too_early, player=replace(too_early.player, turn=safe_turn))
+        selection = replace(
+            early_selection,
+            intent=ActionIntent(
+                None, None, None, prayer=PrayerEvidence(3, safe_turn, safe_turn)
+            ),
+        )
+        assert agent._prayer_permit(selection, ready) == PrayerPermit(safe_turn)
+        assert (
+            agent._gate.resolve(
+                selection.action_index,
+                before=ready,
+                selection=selection,
+                prayer_permit=PrayerPermit(safe_turn),
+                prior_prayers=1,
+                last_prayer_turn=PRAYER_FIRST_SAFE_TURN,
+            ).name
+            == "Command.PRAY"
+        )
+    finally:
+        agent.stop()
+
+
+def test_stale_prayer_prompt_is_declined_not_confirmed(tmp_path: Path) -> None:
+    task = TaskSpec(
+        NleTask.SCORE,
+        ActionProfile.NLE_SURVIVAL_ACTIONS,
+        Objective((ReachLevelLeg(LevelKey(0, 2)),)),
+    )
+    agent = AgentCoordinator(
+        NleEnvironment(
+            ScenarioConfig(
+                seed=6, artifact_directory=tmp_path, max_episode_steps=20, task=task
+            )
+        ),
+        ObservationProjector(),
+        ScriptedDevelopmentModel(),
+    )
+    try:
+        initial = agent.start()
+        agent._observation = replace(
+            initial,
+            player=replace(initial.player, turn=PRAYER_FIRST_SAFE_TURN, hunger=3),
+            inventory=(),
+        )
+        prayer = agent.advance(single_step=True)
+        assert prayer is not None and prayer.action.name == "Command.PRAY"
+        agent._observation = replace(
+            prayer.after, message=prayer.after.message + "unexpected"
+        )
+        declined = agent.advance(single_step=True)
+        assert declined is not None and declined.action.command == ord("n")
+        assert declined.selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
+        assert declined.selection.skill is not Skill.PRAYER
+        assert agent._pending_prayer is None
+        assert agent._prayer_count == 1
+    finally:
+        agent.stop()
+
+
+def test_real_survival_coordinator_prays_at_first_weak_and_audits_both_steps(
+    tmp_path: Path,
+) -> None:
+    task = TaskSpec(
+        NleTask.SCORE,
+        ActionProfile.NLE_SURVIVAL_ACTIONS,
+        Objective((ReachLevelLeg(LevelKey(0, 12)),)),
+    )
+    agent = AgentCoordinator(
+        NleEnvironment(
+            ScenarioConfig(
+                seed=1127,
+                artifact_directory=tmp_path,
+                max_episode_steps=3000,
+                task=task,
+            )
+        ),
+        ObservationProjector(),
+        ScriptedDevelopmentModel(),
+    )
+    initial = agent.start()
+    observed_kills = initial.message.count("You kill")
+    agent.resume()
+    try:
+        for _ in range(3000):
+            first = agent.advance()
+            assert first is not None
+            if first.action.name == "Command.PRAY":
+                break
+            assert first.outcome is None, "run ended before first Weak prayer"
+            observed_kills += first.after.message.count("You kill")
+        else:
+            raise AssertionError("no Weak prayer before episode cap")
+        assert first.before.player.hunger >= 3
+        assert first.before.player.turn >= PRAYER_FIRST_SAFE_TURN
+        assert first.after.message == "Are you sure you want to pray? [yn] (n) "
+        assert first.selection.intent is not None
+        evidence = first.selection.intent.prayer
+        assert evidence is not None and evidence.kill_count == observed_kills
+        first_payload = step_payload(first)
+        assert StepPayload.from_json(first_payload.to_json()) == first_payload
+        assert _action_is_valid(
+            first_payload,
+            agent.legal_actions,
+            first.before,
+            True,
+            task.action_profile,
+            kill_count=observed_kills,
+        )
+        confirmed = agent.advance()
+        assert confirmed is not None and confirmed.action.command == ord("y")
+        assert confirmed.selection.intent is not None
+        result = confirmed.selection.intent.prayer
+        assert result is not None and result.outcome is not None
+        assert result.outcome.kind is PrayerOutcomeKind.FIXED
+        assert result.outcome.turn == confirmed.after.player.turn
+        assert result.outcome.hunger == confirmed.after.player.hunger
+        assert result.outcome.message == confirmed.after.message
+        confirmed_payload = step_payload(confirmed)
+        assert StepPayload.from_json(confirmed_payload.to_json()) == confirmed_payload
+        assert _action_is_valid(
+            confirmed_payload,
+            agent.legal_actions,
+            confirmed.before,
+            True,
+            task.action_profile,
+            prior_prayers=1,
+            last_prayer_turn=first.before.player.turn,
+            pending_prayer=evidence,
+            kill_count=observed_kills + first.after.message.count("You kill"),
+        )
+    finally:
+        agent.stop()
 
 
 def advance_until_stuck(agent: AgentCoordinator, limit: int) -> StepRecord:

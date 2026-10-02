@@ -16,9 +16,13 @@ from nethack_agent.contracts import ContractError
 from nethack_agent.decision import (
     ActionCandidate,
     ActionDecision,
+    ActionIntent,
     ActionSelection,
     ActionSelectionSource,
     DecisionMetrics,
+    PrayerEvidence,
+    PrayerOutcome,
+    PrayerOutcomeKind,
     RunOutcome,
     RunState,
     Skill,
@@ -1081,13 +1085,13 @@ def test_survival_audit_rechecks_prayer_yes_and_ration_evidence() -> None:
 
     pray = LegalAction(0, 240, "Command.PRAY")
     prayer = replace(step.selection, skill=Skill.PRAYER)
-    with pytest.raises(ContractError, match="matching deterministic prayer permit"):
+    with pytest.raises(ContractError, match="pending prayer evidence"):
         replace(step, action=pray, selection=prayer)
     with pytest.raises(ContractError, match="only the deterministic prayer skill"):
         replace(step, action=pray)
 
     yes = LegalAction(0, ord("y"), "CompassDirection.NW")
-    with pytest.raises(ContractError, match="active confirmation prompt permit"):
+    with pytest.raises(ContractError, match="deterministic prayer or hunger prompt"):
         replace(
             step,
             action=yes,
@@ -1143,6 +1147,348 @@ def test_survival_audit_rechecks_prayer_yes_and_ration_evidence() -> None:
         True,
         profile,
     )
+
+
+def test_prayer_replay_requires_original_prompt_and_matching_observed_outcome(
+    tmp_path: Path,
+) -> None:
+    level = LevelKey(0, 1)
+    initial = synthetic_observation(0, level, 1, hunger=3)
+    initial = replace(initial, player=replace(initial.player, turn=100))
+    prompt = replace(
+        synthetic_observation(1, level, 1, hunger=3),
+        player=initial.player,
+        message="Are you sure you want to pray? [yn] (n) ",
+        prompt=PromptState(True, False, False),
+    )
+    after = replace(
+        synthetic_observation(2, level, 1, hunger=0),
+        player=replace(initial.player, turn=103, hunger=0),
+        message="Your stomach feels content.",
+    )
+    evidence = PrayerEvidence(3, 100, 100)
+    intent = ActionIntent(None, None, None, prayer=evidence)
+    pray = LegalAction(0, 240, "Command.PRAY")
+    yes = LegalAction(1, ord("y"), "CompassDirection.NW")
+    prayer = replace(
+        synthetic_step(prompt),
+        action=pray,
+        selection=replace(
+            synthetic_step(prompt).selection, skill=Skill.PRAYER, intent=intent
+        ),
+    )
+    answer = replace(
+        synthetic_step(after),
+        action=yes,
+        selection=replace(
+            prayer.selection,
+            source=ActionSelectionSource.DETERMINISTIC_PROMPT,
+            action_index=1,
+            intent=replace(
+                intent,
+                prayer=replace(
+                    evidence,
+                    outcome=PrayerOutcome(
+                        103, 0, after.message, PrayerOutcomeKind.FIXED
+                    ),
+                ),
+            ),
+        ),
+    )
+    legal = (pray, yes, LegalAction(2, _EAST.command, _EAST.name))
+    profile = ActionProfile.NLE_SURVIVAL_ACTIONS
+    assert evaluation._action_is_valid(prayer, legal, initial, True, profile)
+    with pytest.raises(ContractError, match="exact confirmation prompt"):
+        replace(prayer, observation=replace(prompt, message=prompt.message.rstrip()))
+    assert not evaluation._action_is_valid(
+        prayer,
+        legal,
+        initial,
+        True,
+        profile,
+        prior_prayers=1,
+        last_prayer_turn=99,
+    )
+    early = replace(
+        prayer,
+        selection=replace(
+            prayer.selection,
+            intent=replace(
+                intent,
+                prayer=PrayerEvidence(3, 99, 100),
+            ),
+        ),
+    )
+    assert not evaluation._action_is_valid(
+        early,
+        legal,
+        replace(initial, player=replace(initial.player, turn=99)),
+        True,
+        profile,
+    )
+    assert evaluation._action_is_valid(
+        answer,
+        legal,
+        prompt,
+        True,
+        profile,
+        pending_prayer=evidence,
+    )
+    assert not evaluation._action_is_valid(answer, legal, prompt, True, profile)
+    assert not evaluation._action_is_valid(
+        answer,
+        legal,
+        replace(prompt, message="Are you sure you want to pray? [yn] (n)"),
+        True,
+        profile,
+        pending_prayer=evidence,
+    )
+    with pytest.raises(ContractError, match="matching observed outcome"):
+        replace(
+            answer,
+            selection=replace(
+                answer.selection,
+                intent=replace(
+                    intent,
+                    prayer=replace(
+                        evidence,
+                        outcome=PrayerOutcome(
+                            103, 1, after.message, PrayerOutcomeKind.FIXED
+                        ),
+                    ),
+                ),
+            ),
+        )
+    forged_prior = replace(
+        answer,
+        selection=replace(
+            answer.selection,
+            intent=replace(
+                intent,
+                prayer=replace(
+                    evidence,
+                    prayer_turn=99,
+                    outcome=PrayerOutcome(
+                        103, 0, after.message, PrayerOutcomeKind.FIXED
+                    ),
+                ),
+            ),
+        ),
+    )
+    assert not evaluation._action_is_valid(
+        forged_prior,
+        legal,
+        prompt,
+        True,
+        profile,
+        pending_prayer=evidence,
+    )
+    assert not evaluation._action_is_valid(
+        prayer,
+        legal,
+        initial,
+        True,
+        profile,
+        kill_count=2,
+    )
+    with pytest.raises(ContractError, match="matching observed outcome"):
+        replace(
+            answer,
+            observation=replace(
+                after,
+                player=replace(after.player, hunger=3),
+                message="The lichen bites!",
+            ),
+        )
+    terminal_observation = synthetic_observation(2, None, 1, hunger=0)
+    terminal_answer = replace(
+        synthetic_step(terminal_observation, RunOutcome.DEATH),
+        action=yes,
+        selection=replace(answer.selection, intent=intent),
+    )
+    assert evaluation._action_is_valid(
+        terminal_answer,
+        legal,
+        prompt,
+        True,
+        profile,
+        pending_prayer=evidence,
+    )
+    with pytest.raises(ContractError, match="cannot claim an observed outcome"):
+        replace(terminal_answer, selection=answer.selection)
+    truncated_answer = replace(
+        terminal_answer,
+        terminated=False,
+        truncated=True,
+        outcome=RunOutcome.TRUNCATED,
+    )
+    assert evaluation._action_is_valid(
+        truncated_answer,
+        legal,
+        prompt,
+        True,
+        profile,
+        pending_prayer=evidence,
+    )
+    with pytest.raises(ContractError, match="cannot claim an observed outcome"):
+        replace(truncated_answer, selection=answer.selection)
+    not_fixed = replace(
+        after,
+        player=replace(after.player, hunger=3),
+        message="You finish your prayer.  You feel that Tyr is satisfied.",
+    )
+    not_fixed_answer = replace(
+        answer,
+        observation=not_fixed,
+        selection=replace(
+            answer.selection,
+            intent=replace(
+                intent,
+                prayer=replace(
+                    evidence,
+                    outcome=PrayerOutcome(
+                        103,
+                        3,
+                        not_fixed.message,
+                        PrayerOutcomeKind.NOT_FIXED,
+                    ),
+                ),
+            ),
+        ),
+    )
+    assert evaluation._action_is_valid(
+        not_fixed_answer,
+        legal,
+        prompt,
+        True,
+        profile,
+        pending_prayer=evidence,
+    )
+
+    # Audit folds sequential persisted events, not per-row minted permits.
+    suite = load_suite(SUITE_PATH)
+    task = replace(STAIRCASE_TASK, action_profile=profile)
+    case = replace(suite.cases[0], task=task)
+    record = RunRecord(
+        id="prayer-replay",
+        created_at="2026-09-28T00:00:00+00:00",
+        updated_at="2026-09-28T00:00:00+00:00",
+        state=RunState.TERMINAL,
+        outcome=RunOutcome.DEATH,
+        environment=task.environment.value,
+        character=suite.character,
+        suite_seed=1,
+        core_seed=1,
+        display_seed=1,
+        level_seed=1,
+        max_episode_steps=case.max_episode_steps,
+        model="scripted",
+        policy_version="policy",
+        knowledge_version="knowledge",
+        nle_version="1.3.0",
+        ollama_num_ctx=8192,
+        ollama_version=None,
+        ttyrec_path=None,
+        error=None,
+        task=task,
+    )
+
+    def audited(rows: list[StepPayload]) -> int:
+        events = [
+            RunEvent(
+                0,
+                "2026-09-28T00:00:00+00:00",
+                EventKind.RUN_STARTED,
+                RunStartedPayload(initial, legal, STAND_ON_DOWNSTAIRS, None),
+            ),
+            *(
+                RunEvent(index, "2026-09-28T00:00:00+00:00", EventKind.STEP, row)
+                for index, row in enumerate(rows, start=1)
+            ),
+        ]
+        return summarize_run(
+            record,
+            events,
+            suite=suite,
+            case=case,
+            seed=1,
+            ended_by="episode_end",
+            wall_seconds=0.0,
+            data_directory=tmp_path,
+        ).invalid_actions
+
+    assert audited([prayer, answer]) == 0
+    assert audited([prayer, terminal_answer]) == 0
+    assert audited([prayer, not_fixed_answer]) == 0
+    assert audited([answer]) == 1
+    assert audited([prayer, forged_prior]) == 1
+    duplicate = replace(prayer, observation=replace(prompt, step_index=3))
+    assert audited([prayer, answer, duplicate]) == 1
+    next_turn = 100 + 1229
+    waited = replace(
+        synthetic_observation(3, level, 1, hunger=3),
+        player=replace(initial.player, turn=next_turn),
+        message="You kill the lichen!",
+    )
+    wait_step = replace(
+        synthetic_step(waited),
+        action=legal[2],
+        selection=replace(synthetic_step(waited).selection, action_index=2),
+    )
+    repeat_evidence = PrayerEvidence(3, next_turn, next_turn, kill_count=1)
+    repeat_prompt = replace(
+        prompt,
+        step_index=4,
+        player=waited.player,
+    )
+    repeat_prayer = replace(
+        prayer,
+        observation=repeat_prompt,
+        selection=replace(
+            prayer.selection,
+            intent=ActionIntent(None, None, None, prayer=repeat_evidence),
+        ),
+    )
+    repeat_after = replace(
+        after,
+        step_index=5,
+        player=replace(after.player, turn=next_turn + 3),
+    )
+    repeat_answer = replace(
+        answer,
+        observation=repeat_after,
+        selection=replace(
+            answer.selection,
+            intent=ActionIntent(
+                None,
+                None,
+                None,
+                prayer=replace(
+                    repeat_evidence,
+                    outcome=PrayerOutcome(
+                        next_turn + 3,
+                        0,
+                        repeat_after.message,
+                        PrayerOutcomeKind.FIXED,
+                    ),
+                ),
+            ),
+        ),
+    )
+    assert audited([prayer, answer, wait_step, repeat_prayer, repeat_answer]) == 0
+    forged_kills = replace(
+        repeat_prayer,
+        selection=replace(
+            repeat_prayer.selection,
+            intent=ActionIntent(
+                None,
+                None,
+                None,
+                prayer=replace(repeat_evidence, kill_count=0),
+            ),
+        ),
+    )
+    assert audited([prayer, answer, wait_step, forged_kills, repeat_answer]) == 2
 
 
 def test_episode_metrics_sum_each_levels_most_explored_cells_and_worst_hunger(

@@ -7,12 +7,17 @@ from typing import Final
 from nle import nethack
 
 from nethack_agent.decision import (
+    PRAYER_FIRST_SAFE_TURN,
+    PRAYER_REPEAT_WAIT_TURNS,
     STAIR_DESTINATIONS,
     ActionIntent,
     DestinationKind,
     IntentDestination,
     MapCell,
+    PrayerEvidence,
+    PromptKind,
     StuckReason,
+    confirmation_prompt_kind,
 )
 from nethack_agent.environment import LegalAction
 from nethack_agent.navigation import (
@@ -359,6 +364,81 @@ def safe_food_rations(
             key=lambda item: item.letter,
         )
     )
+
+
+class PrayerSkill:
+    """Guard Weak-or-worse prayer by initial and repeat timeout bounds."""
+
+    @staticmethod
+    def select_action(
+        observation: ProjectedObservation,
+        memory: LevelMemory,
+        actions_by_name: dict[str, LegalAction],
+        actions_by_command: dict[int, LegalAction],
+        *,
+        prior_prayers: int,
+        last_prayer_turn: int | None = None,
+        kill_count: int = 0,
+        pending: PrayerEvidence | None,
+    ) -> SkillAction | None:
+        origin = memory.position
+        if pending is not None:
+            if (
+                confirmation_prompt_kind(
+                    observation.message,
+                    single_choice=observation.prompt.single_character_choice,
+                )
+                is not PromptKind.PRAYER_CONFIRMATION
+                or pending.outcome is not None
+            ):
+                return None
+            yes = actions_by_command.get(ord("y"))
+            if yes is None:
+                return None
+            return SkillAction(
+                yes.index,
+                "Confirm the exact prompt from the preceding authorized prayer.",
+                ActionRecord(ActionKind.OTHER, origin),
+                ActionIntent(None, None, None, prayer=pending),
+            )
+        turn = observation.player.turn
+        safe_turn = (
+            PRAYER_FIRST_SAFE_TURN
+            if last_prayer_turn is None
+            else max(
+                PRAYER_FIRST_SAFE_TURN, last_prayer_turn + PRAYER_REPEAT_WAIT_TURNS
+            )
+        )
+        if (
+            observation.prompt.active
+            or observation.player.hunger < 3
+            or turn < safe_turn
+            or (prior_prayers > 0) != (last_prayer_turn is not None)
+            or safe_food_rations(observation)
+            or memory.cmap(origin) == 27  # NetHack 3.6.7 S_altar.
+            or "altar" in observation.message.lower()
+        ):
+            return None
+        pray = actions_by_name.get("Command.PRAY")
+        if pray is None:
+            return None
+        defense = _attack_adjacent_hostile(memory, actions_by_name, None)
+        if defense is not None:
+            return defense
+        return SkillAction(
+            pray.index,
+            "Pray at Weak or worse only after the conservative initial or "
+            "repeat prayer timeout bound.",
+            ActionRecord(ActionKind.OTHER, origin),
+            ActionIntent(
+                None,
+                None,
+                None,
+                prayer=PrayerEvidence(
+                    observation.player.hunger, turn, safe_turn, kill_count
+                ),
+            ),
+        )
 
 
 def item_selection_commands(

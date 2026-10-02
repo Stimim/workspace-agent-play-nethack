@@ -9,6 +9,7 @@ from typing import Final
 from nethack_agent.decision import (
     EAT_ACTION_NAME,
     LEVEL_CHANGE_ACTIONS,
+    PRAY_ACTION_NAME,
     YES_COMMAND,
     ActionSelection,
     ActionSelectionSource,
@@ -16,6 +17,9 @@ from nethack_agent.decision import (
     MapCell,
     ModelActionDecision,
     ModelSkillDecision,
+    PrayerEvidence,
+    PrayerOutcome,
+    PrayerPermit,
     PromptKind,
     PromptPermit,
     RunOutcome,
@@ -25,6 +29,7 @@ from nethack_agent.decision import (
     SkillSelectionSource,
     StuckReason,
     TraversalPermit,
+    classify_prayer_outcome,
     confirmation_answer_error,
     confirmation_prompt_kind,
     hunger_action_error,
@@ -49,6 +54,7 @@ from nethack_agent.skills import (
     ExploreLevelSkill,
     GoldNavigationSkill,
     HungerSkill,
+    PrayerSkill,
     SafePromptHandler,
     SkillAction,
     StaircaseNavigationSkill,
@@ -156,6 +162,10 @@ class ActionGate:
         *,
         hunger_permit: HungerPermit | None = None,
         prompt_permit: PromptPermit | None = None,
+        prayer_permit: PrayerPermit | None = None,
+        prior_prayers: int = 0,
+        last_prayer_turn: int | None = None,
+        on_altar: bool = False,
         before: ProjectedObservation | None = None,
         selection: ActionSelection | None = None,
     ) -> LegalAction:
@@ -180,15 +190,22 @@ class ActionGate:
         if role is ActionRole.PRAYER:
             if selection is None:
                 raise ActionGateError("PRAY requires a deterministic prayer skill")
-            # No prayer skill issues permits until milestone item 7.
             error = prayer_action_error(
                 action.name,
                 selection,
-                permit=None,
+                permit=prayer_permit,
                 turn=None if before is None else before.player.turn,
+                hunger=None if before is None else before.player.hunger,
+                prompt_active=False if before is None else before.prompt.active,
+                ration_available=False
+                if before is None
+                else bool(safe_food_rations(before)),
+                prior_prayers=prior_prayers,
+                last_prayer_turn=last_prayer_turn,
+                on_altar=on_altar,
             )
-            assert error is not None
-            raise ActionGateError(error)
+            if error is not None:
+                raise ActionGateError(error)
         if role is ActionRole.PROMPT_KEY and (
             prompt_permit is None
             or prompt_permit.command != action.command
@@ -306,6 +323,16 @@ class AgentCoordinator:
             )
             else None
         )
+        self._prayer = (
+            PrayerSkill()
+            if task.action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
+            else None
+        )
+        self._prayer_count = 0
+        self._last_prayer_turn: int | None = None
+        self._prayer_kill_count = 0
+        self._pending_prayer: PrayerEvidence | None = None
+        self._pending_prayer_step: int | None = None
         self._dungeon = DungeonMemory()
         self._lock = threading.RLock()
         self._state = RunState.IDLE
@@ -345,9 +372,15 @@ class AgentCoordinator:
             self._dungeon.reset()
             if self._hunger is not None:
                 self._hunger.reset()
+            self._prayer_count = 0
+            self._last_prayer_turn = None
+            self._prayer_kill_count = 0
+            self._pending_prayer = None
+            self._pending_prayer_step = None
             try:
                 raw = self._environment.reset()
                 self._observation = self._projector.project(raw, step_index=0)
+                self._prayer_kill_count += self._observation.message.count("You kill")
                 self._dungeon.observe(self._observation)
                 self._leg = 0
                 self._goal = self._planner.plan(0, self._dungeon).goal
@@ -437,12 +470,17 @@ class AgentCoordinator:
                 try:
                     traversal_permit = self._traversal_permit(selection, before)
                     hunger_permit = self._hunger_permit(selection, before)
+                    prayer_permit = self._prayer_permit(selection, before)
                     prompt_permit = self._prompt_permit(selection, before)
                     action = self._gate.resolve(
                         selection.action_index,
                         traversal_permit,
                         hunger_permit=hunger_permit,
                         prompt_permit=prompt_permit,
+                        prayer_permit=prayer_permit,
+                        prior_prayers=self._prayer_count,
+                        last_prayer_turn=self._last_prayer_turn,
+                        on_altar=self._on_altar(before),
                         before=before,
                         selection=selection,
                     )
@@ -457,6 +495,9 @@ class AgentCoordinator:
                         transition.observation, step_index=transition.step_index
                     )
                     self._observation = after
+                    selection = self._commit_prayer_locked(
+                        selection, action, before, after, transition
+                    )
                     self._commit_plan_locked(plan, before)
                     outcome = self._terminal_outcome(transition)
                     if outcome is None:
@@ -515,15 +556,11 @@ class AgentCoordinator:
     ) -> _Plan | None:
         """Choose one action; return None when a lifecycle change canceled it.
 
-        The objective planner sets the step's goal. Priority: a pending
-        exploration kick direction, the bounded hunger sequence, safe prompt
-        answers, the model for unhandled prompts, staircase navigation to a
-        reachable remembered staircase matching the goal, on NetHackGold-v0
-        gold navigation to reachable displayed gold under an explore_level
-        goal, then level exploration. When exploration
-        first exhausts the level, the level is marked exhausted and the goal
-        replanned; if that yields no action, the stuck report triggers a model
-        skill consultation (rate-limited) and otherwise a model fallback.
+        The objective planner sets the step's goal. Verified ration and its
+        pending item answer precede a pending exploration kick. Then an exact
+        pending prayer prompt, safe adjacent defense, and a guarded first prayer
+        precede safe prompt handling and ordinary navigation/exploration.
+        Exhausted exploration may consult the model for a fallback.
         """
         memory = self._dungeon.observe(before)
         goal = self._plan_goal(leg, memory)
@@ -535,12 +572,6 @@ class AgentCoordinator:
                 return None
         actions = self._gate.actions_by_name
         arbiter = SkillSelectionSource.ARBITER
-
-        kick = self._exploration.continue_kick(before, memory, actions)
-        if kick is not None:
-            return self._skill_plan(
-                kick, goal, Skill.EXPLORE_LEVEL, arbiter, None, skill_model_decision
-            )
 
         if self._hunger is not None:
             hunger = self._hunger.select_action(
@@ -562,6 +593,43 @@ class AgentCoordinator:
                     source=source,
                 )
 
+        kick = self._exploration.continue_kick(before, memory, actions)
+        if kick is not None:
+            return self._skill_plan(
+                kick, goal, Skill.EXPLORE_LEVEL, arbiter, None, skill_model_decision
+            )
+
+        if self._prayer is not None:
+            pending = (
+                self._pending_prayer
+                if self._pending_prayer_step == before.step_index - 1
+                else None
+            )
+            prayer = self._prayer.select_action(
+                before,
+                memory,
+                actions,
+                self._gate.actions_by_command,
+                prior_prayers=self._prayer_count,
+                last_prayer_turn=self._last_prayer_turn,
+                kill_count=self._prayer_kill_count,
+                pending=pending,
+            )
+            if prayer is not None:
+                source = (
+                    ActionSelectionSource.DETERMINISTIC_PROMPT
+                    if pending is not None
+                    else ActionSelectionSource.DETERMINISTIC_SKILL
+                )
+                return self._skill_plan(
+                    prayer,
+                    goal,
+                    Skill.PRAYER,
+                    arbiter,
+                    None,
+                    skill_model_decision,
+                    source=source,
+                )
         prompt = self._prompt_handler.select_action(
             before, actions, self._gate.actions_by_command
         )
@@ -819,6 +887,38 @@ class AgentCoordinator:
             raise ActionGateError(error)
         return HungerPermit(rations[0].letter)
 
+    def _on_altar(self, observation: ProjectedObservation) -> bool:
+        # NLE overlays the hero on the current square. Remembered S_altar and
+        # the look-here text both prevent prayer on an obscured altar.
+        return (
+            self._dungeon.current.cmap(self._dungeon.current.position) == 27
+            or "altar" in observation.message.lower()
+        )
+
+    def _prayer_permit(
+        self, selection: ActionSelection, before: ProjectedObservation
+    ) -> PrayerPermit | None:
+        legal = self._environment.legal_actions
+        index = selection.action_index
+        if not 0 <= index < len(legal) or legal[index].name != PRAY_ACTION_NAME:
+            return None
+        permit = PrayerPermit(before.player.turn)
+        error = prayer_action_error(
+            PRAY_ACTION_NAME,
+            selection,
+            permit=permit,
+            turn=before.player.turn,
+            hunger=before.player.hunger,
+            prompt_active=before.prompt.active,
+            ration_available=bool(safe_food_rations(before)),
+            prior_prayers=self._prayer_count,
+            last_prayer_turn=self._last_prayer_turn,
+            on_altar=self._on_altar(before),
+        )
+        if error is not None:
+            raise ActionGateError(error)
+        return permit
+
     def _prompt_permit(
         self, selection: ActionSelection, before: ProjectedObservation
     ) -> PromptPermit | None:
@@ -827,6 +927,33 @@ class AgentCoordinator:
         if not 0 <= index < len(legal):
             return None
         action = legal[index]
+        if (
+            selection.skill is Skill.PRAYER
+            and selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
+        ):
+            pending = self._pending_prayer
+            if (
+                pending is None
+                or self._pending_prayer_step != before.step_index - 1
+                or self._prayer_count < 1
+                or selection.intent is None
+                or selection.intent.prayer != pending
+            ):
+                raise ActionGateError("yes requires the preceding prayer evidence")
+            permit = PromptPermit(YES_COMMAND, PromptKind.PRAYER_CONFIRMATION)
+            error = confirmation_answer_error(
+                action.command,
+                selection,
+                prompt_active=before.prompt.active,
+                prompt_kind=confirmation_prompt_kind(
+                    before.message,
+                    single_choice=before.prompt.single_character_choice,
+                ),
+                permit=permit,
+            )
+            if error is not None:
+                raise ActionGateError(error)
+            return permit
         if not self._gate.is_prompt_key(action) and not (
             selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
             and selection.skill is Skill.HUNGER
@@ -844,6 +971,52 @@ class AgentCoordinator:
         if error is not None:
             raise ActionGateError(error)
         return PromptPermit(action.command)
+
+    def _commit_prayer_locked(
+        self,
+        selection: ActionSelection,
+        action: LegalAction,
+        before: ProjectedObservation,
+        after: ProjectedObservation,
+        transition: StepTransition,
+    ) -> ActionSelection:
+        if action.name == PRAY_ACTION_NAME:
+            intent = selection.intent
+            assert intent is not None and intent.prayer is not None
+            self._prayer_count += 1
+            self._last_prayer_turn = before.player.turn
+            self._pending_prayer = intent.prayer
+            self._pending_prayer_step = before.step_index
+        elif (
+            selection.skill is Skill.PRAYER
+            and selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
+            and action.command == YES_COMMAND
+        ):
+            self._pending_prayer = None
+            self._pending_prayer_step = None
+            if not transition.terminated and not transition.truncated:
+                intent = selection.intent
+                assert intent is not None and intent.prayer is not None
+                kind = classify_prayer_outcome(after.player.hunger, after.message)
+                if kind is None:
+                    raise CoordinatorInvariantError(
+                        "live prayer confirmation returned no recognized outcome"
+                    )
+                evidence = replace(
+                    intent.prayer,
+                    outcome=PrayerOutcome(
+                        after.player.turn,
+                        after.player.hunger,
+                        after.message,
+                        kind,
+                    ),
+                )
+                selection = replace(selection, intent=replace(intent, prayer=evidence))
+        else:
+            self._pending_prayer = None
+            self._pending_prayer_step = None
+        self._prayer_kill_count += after.message.count("You kill")
+        return selection
 
     def _select_skill(
         self, before: ProjectedObservation, stuck: StuckReason | None, goal: Goal
