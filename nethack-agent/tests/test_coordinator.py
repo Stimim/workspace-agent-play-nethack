@@ -1603,7 +1603,16 @@ def test_real_seed_1131_eats_observed_lichen_and_evaluator_audits_cleanly(
         agent.stop()
 
 
-def test_corpse_northwest_route_is_not_a_floor_confirmation(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("command", "cell", "action_name"),
+    [
+        ("y", MapCell(43, 4), "CompassDirection.NW"),
+        ("n", MapCell(45, 6), "CompassDirection.SE"),
+    ],
+)
+def test_corpse_route_command_is_not_a_floor_answer(
+    tmp_path: Path, command: str, cell: MapCell, action_name: str
+) -> None:
     task = TaskSpec(
         NleTask.SCORE,
         ActionProfile.NLE_SURVIVAL_ACTIONS,
@@ -1625,40 +1634,71 @@ def test_corpse_northwest_route_is_not_a_floor_confirmation(tmp_path: Path) -> N
             prompt=PromptState(False, False, False),
             player=replace(initial.player, x=44, y=5, turn=530, hunger=1),
         )
-        evidence = CorpseEvidence("gecko", 530, 0, MapCell(43, 4))
+        evidence = CorpseEvidence("gecko", 530, 0, cell)
         selection = ActionSelection(
             source=ActionSelectionSource.DETERMINISTIC_SKILL,
             goal=agent.snapshot().current_goal,
             skill=Skill.CORPSE,
             skill_selection=SkillSelectionSource.ARBITER,
             stuck_reason=None,
-            action_index=agent._gate.actions_by_command[ord("y")].index,
+            action_index=agent._gate.actions_by_command[ord(command)].index,
             rationale="Approach the observed gecko kill cell.",
             intent=ActionIntent(
-                IntentDestination(DestinationKind.CORPSE, 43, 4),
+                IntentDestination(DestinationKind.CORPSE, cell.x, cell.y),
                 None,
-                (MapCell(43, 4),),
+                (cell,),
                 corpse=evidence,
             ),
         )
         action = agent._gate.resolve(
             selection.action_index, before=before, selection=selection
         )
-        assert action.name == "CompassDirection.NW"
+        assert action.name == action_name
+        after = replace(
+            before,
+            step_index=before.step_index + 1,
+            player=replace(before.player, x=cell.x, y=cell.y, turn=531),
+        )
+        payload = StepPayload(
+            selection,
+            None,
+            None,
+            None,
+            None,
+            action,
+            0.0,
+            False,
+            False,
+            0,
+            False,
+            None,
+            after,
+        )
+        assert payload.selection.intent.corpse.outcome is None
         prompt = replace(
             before,
             prompt=PromptState(True, False, False),
             message="There is a gecko corpse here; eat it? [ynq] (n) ",
         )
-        with pytest.raises(ActionGateError):
-            agent._gate.resolve(
-                selection.action_index, before=prompt, selection=selection
-            )
+        if command == "y":
+            with pytest.raises(ActionGateError):
+                agent._gate.resolve(
+                    selection.action_index, before=prompt, selection=selection
+                )
     finally:
         agent.stop()
 
 
-def test_real_seed_1170_corpse_northwest_route_and_audit(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("seed", "action_name", "species"),
+    [
+        (1170, "CompassDirection.NW", "gecko"),
+        (1194, "CompassDirection.SE", "sewer rat"),
+    ],
+)
+def test_real_corpse_route_command_and_audit(
+    tmp_path: Path, seed: int, action_name: str, species: str
+) -> None:
     task = TaskSpec(
         NleTask.SCORE,
         ActionProfile.NLE_SURVIVAL_ACTIONS,
@@ -1667,7 +1707,7 @@ def test_real_seed_1170_corpse_northwest_route_and_audit(tmp_path: Path) -> None
     agent = AgentCoordinator(
         NleEnvironment(
             ScenarioConfig(
-                seed=1170,
+                seed=seed,
                 artifact_directory=tmp_path,
                 max_episode_steps=3000,
                 task=task,
@@ -1685,33 +1725,36 @@ def test_real_seed_1170_corpse_northwest_route_and_audit(tmp_path: Path) -> None
             record = agent.advance()
             assert record is not None
             records.append(record)
-        route = records[534]
-        assert route.before.player.turn == 530
-        assert route.before.message == "You kill the gecko!"
+        route = next(
+            step
+            for step in records
+            if step.selection.skill is Skill.CORPSE
+            and step.action.name == action_name
+            and step.selection.intent is not None
+            and step.selection.intent.corpse is not None
+            and step.selection.intent.corpse.name == species
+        )
         assert not route.before.prompt.active
         assert route.selection.skill is Skill.CORPSE
-        assert route.action.name == "CompassDirection.NW"
-        assert route.selection.intent is not None
-        assert route.selection.intent.corpse == CorpseEvidence(
-            "gecko", 530, 0, MapCell(43, 4)
-        )
+        assert route.action.name == action_name
+        assert route.selection.intent.corpse.outcome is None
         suite = load_suite(
             Path(__file__).resolve().parents[1] / "evaluation" / "staircase-v1.json"
         )
         case = replace(suite.cases[0], task=task, max_episode_steps=3000)
         timestamp = "2026-10-03T00:00:00+00:00"
         run = RunRecord(
-            id="seed-1170-corpse-route",
+            id=f"seed-{seed}-corpse-route",
             created_at=timestamp,
             updated_at=timestamp,
             state=RunState.TERMINAL,
             outcome=records[-1].outcome,
             environment=task.environment.value,
             character=suite.character,
-            suite_seed=1170,
-            core_seed=1170,
-            display_seed=1170,
-            level_seed=1170,
+            suite_seed=seed,
+            core_seed=seed,
+            display_seed=seed,
+            level_seed=seed,
             max_episode_steps=3000,
             model="scripted",
             policy_version="policy",
@@ -1740,7 +1783,7 @@ def test_real_seed_1170_corpse_northwest_route_and_audit(tmp_path: Path) -> None
             events,
             suite=suite,
             case=case,
-            seed=1170,
+            seed=seed,
             ended_by="episode_end",
             wall_seconds=0.0,
             data_directory=tmp_path,

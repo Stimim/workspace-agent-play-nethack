@@ -39,8 +39,10 @@ from nethack_agent.decision import (
     confirmation_prompt_kind,
     corpse_confirmation_error,
     hunger_action_error,
+    is_corpse_decline,
     level_change_error,
     model_selectable_skills,
+    observed_corpse_decline,
     prayer_action_error,
     prompt_response_error,
 )
@@ -1198,13 +1200,23 @@ class AgentCoordinator:
                     kind = classify_corpse_outcome(pending.name, after.message)
                     if kind is None:
                         self._meal_corpse = pending
-                elif action.command in (ord("n"), 27):
+                elif is_corpse_decline(action.command, selection):
                     kind = CorpseOutcomeKind.DECLINED
                 else:
                     kind = None
                 if kind is not None and live:
-                    outcome = CorpseOutcome(
-                        kind, after.player.turn, after.player.hunger, after.message
+                    outcome = (
+                        observed_corpse_decline(
+                            action.command,
+                            selection,
+                            after,
+                            terminated=transition.terminated,
+                            truncated=transition.truncated,
+                        )
+                        if is_corpse_decline(action.command, selection)
+                        else CorpseOutcome(
+                            kind, after.player.turn, after.player.hunger, after.message
+                        )
                     )
                     selection = replace(
                         selection,

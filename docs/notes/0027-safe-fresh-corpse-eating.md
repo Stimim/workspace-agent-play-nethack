@@ -180,3 +180,19 @@ The scripted `NetHackStaircase-v0` / `nle-task-actions` regression, cap 1000,
 still reports `task_success` on seeds 1–10 at steps 217, 44, 222, 47, 147,
 151, 286, 222, 102, and 430. These are development smoke results, not a
 fresh-sample milestone acceptance run.
+
+A second, budget-independent follow-up on 2026-10-03 found the corresponding
+`n`/southeast collision in the **event validator**. In the unchanged
+`a30b300` baseline, seed 1194's southeast corpse-route step 311 carried fresh
+sewer-rat evidence with no meal outcome; `StepPayload` incorrectly treated
+that movement as a decline. The same mismatch occurred in baseline seeds
+1195–1197, 1204, 1205, and 1209 and invalidated the initial bounded-search
+comparison. Coordinator, event validation, and evaluation now share one
+decline predicate (corpse skill, deterministic **prompt** source, and `n` or
+ESC), plus the same live observed decline outcome. Terminal/truncated answers
+still record no outcome. Synthetic southeast and actual seed-1194 regressions
+failed before the fix; a direct coordinator smoke now records the step-311
+sewer-rat route as `CompassDirection.SE`, with no outcome, and its typed event
+is accepted. The northwest regression remains covered without pinning an
+incidental step index. This changes recording consistency, not search ordering,
+corpse eligibility, or gameplay choices.

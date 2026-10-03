@@ -654,6 +654,34 @@ def classify_corpse_outcome(name: str, message: str) -> CorpseOutcomeKind | None
     return None
 
 
+def is_corpse_decline(command: int, selection: ActionSelection) -> bool:
+    """Only a prompt answer declines food; the same `n` command moves SE."""
+    return (
+        selection.skill is Skill.CORPSE
+        and selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
+        and command in (ord("n"), ESC_COMMAND)
+    )
+
+
+def observed_corpse_decline(
+    command: int,
+    selection: ActionSelection,
+    observation: ProjectedObservation,
+    *,
+    terminated: bool,
+    truncated: bool,
+) -> CorpseOutcome | None:
+    """The shared live decline outcome, never inferred from terminal stats."""
+    if not is_corpse_decline(command, selection) or terminated or truncated:
+        return None
+    return CorpseOutcome(
+        CorpseOutcomeKind.DECLINED,
+        observation.player.turn,
+        observation.player.hunger,
+        observation.message,
+    )
+
+
 PRAYER_FIRST_SAFE_TURN: Final = 100
 PRAYER_REPEAT_WAIT_TURNS: Final = 1229
 

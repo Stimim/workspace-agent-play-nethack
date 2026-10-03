@@ -17,7 +17,6 @@ from nethack_agent.contracts import (
 )
 from nethack_agent.decision import (
     EAT_ACTION_NAME,
-    ESC_COMMAND,
     LEVEL_CHANGE_ACTIONS,
     PRAY_ACTION_NAME,
     YES_COMMAND,
@@ -25,7 +24,6 @@ from nethack_agent.decision import (
     ActionSelection,
     ActionSelectionSource,
     CorpseOutcome,
-    CorpseOutcomeKind,
     DecisionMetrics,
     PrayerOutcome,
     PromptKind,
@@ -39,7 +37,9 @@ from nethack_agent.decision import (
     classify_prayer_outcome,
     confirmation_answer_error,
     confirmation_prompt_kind,
+    is_corpse_decline,
     level_change_selection_error,
+    observed_corpse_decline,
     survival_action_selection_error,
 )
 from nethack_agent.environment import LegalAction
@@ -373,16 +373,13 @@ class StepPayload:
                     )
                 ):
                     survival_error = "meal continuation requires its observed outcome"
-            elif self.action.command in (ord("n"), ESC_COMMAND):
-                expected = (
-                    None
-                    if self.terminated or self.truncated
-                    else CorpseOutcome(
-                        CorpseOutcomeKind.DECLINED,
-                        self.observation.player.turn,
-                        self.observation.player.hunger,
-                        self.observation.message,
-                    )
+            elif is_corpse_decline(self.action.command, self.selection):
+                expected = observed_corpse_decline(
+                    self.action.command,
+                    self.selection,
+                    self.observation,
+                    terminated=self.terminated,
+                    truncated=self.truncated,
                 )
                 if (
                     self.selection.source

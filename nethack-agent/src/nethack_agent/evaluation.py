@@ -40,7 +40,6 @@ from nethack_agent.decision import (
     ActionSelectionSource,
     CorpseEvidence,
     CorpseOutcome,
-    CorpseOutcomeKind,
     DecisionMetrics,
     DestinationKind,
     PrayerEvidence,
@@ -57,7 +56,9 @@ from nethack_agent.decision import (
     confirmation_prompt_kind,
     corpse_confirmation_error,
     hunger_action_error,
+    is_corpse_decline,
     level_change_error,
+    observed_corpse_decline,
     parse_floor_corpse_prompt,
     prayer_action_error,
     prompt_response_error,
@@ -2352,11 +2353,7 @@ def _action_is_valid(
         )
     ):
         return False
-    if (
-        selection.skill is Skill.CORPSE
-        and selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
-        and action.command in (ord("n"), ESC_COMMAND)
-    ):
+    if is_corpse_decline(action.command, selection):
         intent = selection.intent
         if (
             action_profile is not ActionProfile.NLE_SURVIVAL_ACTIONS
@@ -2400,15 +2397,12 @@ def _action_is_valid(
             )
         ):
             return False
-        expected = (
-            None
-            if payload.terminated or payload.truncated
-            else CorpseOutcome(
-                CorpseOutcomeKind.DECLINED,
-                payload.observation.player.turn,
-                payload.observation.player.hunger,
-                payload.observation.message,
-            )
+        expected = observed_corpse_decline(
+            action.command,
+            selection,
+            payload.observation,
+            terminated=payload.terminated,
+            truncated=payload.truncated,
         )
         if intent.corpse != replace(pending_corpse, outcome=expected):
             return False
