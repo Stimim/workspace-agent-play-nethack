@@ -124,6 +124,14 @@
         [1190, 1209]
       ],
       "note": "Pre-registered legacy baseline versus promise-v1 per-level SEARCH budgets 300/450/600, real coordinator, reach_level(0,5), survival actions, cap 3000. Initial arms invalidated by the budget-independent corpse event bug; all four repeated after d43cc64. Not acceptance seeds."
+    },
+    {
+      "source": "note-0030-post-fix-bounded-search-probes",
+      "seeds": [],
+      "ranges": [
+        [1210, 1239]
+      ],
+      "note": "Preregistered development sample at 02dbf36: 30 unused seeds audited against the ledger and every evaluation/*.json; actual scripted coordinator, reach_level(0,5), survival actions, cap 3000; legacy versus frozen promise-v1 SEARCH caps 300/450/600. Never fresh acceptance seeds."
     }
   ]
 }
