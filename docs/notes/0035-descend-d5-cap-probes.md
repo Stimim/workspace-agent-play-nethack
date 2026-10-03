@@ -50,3 +50,58 @@ The `min_success_rate` starts at 0.5 (the ADR floor). We raise it to the largest
 - **Chosen Cap:** 3000
 - **Probe success rate at 3000 cap:** 13/20 = 0.65
 - **Chosen Rate:** max multiple of 0.05 <= (0.65 - 0.15) = 0.50. Flooring at 0.5 means `min_success_rate = 0.5`.
+
+## Execution Notes
+The rule defining the thresholds and conditions above was fixed and written to this document before any probes were executed.
+
+The probe run was executed over two stages due to a `bash` timeout after seed 1368 (which hit the 5,000 step cap). The run was immediately resumed from seed 1369 onwards using an identical continuation suite. Every seed (1360-1379) was executed exactly once; no episode encountered an error or required a rerun.
+
+## Catalog Changes
+During the milestone 2 policy integration, a catalog check revealed that two historically failing seeds now successfully complete their objectives under `hierarchical-survival-exit-v1`. They were promoted in `representative-seeds.json` from `known_failure` to `must_pass`:
+
+- **`descend-d3-stair-defense-2`** (seed 2): Expected `known_failure/death`, observed `objective_complete`.
+- **`descend-d3-hidden-downstairs-702`** (seed 702): Expected `known_failure/truncated`, observed `objective_complete`.
+
+Check evidence:
+```text
+IMPROVED descend-d3-stair-defense-2 seed 2: expected known_failure/death, observed objective_complete; known failure now succeeds; update the catalog
+IMPROVED descend-d3-hidden-downstairs-702 seed 702: expected known_failure/truncated, observed objective_complete; known failure now succeeds; update the catalog
+```
+
+## Probe Artifacts
+The final, correct temporary JSON suite used to run the probes (rendered here for seeds 1369-1379; 1360-1368 followed an identical structure):
+```json
+{
+  "schema_version": 3,
+  "suite_id": "temp-d5-probes-2",
+  "character": "val-dwa-law",
+  "policy_version": "hierarchical-survival-exit-v1",
+  "knowledge_bundle_id": "survival-reviewed-v2",
+  "seed_selection": "none",
+  "step_cap_rationale": "5000",
+  "cases": [
+    {
+      "case_id": "probe-1369",
+      "seeds": [1369],
+      "task": {
+        "environment": "NetHackScore-v0",
+        "action_profile": "nle-survival-actions",
+        "objective": { "legs": [ { "kind": "reach_level", "level": { "dungeon_number": 0, "dungeon_level": 5 } } ] }
+      },
+      "max_episode_steps": 5000,
+      "acceptance": { "min_successes": 1, "required_success_seeds": [] }
+    },
+    ...
+  ],
+  "acceptance": {
+    "max_invalid_actions": 0,
+    "max_gate_rejections": 0,
+    "require_complete_records": false
+  }
+}
+```
+
+The command used to execute the suite:
+```bash
+uv run nethack-agent eval run --suite evaluation/temp-d5-probes-2.json --development-scripted-model --data-dir /tmp/item10-temp-probes
+```
