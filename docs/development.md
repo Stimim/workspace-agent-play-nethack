@@ -391,8 +391,9 @@ relabel their reports as later-policy evidence. Policy
 `hierarchical-task-progression-v1` instead has its own regression suites,
 `evaluation/staircase-v3.json` and `evaluation/traversal-v2.json`, which repeat
 the cases, seeds, caps, and thresholds above under new suite ids; they, and the
-`scout-v1` and `eat-v1` baselines, are in turn refused by the current policy,
-which has no committed suite yet.
+`scout-v1` and `eat-v1` baselines, are in turn refused by earlier policies.
+
+Policy `hierarchical-survival-exit-v1` runs its own regression suites, `staircase-v4`, `traversal-v3`, `scout-v2`, and `eat-v2`, plus a schema-3 `descend-d5-v1` suite. To run them with the real model, use `uv run nethack-agent eval run --suite evaluation/<suite>.json --data-dir <dir>`.
 
 Those committed suites continue to pin `staircase-reviewed-v3`; their
 historical reports and rendered bytes are unchanged. Other runs through

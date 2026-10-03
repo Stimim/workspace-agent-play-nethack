@@ -1,0 +1,110 @@
+{
+  "schema_version": 2,
+  "suite_id": "traversal-v3",
+  "character": "val-dwa-law",
+  "policy_version": "hierarchical-survival-exit-v1",
+  "knowledge_bundle_id": "survival-reviewed-v2",
+  "seed_selection": "This regression suite deliberately reuses traversal-v1's held-out seeds 700 through 704, its three objectives, and its thresholds of 3/5, 3/5, and 2/5 unchanged, so policy hierarchical-task-progression-v1 can be compared with the recorded traversal-policy results. Those thresholds came from development-only probes on seeds 600 through 604 before traversal-v1 first ran; traversal-v1 stays pinned to its own policy.",
+  "step_cap_rationale": "Each case reuses traversal-v1's 1000-step cap unchanged, fixed before any traversal-v2 episode ran. traversal-v1's probes showed successful multi-level episodes finishing within 381 steps while unsuccessful episodes reached 972 to 1000 steps.",
+  "cases": [
+    {
+      "case_id": "descend-main-d3",
+      "task": {
+        "environment": "NetHackScore-v0",
+        "action_profile": "nle-task-actions",
+        "objective": {
+          "legs": [
+            {
+              "kind": "reach_level",
+              "level": {
+                "dungeon_number": 0,
+                "dungeon_level": 3
+              }
+            }
+          ]
+        }
+      },
+      "seeds": [
+        700,
+        701,
+        702,
+        703,
+        704
+      ],
+      "max_episode_steps": 1000,
+      "acceptance": {
+        "min_successes": 3,
+        "required_success_seeds": []
+      }
+    },
+    {
+      "case_id": "round-trip-d3-d1",
+      "task": {
+        "environment": "NetHackScore-v0",
+        "action_profile": "nle-task-actions",
+        "objective": {
+          "legs": [
+            {
+              "kind": "reach_level",
+              "level": {
+                "dungeon_number": 0,
+                "dungeon_level": 3
+              }
+            },
+            {
+              "kind": "reach_level",
+              "level": {
+                "dungeon_number": 0,
+                "dungeon_level": 1
+              }
+            }
+          ]
+        }
+      },
+      "seeds": [
+        700,
+        701,
+        702,
+        703,
+        704
+      ],
+      "max_episode_steps": 1000,
+      "acceptance": {
+        "min_successes": 3,
+        "required_success_seeds": []
+      }
+    },
+    {
+      "case_id": "enter-mines",
+      "task": {
+        "environment": "NetHackScore-v0",
+        "action_profile": "nle-task-actions",
+        "objective": {
+          "legs": [
+            {
+              "kind": "enter_dungeon",
+              "dungeon_number": 2
+            }
+          ]
+        }
+      },
+      "seeds": [
+        700,
+        701,
+        702,
+        703,
+        704
+      ],
+      "max_episode_steps": 1000,
+      "acceptance": {
+        "min_successes": 2,
+        "required_success_seeds": []
+      }
+    }
+  ],
+  "acceptance": {
+    "max_invalid_actions": 0,
+    "max_gate_rejections": 0,
+    "require_complete_records": true
+  }
+}

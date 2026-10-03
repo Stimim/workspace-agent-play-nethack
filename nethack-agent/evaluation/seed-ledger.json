@@ -185,6 +185,17 @@
         ]
       ],
       "note": "0034 confirmatory probes: A (baseline 6645966) vs B (shipped nutrition 10cb81d)"
+    },
+    {
+      "source": "note-0035-descend-d5-cap-probes",
+      "seeds": [],
+      "ranges": [
+        [
+          1360,
+          1379
+        ]
+      ],
+      "note": "0035 descend-d5 cap held-out probes"
     }
   ]
 }

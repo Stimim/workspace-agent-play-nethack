@@ -49,10 +49,10 @@ from nethack_agent.storage import (
 )
 from nethack_agent.tasks import STAIRCASE_TASK, TaskSpec
 
-# Task specialists add deterministic gold navigation on NetHackGold-v0 to
-# hierarchical-task-progression-v1. Earlier suites and reports remain pinned to
-# their original policies.
-POLICY_VERSION: Final = "hierarchical-task-specialists-v1"
+# Survival adds the action profile, deterministic prayer, safe corpse eating,
+# corrected meal lifecycle, and exit discovery from notes 0025–0034.
+# Earlier suites and reports remain pinned to their original policies.
+POLICY_VERSION: Final = "hierarchical-survival-exit-v1"
 _ACTIVE_STATES: Final = frozenset({RunState.IDLE, RunState.RUNNING, RunState.PAUSED})
 
 

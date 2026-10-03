@@ -1,0 +1,69 @@
+{
+  "schema_version": 2,
+  "suite_id": "eat-v2",
+  "character": "val-dwa-law",
+  "policy_version": "hierarchical-survival-exit-v1",
+  "knowledge_bundle_id": "survival-reviewed-v2",
+  "seed_selection": "Seeds 920 through 924 are a contiguous held-out range not used by any committed suite, development example, probe, or persisted run inspected before selection. This is the Eat baseline (ADR 0004 section 8): Eat has no NLE success state, so the case is gated by metric thresholds and requires no objective success. The thresholds were fixed before any eat-v1 episode ran, from development-only scripted-model probes of the same case on seeds 820 through 824: 0/5 explore_dungeon(5) completions; Eat return 793.97, 793.97, 793.96, 793.94, 1587.98 (median 793.97; every episode ate at least one known ration); explored cells 669, 753, 1060, 583, 462 (median 669); four deaths while Fainting after the ration was spent and one live truncation, with no starvation death. The return bound requires the median episode to eat a ration; the explored-cell bound is the probe median times 0.7 rounded down to a multiple of 50; at most one starvation death is allowed.",
+  "step_cap_rationale": "The 2000-step cap bounds a surviving episode. One ration extends the hunger horizon: four probes died between 1691 and 1748 steps and one was truncated at 2000 after eating two rations. Exhaustive exploration took 245 to 1511 steps on the three probe first levels it completed, so deeper required levels are not expected within the cap.",
+  "cases": [
+    {
+      "case_id": "explore-d1-d5",
+      "task": {
+        "environment": "NetHackEat-v0",
+        "action_profile": "nle-hunger-actions",
+        "objective": {
+          "legs": [
+            {
+              "kind": "explore_dungeon",
+              "max_level": 5
+            }
+          ]
+        }
+      },
+      "seeds": [
+        920,
+        921,
+        922,
+        923,
+        924
+      ],
+      "max_episode_steps": 2000,
+      "acceptance": {
+        "min_successes": 0,
+        "required_success_seeds": [],
+        "metric_thresholds": [
+          {
+            "metric": "task_return",
+            "statistic": "median",
+            "bound": {
+              "comparison": "at_least",
+              "value": 700
+            }
+          },
+          {
+            "metric": "explored_cells",
+            "statistic": "median",
+            "bound": {
+              "comparison": "at_least",
+              "value": 450
+            }
+          },
+          {
+            "metric": "starvation_death",
+            "statistic": "sum",
+            "bound": {
+              "comparison": "at_most",
+              "value": 1
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "acceptance": {
+    "max_invalid_actions": 0,
+    "max_gate_rejections": 0,
+    "require_complete_records": true
+  }
+}

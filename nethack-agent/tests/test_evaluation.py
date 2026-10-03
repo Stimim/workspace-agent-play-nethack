@@ -266,6 +266,10 @@ def test_committed_suites_refuse_under_a_later_policy_before_any_episode(
     [
         (STAIRCASE_V3_PATH, STAIRCASE_V2_PATH),
         (TRAVERSAL_V2_PATH, TRAVERSAL_V1_PATH),
+        (
+            REPORT_DIRECTORY.parent / "traversal-v3.json",
+            REPORT_DIRECTORY.parent / "traversal-v2.json",
+        ),
     ],
 )
 def test_regression_suites_reuse_their_predecessors_cases_under_a_new_policy(
@@ -274,9 +278,18 @@ def test_regression_suites_reuse_their_predecessors_cases_under_a_new_policy(
     suite = load_suite(regression)
     previous = load_suite(original)
 
-    assert suite.policy_version == _TASK_PROGRESSION_POLICY
+    expected_policy = (
+        run_manager.POLICY_VERSION
+        if suite.suite_id in {"traversal-v3"}
+        else _TASK_PROGRESSION_POLICY
+    )
+    assert suite.policy_version == expected_policy
     assert previous.policy_version != suite.policy_version
-    assert suite.knowledge_bundle_id == previous.knowledge_bundle_id
+    assert suite.knowledge_bundle_id == (
+        "survival-reviewed-v2"
+        if suite.policy_version == run_manager.POLICY_VERSION
+        else previous.knowledge_bundle_id
+    )
     assert suite.suite_id != previous.suite_id
     assert [case.to_json() for case in suite.cases] == [
         case.to_json() for case in previous.cases
@@ -341,7 +354,7 @@ def test_pinned_survival_bundle_reaches_run_manager_and_record(
 ) -> None:
     payload = suite_2_payload()
     payload["suite_id"] = "survival-bundle-smoke"
-    payload["knowledge_bundle_id"] = "survival-reviewed-v1"
+    payload["knowledge_bundle_id"] = "survival-reviewed-v2"
     payload["policy_version"] = run_manager.POLICY_VERSION
     payload["cases"][0]["task"] = {
         "environment": "NetHackScore-v0",
@@ -389,8 +402,11 @@ def test_pinned_survival_bundle_reaches_run_manager_and_record(
     )
 
     bundle = captured[0]
-    assert bundle.bundle_id == "survival-reviewed-v1"
-    assert {card.card_id for card in bundle.cards} >= {"prayer-hunger", "safe-corpses"}
+    assert bundle.bundle_id == "survival-reviewed-v2"
+    assert {card.card_id for card in bundle.cards} >= {
+        "prayer-hunger",
+        "safe-corpses-v2",
+    }
     assert "Plan food and prayer without claiming certainty" in bundle.prompt_context
     assert "Eat only identified fresh low-risk corpses" in bundle.prompt_context
     record = RunStore(tmp_path / "data" / "runs.sqlite3").get_run(
@@ -2840,6 +2856,33 @@ def test_audit_flags_a_gold_intent_on_a_cell_that_showed_no_gold(
                 ("starvation_death", "sum", "at_most", 1),
             ],
         ),
+        (
+            "scout-v2",
+            TaskSpec(
+                NleTask.SCOUT,
+                ActionProfile.NLE_TASK_ACTIONS,
+                Objective((ExploreDungeonLeg(3),)),
+            ),
+            tuple(range(900, 905)),
+            [
+                ("explored_cells", "median", "at_least", 350),
+                ("task_return", "median", "at_least", 350),
+            ],
+        ),
+        (
+            "eat-v2",
+            TaskSpec(
+                NleTask.EAT,
+                ActionProfile.NLE_HUNGER_ACTIONS,
+                Objective((ExploreDungeonLeg(5),)),
+            ),
+            tuple(range(920, 925)),
+            [
+                ("task_return", "median", "at_least", 700),
+                ("explored_cells", "median", "at_least", 450),
+                ("starvation_death", "sum", "at_most", 1),
+            ],
+        ),
     ],
 )
 def test_committed_task_baselines_fix_seeds_caps_and_metric_gates(
@@ -2850,8 +2893,12 @@ def test_committed_task_baselines_fix_seeds_caps_and_metric_gates(
 ) -> None:
     suite = load_suite(REPORT_DIRECTORY.parent / f"{name}.json")
 
-    assert suite.policy_version == _TASK_PROGRESSION_POLICY
-    assert suite.knowledge_bundle_id == "staircase-reviewed-v3"
+    if name.endswith("-v2"):
+        assert suite.policy_version == run_manager.POLICY_VERSION
+        assert suite.knowledge_bundle_id == "survival-reviewed-v2"
+    else:
+        assert suite.policy_version == _TASK_PROGRESSION_POLICY
+        assert suite.knowledge_bundle_id == "staircase-reviewed-v3"
     (case,) = suite.cases
     assert case.task == task
     assert case.seeds == seeds

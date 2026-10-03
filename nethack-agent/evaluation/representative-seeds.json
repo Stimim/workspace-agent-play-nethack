@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "policy_version": "hierarchical-task-specialists-v1",
+  "policy_version": "hierarchical-survival-exit-v1",
   "entries": [
     {
       "entry_id": "staircase-anchor-6",
@@ -99,8 +99,8 @@
       "max_episode_steps": 1000,
       "represents": "Adjacent-hostile stair defense on level 1, then a level-2 search that outlasts the food supply; the hero dies while Fainting.",
       "provenance": "ADR 0004 baseline: a fox (seeds 1 and 4) and a newt (seed 2) killed the waiting hero; note 0016.",
-      "expectation": "known_failure",
-      "outcome": "death",
+      "expectation": "must_pass",
+      "outcome": "objective_complete",
       "test": null
     },
     {
@@ -174,8 +174,8 @@
       "max_episode_steps": 1000,
       "represents": "No downstairs is found on levels 1-2 before hunger reaches Fainting.",
       "provenance": "traversal-v2-20260928T091446Z: seed 701 died at 965 steps and seed 702 was truncated at 1,000, both Fainting.",
-      "expectation": "known_failure",
-      "outcome": "truncated",
+      "expectation": "must_pass",
+      "outcome": "objective_complete",
       "test": null
     },
     {

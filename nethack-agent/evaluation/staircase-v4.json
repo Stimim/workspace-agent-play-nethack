@@ -1,0 +1,41 @@
+{
+  "schema_version": 2,
+  "suite_id": "staircase-v4",
+  "character": "val-dwa-law",
+  "policy_version": "hierarchical-survival-exit-v1",
+  "knowledge_bundle_id": "survival-reviewed-v2",
+  "seed_selection": "This regression case deliberately reuses the staircase-v1, staircase-v2, and staircase-v3 seeds 1 through 10, in their original order and including reference seed 6, so the new survival and exit-discovery policy can be compared with the accepted milestone and prior policy trajectories. Earlier suite ids stay pinned to their own policies.",
+  "step_cap_rationale": "The 1000-step cap and acceptance of 10 successes including seed 6 are fixed by milestone 2 item 10 and ADR 0005 regression criteria.",
+  "cases": [
+    {
+      "case_id": "staircase",
+      "task": {
+        "environment": "NetHackStaircase-v0",
+        "action_profile": "nle-task-actions",
+        "objective": {
+          "legs": [
+            {
+              "kind": "stand_on_stairs",
+              "target": {
+                "direction": "down",
+                "connection": "any",
+                "dungeon_number": null
+              }
+            }
+          ]
+        }
+      },
+      "seeds": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      "max_episode_steps": 1000,
+      "acceptance": {
+        "min_successes": 10,
+        "required_success_seeds": [6]
+      }
+    }
+  ],
+  "acceptance": {
+    "max_invalid_actions": 0,
+    "max_gate_rejections": 0,
+    "require_complete_records": true
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "schema_version": 3,
+  "suite_id": "descend-d5-v1",
+  "character": "val-dwa-law",
+  "policy_version": "hierarchical-survival-exit-v1",
+  "knowledge_bundle_id": "survival-reviewed-v2",
+  "seed_selection": "Fresh sample draws 20 seeds from the full inclusive ADR 0005 section 3 range [1000000, 2147483647], excluding every seed in the used-seed ledger. Baseline contains every NetHackScore-v0 catalog entry named by ADR 0005 section 1.",
+  "step_cap_rationale": "Held-out probes must fix the production cap; ADR 0005 section 1 requires at least 3000 steps. Note 0035 evaluated 20 seeds at 5000 cap; all 13 completions took under 3000 steps, retaining 100% of completions.",
+  "baseline": {
+    "entry_ids": [
+      "descend-d3-covered-stairs-5",
+      "descend-d3-stair-defense-1",
+      "descend-d3-stair-defense-2",
+      "descend-d3-stair-defense-4",
+      "descend-d3-hidden-downstairs-701",
+      "descend-d3-hidden-downstairs-702",
+      "enter-mines-4",
+      "enter-mines-7"
+    ]
+  },
+  "fresh_sample": {
+    "case_id": "reach-d5-fresh",
+    "task": {
+      "environment": "NetHackScore-v0",
+      "action_profile": "nle-survival-actions",
+      "objective": {
+        "legs": [
+          {
+            "kind": "reach_level",
+            "level": {
+              "dungeon_number": 0,
+              "dungeon_level": 5
+            }
+          }
+        ]
+      }
+    },
+    "max_episode_steps": 3000,
+    "count": 20,
+    "range": [
+      1000000,
+      2147483647
+    ],
+    "acceptance": {
+      "min_success_rate": 0.5
+    }
+  },
+  "acceptance": {
+    "max_invalid_actions": 0,
+    "max_gate_rejections": 0,
+    "require_complete_records": true
+  }
+}

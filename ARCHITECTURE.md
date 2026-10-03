@@ -6,10 +6,9 @@ Build a local, autonomous NetHack agent whose long-term success criterion is asc
 
 ## Current status
 
-The deterministic NLE adapter, immutable observation projector, typed traversal planner, per-level dungeon memory, deterministic staircase-navigation, exploration, gold-navigation, bounded hunger, prayer, and safe-corpse skills, contextual action gate, structured Ollama decision model, reviewed local knowledge, typed SQLite event log, loopback control service and browser UI, scenario orchestrator, network-boundary verifier, exhaustion-marker replay, and policy-pinned evaluation harness with typed metric thresholds are implemented. Milestone 1, traversal-policy, and survival-policy evidence remain accepted or recorded as they were; `POLICY_VERSION` remains `hierarchical-task-specialists-v1`.
+The deterministic NLE adapter, immutable observation projector, typed traversal planner, per-level dungeon memory, deterministic staircase-navigation, exploration, gold-navigation, bounded hunger, prayer, and safe-corpse skills, contextual action gate, structured Ollama decision model, reviewed local knowledge, typed SQLite event log, loopback control service and browser UI, scenario orchestrator, network-boundary verifier, exhaustion-marker replay, and policy-pinned evaluation harness with typed metric thresholds are implemented. Milestone 1, traversal-policy, and survival-policy evidence remain accepted or recorded as they were; `POLICY_VERSION` remains `hierarchical-survival-exit-v1`.
 
 ## System context
-
 ```mermaid
 flowchart LR
     NLE[NetHack Learning Environment] --> OBS[Observation projector]
@@ -885,7 +884,9 @@ completions (reports `*-20260928T0914*`, `T091827Z`, and `T092011Z` in
 Policy `hierarchical-task-specialists-v1` adds gold navigation on
 `NetHackGold-v0` (`explore_dungeon` with `nle-task-actions`). It refuses
 `staircase-v3`, `traversal-v2`, `scout-v1`, and `eat-v1`, which stay pinned to
-`hierarchical-task-progression-v1`; it has no committed suite yet.
+`hierarchical-task-progression-v1`. Policy `hierarchical-survival-exit-v1` adds
+safe corpse eating, deterministic prayer, corrected meal lifecycle, and exit discovery;
+it runs `staircase-v4`, `traversal-v3`, `scout-v2`, `eat-v2`, and the schema-3 `descend-d5-v1` suite.
 
 Milestone 2 evaluation adds a reviewed representative-seed catalog
 (`evaluation/representative-seeds.json`, rendered to `representative-seeds.md`)
