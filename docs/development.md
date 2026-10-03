@@ -37,24 +37,25 @@ aggregate token counts, and latency.
 
 ### OMP local coding model
 
-Every local OMP role uses one Ollama model, `omp-coder:latest`. It is developer
-tooling, separate from the playing agent's `gemma4-nethack:latest`. The recipe
-derives it from `gemma4:26b` (26B-A4B MoE) with `num_ctx` 65,536:
+Every local OMP role uses the Ollama model `omp-coder:latest`; this is
+developer tooling, separate from the playing agent's `gemma4-nethack:latest`.
+Its recipe derives from `gemma4:26b` (26B-A4B MoE) with `num_ctx` 65,536:
 
 ```bash
 ollama create omp-coder:latest --file _agents/models/omp-coder/Modelfile
 omp models refresh   # OMP caches Ollama discovery
 ```
 
-The global OMP settings (`~/.omp/agent/config.yml`) route to it:
+Current global OMP routing:
 
 ```yaml
 modelRoles:
+  default: anthropic/claude-opus-5-5
+  fast_worker: openai-codex/gpt-6-luna:auto
+  good_worker: openai-codex/gpt-6-sol:auto
   smol: ollama/omp-coder:latest:off
   tiny: ollama/omp-coder:latest:off
   commit: ollama/omp-coder:latest:off
-  fast_worker: ollama/omp-coder:latest:high
-  good_worker: ollama/omp-coder:latest:high
 task:
   agentModelOverrides: {sonic: "@fast_worker", task: "@good_worker"}
   maxConcurrency: 2
@@ -65,32 +66,21 @@ edit:
 disabledProviders: [google-antigravity]
 ```
 
-- Vibe `cli=fast`/`cli=good` and the `sonic`/`task` subagents use the worker
-  roles.
-- Ollama reports gemma4's thinking as on or off, so `:high` just enables it.
-  The fast and good tiers therefore behave identically for now.
-- `edit.modelVariants` gives `omp-coder*` models the `replace`
-  (old/new string) edit tool. With OMP's default `hashline` tool, local models
-  failed even fully specified edits. The pattern is a substring match; every
-  other model keeps hashline.
-- `google-antigravity` is disabled because its quota was too small to be
-  useful.
-- The legacy `retry.fallbackChains` entries for Gemini, `smol`, and `tiny` still
-  point to `omp-coder-smol:latest`
-  (`_agents/models/omp-coder-smol/Modelfile`, gemma4:e4b at 8,192 tokens).
-  Keep that tag until the chains are removed.
+Vibe `fast`/`good` and the `sonic`/`task` subagents use the OpenAI worker
+roles; only `smol`, `tiny`, and `commit` use the local model. The
+`omp-coder` `replace` edit variant therefore applies to those local roles.
+The legacy `retry.fallbackChains` entries for Gemini, `smol`, and `tiny` still
+point to `omp-coder-smol:latest`
+(`_agents/models/omp-coder-smol/Modelfile`, gemma4:e4b at 8,192 tokens); keep
+that tag until those chains are removed.
 
-On the RTX 4070 Laptop GPU (8 GB), the model keeps attention and shared weights
-on the GPU (about 5 GB) and its expert weights in RAM (14.3 GB). It generates
+On the RTX 4070 Laptop GPU (8 GB), gemma4 keeps attention and shared weights on
+the GPU (about 5 GB) and its expert weights in RAM (14.3 GB). It generates
 about 17 tokens per second and reads prompts at about 190 tokens per second.
-
-- A new session's roughly 9k-token prompt therefore takes about 47 s to read.
-- Ollama runs one active conversation per loaded model, but it saves displaced
-  conversations in an 8 GiB RAM prompt cache and restores them. Interleaved
-  requests (titles, commit messages, a second worker) therefore resume without
-  re-reading. The server log reports a 65,536-token limit, which probably
-  bounds the total cached.
-- The playing model cannot stay loaded alongside it.
+Ollama runs one active conversation per loaded model, but saves displaced
+conversations in an 8 GiB RAM prompt cache and restores them. Interleaved
+requests can therefore resume without re-reading; the server log reports a
+65,536-token cache limit. The playing model cannot stay loaded alongside it.
 
 A running OMP session keeps the settings and model catalog it started with, so
 run `/restart` after changing them. Without a restart, a fresh process from a
@@ -649,18 +639,25 @@ Do not put the raw dump into a model prompt. Extract a relevant page, verify the
 each card's SHA-256. The separate
 `manifest.survival-reviewed-v1.json` selects reviewed hunger/prayer and
 conservative corpse cards without changing the current policy or any suite
-pin. The bundle id names its new survival scope; explicit selection requires
-`load_knowledge_bundle(Path(\"knowledge\"), bundle_id=\"survival-reviewed-v1\")`.
-The selected context is 5,917 characters / 1,480 estimated tokens; it omits
-the older `safe-interaction` card to stay below the existing 6,000 / 1,500
-budget. Card edits require updating the selected manifest's hash and bumping
-that bundle id for semantic changes (do not mutate committed-report pins):
+pin. `manifest.survival-reviewed-v2.json` keeps `v1` byte-identical and
+reuses its `stairs-traversal`, `exploration-map`, and `prayer-hunger` cards,
+replacing the fresh-corpse card with `safe-corpses-v2` (widened species,
+lichen's nonrotting/pet-moved exemption, conditional jackal/fox/coyote) and
+adding `nutrition-foraging` (ration/fruit variants, non-shop floor-food
+collection, undead-garlic). The bundle id names its survival scope; explicit
+selection requires
+`load_knowledge_bundle(Path(\"knowledge\"), bundle_id=\"survival-reviewed-v2\")`.
+The selected context is 5,985 characters / 1,497 estimated tokens (`v1` is
+5,917 / 1,480); both omit the older `safe-interaction` card to stay below the
+existing 6,000 / 1,500 budget. Card edits require updating the selected
+manifest's hash and bumping that bundle id for semantic changes (do not
+mutate committed-report pins):
 
 ```bash
 cd nethack-agent
-sha256sum knowledge/prayer-hunger.md knowledge/safe-corpses.md
+sha256sum knowledge/prayer-hunger.md knowledge/safe-corpses-v2.md knowledge/nutrition-foraging.md
 uv run pytest -q tests/test_knowledge.py
-uv run python -c 'from pathlib import Path; from nethack_agent.knowledge import load_knowledge_bundle as l; b=l(Path(\"knowledge\"), bundle_id=\"survival-reviewed-v1\"); print(b.version, b.character_count, b.estimated_tokens)'
+uv run python -c 'from pathlib import Path; from nethack_agent.knowledge import load_knowledge_bundle as l; b=l(Path(\"knowledge\"), bundle_id=\"survival-reviewed-v2\"); print(b.version, b.character_count, b.estimated_tokens)'
 ```
 
 The service loads and validates the bundle once at startup, then records its
@@ -676,12 +673,13 @@ are reviewed in [note 0024](notes/0024-reviewed-survival-knowledge.md).
 ### Survival action profile and prompt gate (milestone 2, item 6)
 
 Choose `nle-survival-actions` in a `TaskSpec` to keep all 58
-`nle-hunger-actions` members, then append `Command.PRAY` (59 indexed actions).
-The profile preserves ration handling and the existing task objective. Item 6
-defined the roles and gate without a prayer or corpse issuer; item 7 enabled
-prayer, and item 8 enables only strictly verified fresh-corpse eating. The
-active knowledge bundle, `POLICY_VERSION`, and published evaluation suites
-remain unchanged.
+`nle-hunger-actions` members, then append `Command.PRAY` and `Command.PICKUP`
+(60 indexed actions). The profile preserves ration handling and the existing
+task objective. Item 6 defined the roles and gate without a prayer or corpse
+issuer; item 7 enabled prayer, item 8 enabled strictly verified fresh-corpse
+eating, and note 0033 added the food-pickup role for reviewed non-shop floor
+comestibles. The active knowledge bundle, `POLICY_VERSION`, and published
+evaluation suites remain unchanged.
 
 In NLE 1.3.0, the exact observed confirmation messages (the space before each
 closing quote is part of the raw observation) are:
@@ -747,14 +745,23 @@ stairs or exploration. A known ration still preempts prayer under its existing
 no-ration safety guard. Never start eating while Satiated (NLE hunger 0);
 Not Hungry or worse permits use of a fresh corpse before the first Hungry turn.
 
-Only lichen, newt, sewer rat, giant rat, and gecko qualify. The coordinator
-records an actual `You kill the <name>!` combat observation and its monster
-cell, at most 19 game turns old on the current level. It routes only to a
-visible corpse on that cell through at most five passable BFS steps. On arrival,
-`EAT` needs an exact `You see here a <name> corpse.` clause in the look-here
-message (possibly after a door or stair clause), matching the own-kill identity;
-an inventory prompt instead of a floor offer is canceled with ESC. Only the
-immediately following exact `There is a <name> corpse here; eat it? [ynq] (n) `
+Lichen, newt, sewer rat, giant rat, gecko, garter snake, hobbit, goblin,
+iguana, and shrieker qualify; jackal, fox, and coyote qualify too, only
+without public lycanthropy evidence (the "You feel feverish" message or a
+were-creature bite) and without polymorph, since eating them while sharing a
+werejackal's species is cannibalism ([note 0033](notes/0033-reviewed-nutrition-probes.md)).
+The coordinator records an actual `You kill the <name>!` combat observation
+and its monster cell, at most 19 game turns old on the current level (lichen
+alone is exempt from this cap, since it never rots). It routes only to a
+visible corpse on that cell through at most five passable BFS steps. On
+arrival, `EAT` needs an exact `You see here a <name> corpse.` clause in the
+look-here message (possibly after a door or stair clause), matching the
+own-kill identity; an inventory prompt instead of a floor offer is canceled
+with ESC. A pet can drag a corpse off its kill cell before the hero arrives;
+only lichen may then still be eaten, identified at its new cell by this same
+exact text, without any kill-turn or age provenance, since it alone needs
+none. Only the immediately following exact
+`There is a <name> corpse here; eat it? [ynq] (n) `
 prompt for the **same** species receives `y` through
 `PromptPermit(y, CORPSE_CONFIRMATION)`. A `partly eaten` corpse uses the same
 identity, age, and confirmation checks after an interruption. Other floor
@@ -783,21 +790,49 @@ success rate. See [note 0027](notes/0027-safe-fresh-corpse-eating.md)
 for species counts, source revisions, real-NLE regression, and caveats.
 
 Seed 1131 is the real-NLE scripted-coordinator regression: lichen kill at
-turn 3 while Not Hungry, look-here and EAT at turn 4, exact `y` completion at
-turn 8 with Satiated hunger, and zero invalid evaluator actions or gate
-rejections. Development seeds 1130–1149 are reserved in the used-seed ledger.
+turn 3 while Not Hungry; a pet then drags the corpse off its kill cell after
+a food-ration pickup, so the hero eats it at its new cell by the untracked
+look-here identity alone, completing at turn 14 with Satiated hunger, and
+zero invalid evaluator actions or gate rejections. Development seeds
+1130-1149 are reserved in the used-seed ledger. Seed 1300 is the companion
+regression for a later, different-species kill landing on the exact cell of
+an earlier untracked lichen sighting: the stale same-cell kill record must
+not shadow the still-valid lichen identity actually displayed there
+([note 0033](notes/0033-reviewed-nutrition-probes.md)).
 
 To exercise corpse identity, meal-end outcomes, nutrition priority, and
 terminal/truncated replay boundaries:
 
 ```bash
-uv run pytest -q tests/test_coordinator.py -k 'corpse or seed_1131'
+uv run pytest -q tests/test_coordinator.py -k 'corpse or seed_1131 or seed_1300'
 uv run pytest -q tests/test_evaluation.py -k corpse
 ```
 
 Seeds 1150–1169 are also excluded as development probes: bounded-search probe
 at `a58902a`, coordinator, `reach_level(0,5)`, cap 3000. They are not fresh
 acceptance-suite seeds.
+
+### Floor-food foraging and ration variants (milestone 2, items 8/9)
+
+[Note 0033](notes/0033-reviewed-nutrition-probes.md) adds a deterministic
+`FoodSkill`, not another NLE action beyond `Command.PICKUP`. A held, partly
+eaten identified ration, cram ration, K-ration, C-ration, lembas wafer, or
+reviewed fruit/vegetable is still itself; the hunger skill resumes it rather
+than treating it as unknown. On the main-dungeon level, an identified
+reviewed comestible on a non-shop floor cell within a passable route of at
+most five steps is collected with `Command.PICKUP` while unburdened,
+confirmed only against the exact native pickup-menu text (`PickupMenu`,
+parsed from the public `tty_chars` grid, since NLE exposes no structured
+pickup-menu field); otherwise it is eaten from the floor only at Hungry or
+worse, confirming only the exact offered item text. The coordinator and the
+evaluator share the same `food_action_error` predicate. Garlic nourishes an
+ordinary hero normally; an undead hero only vomits from eating one, so the
+skill skips garlic while the hero is itself undead (own glyph's public
+`M2_UNDEAD` flag).
+
+```bash
+uv run pytest -q tests/test_skills.py tests/test_evaluation.py -k food
+```
 
 ## Dependency policy
 
@@ -829,3 +864,16 @@ probe, corrected comparison, and 14-seed development rerun are in note 0031.
 This is feature qualification, not milestone/real-model acceptance.
 `POLICY_VERSION` remains unchanged; item 10 owns versioning and the next
 held-out committed suites.
+
+A frontier-first covered-cell fallback, bounded route-cycle abandonment, shop
+exclusion, and adjacent-attack peacefulness invalidation were then probed on
+seeds 1270-1299: objectives improved 20→23 and total deaths improved 6→4, but
+two seeds died Fainting that had not before, failing the frozen hunger-death
+gate; the candidate did not qualify
+([note 0032](notes/0032-exit-discovery-correction-probes.md)). Paired with
+the reviewed nutrition package on seeds 1300-1329, the same correction still
+did not qualify (objectives 20 against the nutrition-only package's 24, and a
+hunger death the nutrition-only package avoided); only the nutrition package
+shipped ([note 0033](notes/0033-reviewed-nutrition-probes.md)). Runtime and
+tests for both unqualified attempts were restored; only their notes and the
+seed ledger were committed.

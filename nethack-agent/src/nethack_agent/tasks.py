@@ -67,6 +67,7 @@ class ActionRole(Enum):
     HUNGER = "hunger"
     PROMPT_KEY = "prompt_key"
     PRAYER = "prayer"
+    FOOD_PICKUP = "food_pickup"
 
 
 class ActionProfile(Enum):
@@ -93,6 +94,10 @@ class ActionProfile(Enum):
             nethack.Command.PRAY
         ):
             return ActionRole.PRAYER
+        if self is ActionProfile.NLE_SURVIVAL_ACTIONS and command == int(
+            nethack.Command.PICKUP
+        ):
+            return ActionRole.FOOD_PICKUP
         return ActionRole.ROUTINE
 
 
@@ -111,7 +116,11 @@ _HUNGER_ADDITIONS: Final = (
     ),
 )
 _HUNGER_ACTIONS: Final = (*_TASK_ACTIONS, *_HUNGER_ADDITIONS)
-_SURVIVAL_ACTIONS: Final = (*_HUNGER_ACTIONS, nethack.Command.PRAY)
+_SURVIVAL_ACTIONS: Final = (
+    *_HUNGER_ACTIONS,
+    nethack.Command.PRAY,
+    nethack.Command.PICKUP,
+)
 
 _PROFILE_ACTIONS: Final[dict[ActionProfile, tuple[IntEnum, ...]]] = {
     ActionProfile.NLE_TASK_ACTIONS: _TASK_ACTIONS,

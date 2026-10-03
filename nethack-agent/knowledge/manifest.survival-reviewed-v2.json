@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "bundle_id": "survival-reviewed-v2",
+  "max_context_characters": 6000,
+  "cards": [
+    {
+      "path": "stairs-traversal.md",
+      "sha256": "ad76638fb43557d00cf05ff6bcf86b286f706b3dd5ecbe1c4468ad9db5a9b0fc"
+    },
+    {
+      "path": "exploration-map.md",
+      "sha256": "41317e77303d0a39a9f9e8787ecbb17d5744f120e773d257bfefcef1e8fec08b"
+    },
+    {
+      "path": "prayer-hunger.md",
+      "sha256": "a788856a0f962aaa52c090794ee3abf1737ecdfcad5a06aedb69e86d5f0252d0"
+    },
+    {
+      "path": "safe-corpses-v2.md",
+      "sha256": "c6009ed92f316fbfe0350d8bb06c6f4c03305c6e5db8a00d8c13830b5fcdf09c"
+    },
+    {
+      "path": "nutrition-foraging.md",
+      "sha256": "636cf05a0384f9d3721eeffd6a321ff4b7059b7a28af6285ae640bac50ab68c2"
+    }
+  ]
+}

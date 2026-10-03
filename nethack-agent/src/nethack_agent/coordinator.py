@@ -6,7 +6,12 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Final
 
-from nethack_agent.corpse import CorpseKill, eligible_corpse, observed_corpse_kill
+from nethack_agent.corpse import (
+    CorpseKill,
+    eligible_corpse,
+    eligible_lichen,
+    observed_corpse_kill,
+)
 from nethack_agent.decision import (
     EAT_ACTION_NAME,
     LEVEL_CHANGE_ACTIONS,
@@ -17,6 +22,7 @@ from nethack_agent.decision import (
     CorpseEvidence,
     CorpseOutcome,
     CorpseOutcomeKind,
+    FoodEvidence,
     HungerPermit,
     MapCell,
     ModelActionDecision,
@@ -47,6 +53,12 @@ from nethack_agent.decision import (
     prompt_response_error,
 )
 from nethack_agent.environment import LegalAction, NleEnvironment, StepTransition
+from nethack_agent.food import (
+    is_floor_eat_prompt,
+    public_lycanthropy_evidence,
+    safe_inventory_food,
+)
+from nethack_agent.foraging import FoodPermit, FoodSkill, food_action_error
 from nethack_agent.model import DecisionFailure, HierarchicalDecisionModel
 from nethack_agent.navigation import (
     ActionKind,
@@ -69,7 +81,6 @@ from nethack_agent.skills import (
     StaircaseNavigationSkill,
     _attack_adjacent_hostile,
     item_selection_commands,
-    safe_food_rations,
 )
 from nethack_agent.tasks import ActionProfile, ActionRole, NleTask
 from nethack_agent.traversal import (
@@ -180,12 +191,63 @@ class ActionGate:
         before: ProjectedObservation | None = None,
         selection: ActionSelection | None = None,
         memory: LevelMemory | None = None,
+        lycanthropy_known: bool = False,
+        food_permit: FoodPermit | None = None,
     ) -> LegalAction:
         if isinstance(action_index, bool) or not isinstance(action_index, int):
             raise ActionGateError("action index must be an integer")
         if not 0 <= action_index < len(self._legal_actions):
             raise ActionGateError(f"action index {action_index} is not legal")
         action = self._legal_actions[action_index]
+        food = (
+            None
+            if selection is None or selection.intent is None
+            else selection.intent.food
+        )
+        if food is not None or food_permit is not None:
+            if (
+                self._profile is not ActionProfile.NLE_SURVIVAL_ACTIONS
+                or food_permit is None
+                or food_permit.evidence != food
+                or before is None
+                or selection is None
+            ):
+                raise ActionGateError(
+                    "food actions require matching reviewed food authorization"
+                )
+            error = food_action_error(
+                action,
+                selection,
+                before,
+                memory,
+                arrived=food_permit.arrived,
+                pending=food_permit.pending,
+            )
+            if error is not None:
+                raise ActionGateError(error)
+            return action
+        if (
+            prompt_permit is not None
+            and prompt_permit.kind is PromptKind.ITEM
+            and prompt_permit.command == action.command
+            and before is not None
+            and selection is not None
+            and selection.skill is Skill.HUNGER
+            and selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
+        ):
+            offered = item_selection_commands(before)
+            error = prompt_response_error(
+                action.name,
+                action.command,
+                selection,
+                prompt_active=before.prompt.active,
+                item_selection=offered is not None,
+                offered_commands=offered or frozenset(),
+                floor_eat_prompt=is_floor_eat_prompt(before.message),
+            )
+            if error is not None:
+                raise ActionGateError(error)
+            return action
         if selection is not None:
             error = kick_action_error(action.name, selection, memory)
             if error is not None:
@@ -201,6 +263,10 @@ class ActionGate:
                 "coordinator traversal permit in that direction"
             )
         role = self._roles[action.index]
+        if role is ActionRole.FOOD_PICKUP:
+            raise ActionGateError(
+                "PICKUP requires reviewed non-shop food authorization"
+            )
         if role is ActionRole.HUNGER and hunger_permit is None:
             raise ActionGateError(
                 f"{action.name} is forbidden: EAT requires a hunger permit"
@@ -212,15 +278,22 @@ class ActionGate:
         ):
             if before is None or selection is None:
                 raise ActionGateError("corpse EAT requires observed selection evidence")
+            if (
+                memory is not None
+                and (hunger_permit.corpse.cell.x, hunger_permit.corpse.cell.y)
+                in memory.shop_cells
+            ):
+                raise ActionGateError("floor corpse EAT is forbidden in a known shop")
             error = hunger_action_error(
                 action.name,
                 selection,
                 hunger=before.player.hunger,
                 prompt_active=before.prompt.active,
-                safe_ration_available=bool(safe_food_rations(before)),
+                safe_ration_available=bool(safe_inventory_food(before)),
                 corpse_evidence=hunger_permit.corpse,
                 observed_corpse=hunger_permit.corpse,
                 observation=before,
+                lycanthropy_known=lycanthropy_known,
             )
             if error is not None:
                 raise ActionGateError(error)
@@ -236,7 +309,7 @@ class ActionGate:
                 prompt_active=False if before is None else before.prompt.active,
                 ration_available=False
                 if before is None
-                else bool(safe_food_rations(before)),
+                else bool(safe_inventory_food(before)),
                 prior_prayers=prior_prayers,
                 last_prayer_turn=last_prayer_turn,
                 on_altar=on_altar,
@@ -286,6 +359,7 @@ class ActionGate:
                     corpse_evidence=evidence,
                     observed_corpse=evidence,
                     observation=before,
+                    lycanthropy_known=lycanthropy_known,
                 )
                 if error is not None:
                     raise ActionGateError(error)
@@ -390,6 +464,11 @@ class AgentCoordinator:
         self._consumed_corpses: set[CorpseKill] = set()
         self._pending_corpse: CorpseEvidence | None = None
         self._pending_corpse_step: int | None = None
+        self._arrived_corpse: CorpseEvidence | None = None
+        self._lycanthropy_known = False
+        self._food = FoodSkill() if self._corpse is not None else None
+        self._arrived_food: FoodEvidence | None = None
+        self._pending_food: FoodEvidence | None = None
         self._prayer_count = 0
         self._last_prayer_turn: int | None = None
         self._prayer_kill_count = 0
@@ -443,6 +522,10 @@ class AgentCoordinator:
             self._consumed_corpses.clear()
             self._pending_corpse = None
             self._pending_corpse_step = None
+            self._arrived_corpse = None
+            self._lycanthropy_known = False
+            self._arrived_food = None
+            self._pending_food = None
             try:
                 raw = self._environment.reset()
                 self._observation = self._projector.project(raw, step_index=0)
@@ -538,6 +621,7 @@ class AgentCoordinator:
                     hunger_permit = self._hunger_permit(selection, before)
                     prayer_permit = self._prayer_permit(selection, before)
                     prompt_permit = self._prompt_permit(selection, before)
+                    food_permit = self._food_permit(selection, before)
                     action = self._gate.resolve(
                         selection.action_index,
                         traversal_permit,
@@ -550,6 +634,8 @@ class AgentCoordinator:
                         before=before,
                         selection=selection,
                         memory=self._dungeon.current,
+                        lycanthropy_known=self._lycanthropy_known,
+                        food_permit=food_permit,
                     )
                 except ActionGateError as error:
                     self._state = RunState.PAUSED
@@ -635,6 +721,24 @@ class AgentCoordinator:
                 return None
         actions = self._gate.actions_by_name
         arbiter = SkillSelectionSource.ARBITER
+        if self._food is not None and self._pending_food is not None:
+            food = self._food.select_action(
+                before,
+                memory,
+                actions,
+                self._gate.actions_by_command,
+                pending=self._pending_food,
+            )
+            if food is not None:
+                return self._skill_plan(
+                    food,
+                    goal,
+                    Skill.HUNGER,
+                    arbiter,
+                    None,
+                    skill_model_decision,
+                    source=ActionSelectionSource.DETERMINISTIC_PROMPT,
+                )
 
         if (
             before.prompt.active
@@ -642,7 +746,10 @@ class AgentCoordinator:
             and self._pending_corpse_step == before.step_index - 1
         ):
             corpse = CorpseSkill.confirm(
-                before, self._gate.actions_by_command, self._pending_corpse
+                before,
+                self._gate.actions_by_command,
+                self._pending_corpse,
+                lycanthropy_known=self._lycanthropy_known,
             )
             if corpse is None:
                 corpse = CorpseSkill.decline(
@@ -722,9 +829,32 @@ class AgentCoordinator:
                 return self._skill_plan(
                     hunger, goal, Skill.HUNGER, arbiter, None, skill_model_decision
                 )
+        if self._food is not None and not before.prompt.active:
+            food = self._food.select_action(
+                before,
+                memory,
+                actions,
+                self._gate.actions_by_command,
+                arrived=self._arrived_food,
+            )
+            if food is not None:
+                return self._skill_plan(
+                    food,
+                    goal,
+                    Skill.HUNGER,
+                    arbiter,
+                    None,
+                    skill_model_decision,
+                )
         if not before.prompt.active and self._corpse is not None:
             corpse = self._corpse.select_action(
-                before, memory, actions, self._corpse_kills, self._consumed_corpses
+                before,
+                memory,
+                actions,
+                self._corpse_kills,
+                self._consumed_corpses,
+                arrived=self._arrived_corpse,
+                lycanthropy_known=self._lycanthropy_known,
             )
             if corpse is not None:
                 return self._skill_plan(
@@ -940,6 +1070,8 @@ class AgentCoordinator:
         evidence the intent recorded.
         Actions that do not change level need no permit.
         """
+        if selection.intent is not None and selection.intent.food is not None:
+            return None
         legal = self._environment.legal_actions
         index = selection.action_index
         if not 0 <= index < len(legal):
@@ -974,21 +1106,59 @@ class AgentCoordinator:
             raise ActionGateError(error)
         return TraversalPermit(direction, level, MapCell(*position))
 
+    def _food_permit(
+        self, selection: ActionSelection, before: ProjectedObservation
+    ) -> FoodPermit | None:
+        evidence = None if selection.intent is None else selection.intent.food
+        if evidence is None:
+            return None
+        action = self._environment.legal_actions[selection.action_index]
+        error = food_action_error(
+            action,
+            selection,
+            before,
+            self._dungeon.current,
+            arrived=self._arrived_food,
+            pending=self._pending_food,
+        )
+        if error is not None:
+            raise ActionGateError(error)
+        return FoodPermit(evidence, self._arrived_food, self._pending_food)
+
     def _hunger_permit(
         self, selection: ActionSelection, before: ProjectedObservation
     ) -> HungerPermit | None:
         legal = self._environment.legal_actions
         index = selection.action_index
+        if (selection.intent is not None and selection.intent.food is not None) or (
+            selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
+            and selection.skill is Skill.HUNGER
+        ):
+            return None
         if not 0 <= index < len(legal) or legal[index].name != EAT_ACTION_NAME:
             return None
-        rations = safe_food_rations(before)
+        rations = safe_inventory_food(before)
         evidence = None if selection.intent is None else selection.intent.corpse
         observed = None
         if evidence is not None:
             level = LevelKey(before.player.dungeon_number, before.player.dungeon_level)
-            kill = self._corpse_kills.get((level, evidence.cell))
-            if kill is not None and kill not in self._consumed_corpses:
-                observed = eligible_corpse(kill, before)
+            if evidence.kill_turn is None and evidence.name == "lichen":
+                observed = eligible_lichen(
+                    evidence.cell,
+                    before,
+                    arrived=self._arrived_corpse,
+                    shop_cells=self._dungeon.current.shop_cells,
+                )
+            else:
+                kill = self._corpse_kills.get((level, evidence.cell))
+                if kill is not None and kill not in self._consumed_corpses:
+                    observed = eligible_corpse(
+                        kill,
+                        before,
+                        arrived=self._arrived_corpse,
+                        lycanthropy_known=self._lycanthropy_known,
+                        shop_cells=self._dungeon.current.shop_cells,
+                    )
         error = hunger_action_error(
             legal[index].name,
             selection,
@@ -998,6 +1168,7 @@ class AgentCoordinator:
             corpse_evidence=evidence,
             observed_corpse=observed,
             observation=before,
+            lycanthropy_known=self._lycanthropy_known,
         )
         if error is not None:
             raise ActionGateError(error)
@@ -1029,7 +1200,7 @@ class AgentCoordinator:
             turn=before.player.turn,
             hunger=before.player.hunger,
             prompt_active=before.prompt.active,
-            ration_available=bool(safe_food_rations(before)),
+            ration_available=bool(safe_inventory_food(before)),
             prior_prayers=self._prayer_count,
             last_prayer_turn=self._last_prayer_turn,
             on_altar=self._on_altar(before),
@@ -1043,6 +1214,8 @@ class AgentCoordinator:
     ) -> PromptPermit | None:
         legal = self._environment.legal_actions
         index = selection.action_index
+        if selection.intent is not None and selection.intent.food is not None:
+            return None
         if not 0 <= index < len(legal):
             return None
         action = legal[index]
@@ -1096,6 +1269,7 @@ class AgentCoordinator:
                     corpse_evidence=evidence,
                     observed_corpse=pending,
                     observation=before,
+                    lycanthropy_known=self._lycanthropy_known,
                 )
                 if error is not None:
                     raise ActionGateError(error)
@@ -1113,6 +1287,7 @@ class AgentCoordinator:
             prompt_active=before.prompt.active,
             item_selection=offered is not None,
             offered_commands=offered or frozenset(),
+            floor_eat_prompt=is_floor_eat_prompt(before.message),
         )
         if error is not None:
             raise ActionGateError(error)
@@ -1172,8 +1347,45 @@ class AgentCoordinator:
         after: ProjectedObservation,
         transition: StepTransition,
     ) -> ActionSelection:
+        food = None if selection.intent is None else selection.intent.food
+        self._arrived_food = (
+            food
+            if food is not None
+            and selection.intent.destination is not None
+            and (after.player.x, after.player.y) == (food.cell.x, food.cell.y)
+            and (before.player.dungeon_number, before.player.dungeon_level)
+            == (after.player.dungeon_number, after.player.dungeon_level)
+            and not after.prompt.active
+            else None
+        )
+        self._pending_food = (
+            food
+            if food is not None
+            and selection.intent.destination is None
+            and after.prompt.active
+            and (
+                after.pickup_menu is not None
+                or is_floor_eat_prompt(after.message)
+                or item_selection_commands(after) is not None
+            )
+            else None
+        )
         if self._corpse is None:
             return selection
+        self._lycanthropy_known |= public_lycanthropy_evidence(
+            before.message
+        ) or public_lycanthropy_evidence(after.message)
+        route = None if selection.intent is None else selection.intent.corpse
+        self._arrived_corpse = (
+            route
+            if route is not None
+            and selection.intent.destination is not None
+            and (after.player.x, after.player.y) == (route.cell.x, route.cell.y)
+            and (before.player.dungeon_number, before.player.dungeon_level)
+            == (after.player.dungeon_number, after.player.dungeon_level)
+            and not after.prompt.active
+            else None
+        )
         # NLE zeroes a terminal observation's statistics, so outcomes are
         # recorded only for live transitions (as for prayer).
         live = not transition.terminated and not transition.truncated
@@ -1196,7 +1408,15 @@ class AgentCoordinator:
                     kind = CorpseOutcomeKind.DECLINED
                 else:
                     kind = None
-                if kind is not CorpseOutcomeKind.INTERRUPTED:
+                continuing = (
+                    action.command == ord("n")
+                    and after.prompt.single_character_choice
+                    and is_floor_eat_prompt(after.message)
+                )
+                if continuing:
+                    self._pending_corpse = pending
+                    self._pending_corpse_step = before.step_index
+                if kind is not CorpseOutcomeKind.INTERRUPTED and not continuing:
                     key = (
                         LevelKey(
                             before.player.dungeon_number, before.player.dungeon_level

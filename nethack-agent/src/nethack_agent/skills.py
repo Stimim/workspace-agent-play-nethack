@@ -4,9 +4,12 @@ import re
 from dataclasses import dataclass
 from typing import Final
 
-from nle import nethack
-
-from nethack_agent.corpse import CorpseKill, eligible_corpse, parse_floor_corpse_prompt
+from nethack_agent.corpse import (
+    CorpseKill,
+    eligible_corpse,
+    eligible_lichen,
+    parse_floor_corpse_prompt,
+)
 from nethack_agent.decision import (
     PRAYER_FIRST_SAFE_TURN,
     PRAYER_REPEAT_WAIT_TURNS,
@@ -14,6 +17,7 @@ from nethack_agent.decision import (
     ActionIntent,
     CorpseEvidence,
     DestinationKind,
+    FoodEvidence,
     IntentDestination,
     MapCell,
     PrayerEvidence,
@@ -23,6 +27,11 @@ from nethack_agent.decision import (
     corpse_confirmation_matches,
 )
 from nethack_agent.environment import LegalAction
+from nethack_agent.food import (
+    is_floor_eat_prompt,
+    known_inventory_food,
+    safe_inventory_food,
+)
 from nethack_agent.navigation import (
     MOVE_ACTION_NAMES,
     ORTHOGONAL_DELTAS,
@@ -36,7 +45,6 @@ from nethack_agent.navigation import (
     route_tree,
 )
 from nethack_agent.observation import (
-    BucStatus,
     InventoryItem,
     ProjectedObservation,
 )
@@ -68,12 +76,6 @@ _FRONTIER_PASSAGES: Final = frozenset(
 
 _INVENTORY_LETTERS: Final = frozenset(
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-)
-_SAFE_RATION_DESCRIPTION: Final = re.compile(
-    r"^(?P<count>a|an|the|[1-9]\d*) "
-    r"(?:(?P<buc>blessed|uncursed|cursed) )?"
-    r"(?:(?P<enchantment>[+-]\d+) )?"
-    r"(?P<name>food ration|food rations)$"
 )
 _ITEM_SELECTION_PROMPT: Final = re.compile(
     r"^What do you want to eat\? \[(?P<letters>[A-Za-z]+) or \?\*\]$"
@@ -353,26 +355,7 @@ class ExploreLevelSkill:
 
 
 def is_safe_food_ration(item: InventoryItem) -> bool:
-    """Whether typed inventory evidence names exactly a food-ration stack."""
-    if item.letter not in _INVENTORY_LETTERS or item.object_class != int(
-        nethack.FOOD_CLASS
-    ):
-        return False
-    match = _SAFE_RATION_DESCRIPTION.fullmatch(item.description)
-    if match is None:
-        return False
-    count = match.group("count")
-    plural = match.group("name") == "food rations"
-    if count.isdigit():
-        if (int(count) == 1) == plural:
-            return False
-    elif plural:
-        return False
-    described_buc = match.group("buc")
-    expected_buc = (
-        BucStatus.UNKNOWN if described_buc is None else BucStatus(described_buc)
-    )
-    return item.buc is expected_buc
+    return known_inventory_food(item) == "food ration"
 
 
 def safe_food_rations(
@@ -434,7 +417,7 @@ class PrayerSkill:
             or observation.player.hunger < 3
             or turn < safe_turn
             or (prior_prayers > 0) != (last_prayer_turn is not None)
-            or safe_food_rations(observation)
+            or safe_inventory_food(observation)
             or memory.cmap(origin) == 27  # NetHack 3.6.7 S_altar.
             or "altar" in observation.message.lower()
         ):
@@ -500,16 +483,28 @@ class HungerSkill:
         origin = (observation.player.x, observation.player.y)
         if self._pending is not None:
             pending = self._pending
-            self._pending = None
             if not observation.prompt.active:
+                self._pending = None
                 return None
+            if observation.prompt.single_character_choice and is_floor_eat_prompt(
+                observation.message
+            ):
+                decline = actions_by_command.get(ord("n"))
+                if decline is not None:
+                    return SkillAction(
+                        decline.index,
+                        "Decline floor food while selecting the held reviewed meal.",
+                        ActionRecord(ActionKind.OTHER, origin),
+                        None,
+                    )
             offered = item_selection_commands(observation)
             if offered is None:
                 return None
+            self._pending = None
             if offered:
                 matches = tuple(
                     item
-                    for item in safe_food_rations(observation)
+                    for item in safe_inventory_food(observation)
                     if _same_ration(pending, item)
                 )
                 if len(matches) == 1:
@@ -546,7 +541,7 @@ class HungerSkill:
             return None
         if observation.prompt.active or observation.player.hunger < 2:
             return None
-        rations = safe_food_rations(observation)
+        rations = safe_inventory_food(observation)
         eat = actions_by_name.get("Command.EAT")
         if not rations or eat is None:
             return None
@@ -570,18 +565,42 @@ class CorpseSkill:
         actions_by_name: dict[str, LegalAction],
         kills: dict[tuple[LevelKey, MapCell], CorpseKill],
         consumed: set[CorpseKill],
+        *,
+        arrived: CorpseEvidence | None = None,
+        lycanthropy_known: bool = False,
     ) -> SkillAction | None:
-        if observation.prompt.active or observation.player.hunger < 1 or not kills:
+        if observation.prompt.active or observation.player.hunger < 1:
             return None
         origin = memory.position
         visible: list[CorpseEvidence] = []
         for kill in kills.values():
             if kill in consumed:
                 continue
-            evidence = eligible_corpse(kill, observation)
+            evidence = eligible_corpse(
+                kill,
+                observation,
+                arrived=arrived,
+                lycanthropy_known=lycanthropy_known,
+                shop_cells=memory.shop_cells,
+            )
             if evidence is None:
                 continue
             visible.append(evidence)
+        known_cells = {evidence.cell for evidence in visible} | {
+            kill.cell for kill in kills.values() if kill.name == "lichen"
+        }
+        for point in memory.objects | {origin}:
+            cell = MapCell(*point)
+            if cell in known_cells:
+                continue
+            evidence = eligible_lichen(
+                cell,
+                observation,
+                arrived=arrived,
+                shop_cells=memory.shop_cells,
+            )
+            if evidence is not None:
+                visible.append(evidence)
         if not visible:
             return None
         tree = route_tree(memory)
@@ -625,8 +644,12 @@ class CorpseSkill:
         observation: ProjectedObservation,
         actions_by_command: dict[int, LegalAction],
         evidence: CorpseEvidence,
+        *,
+        lycanthropy_known: bool = False,
     ) -> SkillAction | None:
-        if not corpse_confirmation_matches(observation, evidence):
+        if not corpse_confirmation_matches(
+            observation, evidence, lycanthropy_known=lycanthropy_known
+        ):
             return None
         yes = actions_by_command.get(ord("y"))
         if yes is None:
@@ -649,9 +672,9 @@ class CorpseSkill:
         if not observation.prompt.single_character_choice:
             return None
         species = parse_floor_corpse_prompt(observation.message)
-        if species is not None:
+        if is_floor_eat_prompt(observation.message):
             action = actions_by_command.get(ord("n"))
-            reason = f"Decline the unverified {species} corpse floor prompt."
+            reason = f"Decline the nonmatching {species or 'food'} floor prompt."
         elif item_selection_commands(observation) is not None:
             action = actions_by_command.get(27)
             reason = "Cancel inventory selection after a floor-corpse EAT."
@@ -737,6 +760,7 @@ def _route_step(
     attack_target: MapCell | None = None,
     search_spot: Point | None = None,
     corpse: CorpseEvidence | None = None,
+    food: FoodEvidence | None = None,
 ) -> SkillAction | None:
     """Take the first step of `route`, whose last cell is the route goal."""
     if route is None:
@@ -754,6 +778,7 @@ def _route_step(
         attack_target,
         tuple(MapCell(*point) for point in route),
         corpse=corpse,
+        food=food,
     )
     monster = memory.monsters.get(step)
     if memory.kind(step) is CellKind.CLOSED_DOOR:

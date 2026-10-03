@@ -31,7 +31,12 @@ from nethack_agent.contracts import (
     object_value,
     string_value,
 )
-from nethack_agent.corpse import CorpseKill, eligible_corpse, observed_corpse_kill
+from nethack_agent.corpse import (
+    CorpseKill,
+    eligible_corpse,
+    eligible_lichen,
+    observed_corpse_kill,
+)
 from nethack_agent.decision import (
     ESC_COMMAND,
     LEVEL_CHANGE_ACTIONS,
@@ -43,6 +48,7 @@ from nethack_agent.decision import (
     CorpseOutcomeKind,
     DecisionMetrics,
     DestinationKind,
+    FoodEvidence,
     PrayerEvidence,
     PrayerOutcome,
     PrayerPermit,
@@ -55,12 +61,12 @@ from nethack_agent.decision import (
     classify_prayer_outcome,
     confirmation_answer_error,
     confirmation_prompt_kind,
+    corpse_age_matches,
     corpse_confirmation_error,
     hunger_action_error,
     is_corpse_decline,
     level_change_error,
     observed_corpse_decline,
-    parse_floor_corpse_prompt,
     prayer_action_error,
     prompt_response_error,
 )
@@ -72,6 +78,12 @@ from nethack_agent.events import (
     RunStartedPayload,
     StepPayload,
 )
+from nethack_agent.food import (
+    is_floor_eat_prompt,
+    public_lycanthropy_evidence,
+    safe_inventory_food,
+)
+from nethack_agent.foraging import food_action_error
 from nethack_agent.knowledge import (
     KnowledgeBundle,
     KnowledgeManifestError,
@@ -93,7 +105,7 @@ from nethack_agent.replay import (
     kick_action_error,
 )
 from nethack_agent.run_manager import POLICY_VERSION, ModelFactory, RunManager
-from nethack_agent.skills import item_selection_commands, safe_food_rations
+from nethack_agent.skills import item_selection_commands
 from nethack_agent.storage import MAX_EVENT_PAGE_LIMIT, RunRecord, RunStore
 from nethack_agent.tasks import (
     STAIRCASE_TASK,
@@ -1692,8 +1704,12 @@ def summarize_run(
     pending_prayer: PrayerEvidence | None = None
     prayer_memory = DungeonMemory()
     corpse_kills: dict[tuple[LevelKey, int, int], CorpseKill] = {}
-    consumed_corpses: set[tuple[LevelKey, int, int, int]] = set()
+    consumed_corpses: set[tuple[LevelKey, int, int, int | None]] = set()
     pending_corpse: CorpseEvidence | None = None
+    arrived_corpse: CorpseEvidence | None = None
+    lycanthropy_known = False
+    arrived_food: FoodEvidence | None = None
+    pending_food: FoodEvidence | None = None
 
     sequences = [event.sequence for event in events]
     if sequences != list(range(len(events))):
@@ -1734,6 +1750,10 @@ def summarize_run(
                 corpse_kills=corpse_kills,
                 consumed_corpses=consumed_corpses,
                 pending_corpse=pending_corpse,
+                arrived_corpse=arrived_corpse,
+                lycanthropy_known=lycanthropy_known,
+                arrived_food=arrived_food,
+                pending_food=pending_food,
                 dungeon_memory=prayer_memory,
                 on_altar=(
                     prayer_memory.current.cmap(prayer_memory.current.position) == 27
@@ -1782,6 +1802,10 @@ def summarize_run(
                     if (
                         outcome is None
                         or outcome.kind is not CorpseOutcomeKind.INTERRUPTED
+                    ) and not (
+                        payload.action.command == ord("n")
+                        and payload.observation.prompt.single_character_choice
+                        and is_floor_eat_prompt(payload.observation.message)
                     ):
                         consumed_corpses.add(
                             (
@@ -1791,7 +1815,65 @@ def summarize_run(
                                 evidence.kill_turn,
                             )
                         )
-                pending_corpse = None
+                pending_corpse = (
+                    evidence
+                    if payload.action.command == ord("n")
+                    and payload.observation.prompt.single_character_choice
+                    and is_floor_eat_prompt(payload.observation.message)
+                    else None
+                )
+            lycanthropy_known |= public_lycanthropy_evidence(
+                payload.observation.message
+            )
+            route = (
+                None
+                if payload.selection.intent is None
+                else payload.selection.intent.corpse
+            )
+            arrived_corpse = (
+                route
+                if valid
+                and route is not None
+                and payload.selection.intent.destination is not None
+                and (payload.observation.player.x, payload.observation.player.y)
+                == (route.cell.x, route.cell.y)
+                and decided_on is not None
+                and _observation_level(decided_on)
+                == _observation_level(payload.observation)
+                and not payload.observation.prompt.active
+                else None
+            )
+            food = (
+                None
+                if payload.selection.intent is None
+                else payload.selection.intent.food
+            )
+            arrived_food = (
+                food
+                if valid
+                and food is not None
+                and payload.selection.intent.destination is not None
+                and (payload.observation.player.x, payload.observation.player.y)
+                == (food.cell.x, food.cell.y)
+                and decided_on is not None
+                and _observation_level(decided_on)
+                == _observation_level(payload.observation)
+                and not payload.observation.prompt.active
+                else None
+            )
+            pending_food = (
+                food
+                if valid
+                and food is not None
+                and payload.selection.intent.destination is None
+                and payload.observation.prompt.active
+                and (
+                    payload.observation.pickup_menu is not None
+                    or is_floor_eat_prompt(payload.observation.message)
+                    or item_selection_commands(payload.observation) is not None
+                )
+                else None
+            )
             if decided_on is not None:
                 kill = observed_corpse_kill(
                     decided_on, payload.action, payload.observation
@@ -2231,9 +2313,13 @@ def _action_is_valid(
     pending_prayer: PrayerEvidence | None = None,
     on_altar: bool = False,
     corpse_kills: dict[tuple[LevelKey, int, int], CorpseKill] | None = None,
-    consumed_corpses: set[tuple[LevelKey, int, int, int]] | None = None,
+    consumed_corpses: set[tuple[LevelKey, int, int, int | None]] | None = None,
     pending_corpse: CorpseEvidence | None = None,
     dungeon_memory: DungeonMemory | None = None,
+    arrived_corpse: CorpseEvidence | None = None,
+    lycanthropy_known: bool = False,
+    arrived_food: FoodEvidence | None = None,
+    pending_food: FoodEvidence | None = None,
 ) -> bool:
     if not isinstance(legal_actions, tuple):
         return False
@@ -2245,6 +2331,42 @@ def _action_is_valid(
     ):
         return False
     selection = payload.selection
+    if selection.intent is not None and selection.intent.food is not None:
+        return (
+            action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
+            and decided_on is not None
+            and food_action_error(
+                action,
+                selection,
+                decided_on,
+                None if dungeon_memory is None else dungeon_memory.current,
+                arrived=arrived_food,
+                pending=pending_food,
+            )
+            is None
+        )
+    if action.name == "Command.PICKUP":
+        return False
+    if (
+        decided_on is not None
+        and decided_on.prompt.active
+        and selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
+        and selection.skill is Skill.HUNGER
+        and selection.intent is None
+    ):
+        offered = item_selection_commands(decided_on)
+        return (
+            prompt_response_error(
+                action.name,
+                action.command,
+                selection,
+                prompt_active=True,
+                item_selection=offered is not None,
+                offered_commands=offered or frozenset(),
+                floor_eat_prompt=is_floor_eat_prompt(decided_on.message),
+            )
+            is None
+        )
     if (
         kick_action_error(
             action.name,
@@ -2265,7 +2387,7 @@ def _action_is_valid(
             turn=decided_on.player.turn,
             hunger=decided_on.player.hunger,
             prompt_active=decided_on.prompt.active,
-            ration_available=bool(safe_food_rations(decided_on)),
+            ration_available=bool(safe_inventory_food(decided_on)),
             prior_prayers=prior_prayers,
             last_prayer_turn=last_prayer_turn,
             on_altar=on_altar,
@@ -2282,7 +2404,12 @@ def _action_is_valid(
         and selection.intent.destination is not None
         and selection.intent.destination.kind is DestinationKind.CORPSE
         and _corpse_route_error(
-            payload, decided_on, corpse_kills, consumed_corpses, dungeon_memory
+            payload,
+            decided_on,
+            corpse_kills,
+            consumed_corpses,
+            dungeon_memory,
+            lycanthropy_known=lycanthropy_known,
         )
         is not None
     ):
@@ -2301,23 +2428,42 @@ def _action_is_valid(
             and consumed_corpses is not None
         ):
             level = _observation_level(decided_on)
-            kill = corpse_kills.get((level, corpse.cell.x, corpse.cell.y))
-            if (
-                kill is not None
-                and (level, corpse.cell.x, corpse.cell.y, kill.turn)
-                not in consumed_corpses
-            ):
-                observed = eligible_corpse(kill, decided_on)
+            if corpse.kill_turn is None and corpse.name == "lichen":
+                observed = eligible_lichen(
+                    corpse.cell,
+                    decided_on,
+                    arrived=arrived_corpse,
+                    shop_cells=frozenset()
+                    if dungeon_memory is None
+                    else dungeon_memory.current.shop_cells,
+                )
+            else:
+                kill = corpse_kills.get((level, corpse.cell.x, corpse.cell.y))
+                if (
+                    kill is not None
+                    and (level, corpse.cell.x, corpse.cell.y, kill.turn)
+                    not in consumed_corpses
+                ):
+                    observed = eligible_corpse(
+                        kill,
+                        decided_on,
+                        arrived=arrived_corpse,
+                        lycanthropy_known=lycanthropy_known,
+                        shop_cells=frozenset()
+                        if dungeon_memory is None
+                        else dungeon_memory.current.shop_cells,
+                    )
         if (
             hunger_action_error(
                 action.name,
                 selection,
                 hunger=decided_on.player.hunger,
                 prompt_active=decided_on.prompt.active,
-                safe_ration_available=bool(safe_food_rations(decided_on)),
+                safe_ration_available=bool(safe_inventory_food(decided_on)),
                 corpse_evidence=corpse,
                 observed_corpse=observed,
                 observation=decided_on,
+                lycanthropy_known=lycanthropy_known,
             )
             is not None
         ):
@@ -2332,7 +2478,7 @@ def _action_is_valid(
         and (
             decided_on is None
             or not decided_on.prompt.single_character_choice
-            or parse_floor_corpse_prompt(decided_on.message) is None
+            or not is_floor_eat_prompt(decided_on.message)
         )
     ):
         return False
@@ -2349,21 +2495,26 @@ def _action_is_valid(
             or not decided_on.prompt.active
             or (decided_on.player.x, decided_on.player.y)
             != (pending_corpse.cell.x, pending_corpse.cell.y)
-            or not 0 <= decided_on.player.turn - pending_corpse.kill_turn <= 19
+            or not corpse_age_matches(pending_corpse, decided_on)
         ):
             return False
         level = _observation_level(decided_on)
         kill = corpse_kills.get((level, pending_corpse.cell.x, pending_corpse.cell.y))
         if (
-            kill is None
-            or kill.name != pending_corpse.name
-            or kill.turn != pending_corpse.kill_turn
-            or (level, kill.cell.x, kill.cell.y, kill.turn) in consumed_corpses
+            (
+                pending_corpse.kill_turn is not None
+                and (
+                    kill is None
+                    or kill.name != pending_corpse.name
+                    or kill.turn != pending_corpse.kill_turn
+                    or (level, kill.cell.x, kill.cell.y, kill.turn) in consumed_corpses
+                )
+            )
             or (
                 action.command == ord("n")
                 and (
                     not decided_on.prompt.single_character_choice
-                    or parse_floor_corpse_prompt(decided_on.message) is None
+                    or not is_floor_eat_prompt(decided_on.message)
                 )
             )
             or (
@@ -2451,10 +2602,16 @@ def _action_is_valid(
             )
             observed = (
                 pending_corpse
-                if kill is not None
-                and kill.name == pending_corpse.name
-                and kill.turn == pending_corpse.kill_turn
-                and (level, kill.cell.x, kill.cell.y, kill.turn) not in consumed_corpses
+                if (
+                    pending_corpse.name == "lichen" and pending_corpse.kill_turn is None
+                )
+                or (
+                    kill is not None
+                    and kill.name == pending_corpse.name
+                    and kill.turn == pending_corpse.kill_turn
+                    and (level, kill.cell.x, kill.cell.y, kill.turn)
+                    not in consumed_corpses
+                )
                 else None
             )
             intent_corpse = (
@@ -2472,6 +2629,7 @@ def _action_is_valid(
                     corpse_evidence=pending_corpse,
                     observed_corpse=observed,
                     observation=decided_on,
+                    lycanthropy_known=lycanthropy_known,
                 )
                 is None
             ):
@@ -2569,8 +2727,10 @@ def _corpse_route_error(
     payload: StepPayload,
     decided_on: ProjectedObservation | None,
     kills: dict[tuple[LevelKey, int, int], CorpseKill] | None,
-    consumed: set[tuple[LevelKey, int, int, int]] | None,
+    consumed: set[tuple[LevelKey, int, int, int | None]] | None,
     memory: DungeonMemory | None,
+    *,
+    lycanthropy_known: bool = False,
 ) -> str | None:
     """Re-derive the kill, visible generic corpse, and bounded reachable route."""
     intent = payload.selection.intent
@@ -2583,11 +2743,26 @@ def _corpse_route_error(
     level = _observation_level(decided_on)
     kill = kills.get((level, evidence.cell.x, evidence.cell.y))
     path = intent.path
+    shops = frozenset() if memory is None else memory.current.shop_cells
+    observed = (
+        eligible_lichen(evidence.cell, decided_on, shop_cells=shops)
+        if evidence.name == "lichen" and evidence.kill_turn is None
+        else eligible_corpse(
+            kill,
+            decided_on,
+            shop_cells=shops,
+            lycanthropy_known=lycanthropy_known,
+        )
+        if kill is not None
+        else None
+    )
     if (
         intent.level != level
-        or kill is None
-        or (level, evidence.cell.x, evidence.cell.y, kill.turn) in consumed
-        or eligible_corpse(kill, decided_on) != evidence
+        or (
+            kill is not None
+            and (level, evidence.cell.x, evidence.cell.y, kill.turn) in consumed
+        )
+        or observed != evidence
         or destination.x != evidence.cell.x
         or destination.y != evidence.cell.y
         or path is None

@@ -157,15 +157,19 @@ permanent test that uses it, if any. Initial entries:
   bound; the outcome is read from the following messages and hunger status.
 - The model does not choose prayer. It is a later milestone D decision class.
 
-### 6. Corpse eating
+### 6. Corpse eating and floor foraging
 
-- **Allow-list:** the reviewed card considers only identified lichen, newt,
-  sewer rat, giant rat, or gecko corpses for a normal dwarven Valkyrie with
-  observed kill and freshness evidence. Grid bugs leave no corpse; jackal,
-  coyote, and fox are deliberately omitted because eating them can incur
-  cannibalism while infected with werejackal lycanthropy, which is not reliably
-  ruled out by their names. The remaining harmful classes are excluded
-  ([note 0024](../notes/0024-reviewed-survival-knowledge.md)).
+- **Allow-list:** the reviewed `survival-reviewed-v2` bundle (superseding
+  `survival-reviewed-v1`'s card, byte-identical and still available) widens
+  identified-fresh-kill corpses to lichen, newt, sewer rat, giant rat, gecko,
+  garter snake, hobbit, goblin, iguana, and shrieker for a normal dwarven
+  Valkyrie. Grid bugs leave no corpse. Jackal, fox, and coyote are now
+  included, but only while no public lycanthropy evidence (the "You feel
+  feverish" or a were-creature bite message) has been observed and the hero
+  is not polymorphed, since eating them while sharing a werejackal's species
+  is cannibalism. The remaining harmful classes stay excluded
+  ([note 0024](../notes/0024-reviewed-survival-knowledge.md),
+  [note 0033](../notes/0033-reviewed-nutrition-probes.md)).
 - **Freshness:** only a corpse on the cell of a monster the hero was observed
   killing, at most 19 game turns earlier. Rotten-age calculations divide age
   by a random integer from 10 to 29 and add 2 if cursed; at age 19 or less,
@@ -173,10 +177,24 @@ permanent test that uses it, if any. Initial entries:
   age thresholds. The earlier proposed 30-turn limit did not account for
   cursed corpses reaching the \"old\" threshold. A separate 1/7 rotten-food
   chance remains for most ordinary corpses and is accepted and recorded
-  ([note 0024](../notes/0024-reviewed-survival-knowledge.md)).
+  ([note 0024](../notes/0024-reviewed-survival-knowledge.md)). Lichen alone is
+  exempt from this age cap, since it never rots; a pet can drag a lichen
+  corpse off its own kill cell, so lichen alone may also be identified at a
+  new cell by its exact look-here or floor-eat text, without kill-turn
+  provenance ([note 0033](../notes/0033-reviewed-nutrition-probes.md)).
+- **Ration and fruit variants:** a held, partly-eaten identified food ration,
+  cram ration, K-ration, C-ration, lembas wafer, or reviewed fruit/vegetable
+  is still recognized and resumed, instead of being treated as unknown
+  ([note 0033](../notes/0033-reviewed-nutrition-probes.md)).
+- **Floor foraging:** an identified reviewed comestible on a non-shop floor
+  cell is collected within a cheap, reachable route while unburdened;
+  otherwise it is eaten from the floor only at Hungry or worse, confirming
+  the exact offered item text. An undead hero skips garlic, which only makes
+  it vomit ([note 0033](../notes/0033-reviewed-nutrition-probes.md)).
 - **Trigger:** whenever the hero is not Satiated. Choking needs a meal started
   while Satiated, so this is safe, and it saves rations. Rations are eaten only
-  when Hungry or worse with no eligible corpse; prayer covers Weak.
+  when Hungry or worse with no eligible corpse or floor food; prayer covers
+  Weak.
 - Everything else, including the "eat it?" prompt for other corpses, stays
   declined.
 

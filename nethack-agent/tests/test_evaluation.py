@@ -1232,10 +1232,10 @@ def test_corpse_replay_requires_observed_target_identity_and_fresh_look_here() -
         eligible_corpse(kill, replace(here, message="You see here a gecko corpse."))
         is None
     )
-    assert (
-        eligible_corpse(kill, replace(floor, player=replace(floor.player, turn=22)))
-        is None
-    )
+    # Lichen alone is exempt from the ordinary 19-turn freshness cap.
+    assert eligible_corpse(
+        kill, replace(floor, player=replace(floor.player, turn=22))
+    ) == replace(evidence, age=20)
     assert (
         eligible_corpse(kill, replace(floor, player=replace(floor.player, hunger=0)))
         is None
@@ -1783,10 +1783,15 @@ def test_survival_audit_rechecks_prayer_yes_and_ration_evidence() -> None:
         selection=replace(step.selection, skill=Skill.HUNGER),
     )
     assert not evaluation._action_is_valid(eat_step, (eat,), before, True, profile)
+    ration_index = next(
+        index
+        for index in range(nethack.NUM_OBJECTS)
+        if nethack.OBJ_NAME(nethack.objclass(index)) == "food ration"
+    )
     ration = InventoryItem(
         "d",
         "a food ration",
-        int(nethack.GLYPH_OBJ_OFF),
+        nethack.GLYPH_OBJ_OFF + ration_index,
         int(nethack.FOOD_CLASS),
         BucStatus.UNKNOWN,
     )

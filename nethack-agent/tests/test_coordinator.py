@@ -1587,17 +1587,21 @@ def test_real_seed_1131_eats_observed_lichen_and_evaluator_audits_cleanly(
         assert kill.after.player.turn == 3
         eat = next(step for step in records if step.action.name == "Command.EAT")
         assert eat.selection.skill is Skill.CORPSE
-        assert eat.before.player.turn == 4
+        assert eat.before.player.turn == 10
         assert eat.before.message == "You see here a lichen corpse."
         assert kill.selection.intent is not None
         assert kill.selection.intent.attack_target is not None
         assert eat.selection.intent is not None
         assert eat.selection.intent.corpse is not None
-        assert eat.selection.intent.corpse.cell == kill.selection.intent.attack_target
-        assert eat.selection.intent.corpse.kill_turn == kill.after.player.turn
+        # A pet dragged this lichen corpse off its kill cell before the hero
+        # reached it; lichen alone is exempt from kill-cell/freshness
+        # provenance, so the untracked-arrival path identifies it by the
+        # exact look-here text at its new cell instead.
+        assert eat.selection.intent.corpse.cell != kill.selection.intent.attack_target
+        assert eat.selection.intent.corpse.kill_turn is None
         assert eat.after.message == "There is a lichen corpse here; eat it? [ynq] (n) "
         finished = records[-1]
-        assert finished.after.player.turn == 8
+        assert finished.after.player.turn == 14
         assert finished.after.player.hunger == 0
         assert "You finish eating the lichen corpse." in finished.after.message
         assert finished.selection.intent is not None
@@ -1622,7 +1626,9 @@ def test_real_seed_1131_eats_observed_lichen_and_evaluator_audits_cleanly(
                     ),
                 ),
             )
-        assert any(kill.name == "lichen" for kill in agent._consumed_corpses)
+        # The eaten corpse was the pet-moved, kill-untracked lichen, so the
+        # original observed kill at its own cell is never marked consumed.
+        assert not any(kill.name == "lichen" for kill in agent._consumed_corpses)
         for _ in range(50 - len(records)):
             step = agent.advance()
             assert step is not None
@@ -1686,6 +1692,54 @@ def test_real_seed_1131_eats_observed_lichen_and_evaluator_audits_cleanly(
         assert result.invalid_actions == 0
         assert result.gate_rejections == 0
         assert result.integrity_problems == ()
+    finally:
+        agent.stop()
+
+
+def test_real_seed_1300_eats_untracked_lichen_shadowed_by_a_later_same_cell_kill(
+    tmp_path: Path,
+) -> None:
+    # A sewer rat is later killed on exactly the cell where an earlier lichen
+    # was killed; the tracked sewer-rat kill record must not shadow the
+    # still-valid untracked lichen sighting actually displayed there.
+    task = TaskSpec(
+        NleTask.SCORE,
+        ActionProfile.NLE_SURVIVAL_ACTIONS,
+        Objective((ReachLevelLeg(LevelKey(0, 5)),)),
+    )
+    agent = AgentCoordinator(
+        NleEnvironment(
+            ScenarioConfig(
+                seed=1300,
+                artifact_directory=tmp_path,
+                max_episode_steps=1700,
+                task=task,
+            )
+        ),
+        ObservationProjector(),
+        ScriptedDevelopmentModel(),
+    )
+    agent.start()
+    agent.resume()
+    try:
+        lichen_eat = None
+        for _ in range(1700):
+            step = agent.advance()
+            assert step is not None
+            if (
+                step.action.name == "Command.EAT"
+                and step.selection.skill is Skill.CORPSE
+                and step.selection.intent is not None
+                and step.selection.intent.corpse is not None
+                and step.selection.intent.corpse.name == "lichen"
+                and step.selection.intent.corpse.kill_turn is None
+            ):
+                lichen_eat = step
+                break
+        assert lichen_eat is not None
+        assert lichen_eat.before.message == (
+            "There is a doorway here.  You see here a lichen corpse."
+        )
     finally:
         agent.stop()
 

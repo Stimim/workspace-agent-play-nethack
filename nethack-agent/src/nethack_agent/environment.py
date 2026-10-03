@@ -12,9 +12,11 @@ from typing import Any, Final, Self
 import gymnasium as gym
 import nle  # noqa: F401  # Registers the NLE Gymnasium environments.
 import numpy as np
+from nle import nethack
 from numpy.typing import NDArray
 
 from nethack_agent.contracts import integer_value, object_value, string_value
+from nethack_agent.menus import pickup_menu_from_tty
 from nethack_agent.tasks import STAIRCASE_TASK, ActionProfile, NleTask, TaskSpec
 
 CHARACTER: Final = "val-dwa-law"
@@ -241,6 +243,7 @@ class NleEnvironment:
         self._raw_environment = raw_environment
         self._state = EnvironmentState.READY
         self._step_index = 0
+        self._pickup_menu_open = False
         self._seed_set = SeedSet.derive(config.seed)
         self._legal_actions = tuple(
             LegalAction(
@@ -292,6 +295,7 @@ class NleEnvironment:
         )
         observation, _ = self._environment.reset(seed=self._config.seed)
         self._step_index = 0
+        self._pickup_menu_open = False
         self._state = EnvironmentState.RUNNING
         return NleObservation.from_nle(observation)
 
@@ -307,8 +311,26 @@ class NleEnvironment:
                 f"action_index must be between 0 and {len(self._legal_actions) - 1}"
             )
 
-        observation, reward, terminated, truncated, information = (
-            self._environment.step(action_index)
+        pickup = (
+            self._config.task.action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
+            and (
+                self._legal_actions[action_index].command == int(nethack.Command.PICKUP)
+                or self._pickup_menu_open
+            )
+        )
+        allow_all_modes = self._raw_environment._allow_all_modes
+        if pickup:
+            # NLE normally auto-dismisses these public menus. Preserve only the
+            # bounded pickup interaction, not unrelated yes/no or text questions.
+            self._raw_environment._allow_all_modes = True
+        try:
+            observation, reward, terminated, truncated, information = (
+                self._environment.step(action_index)
+            )
+        finally:
+            self._raw_environment._allow_all_modes = allow_all_modes
+        self._pickup_menu_open = (
+            pickup and pickup_menu_from_tty(observation["tty_chars"]) is not None
         )
         self._step_index += 1
         if terminated or truncated:

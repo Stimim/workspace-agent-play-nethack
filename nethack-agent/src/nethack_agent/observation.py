@@ -17,6 +17,7 @@ from nethack_agent.contracts import (
     string_value,
 )
 from nethack_agent.environment import NleObservation
+from nethack_agent.menus import PickupMenu, pickup_menu_from_tty
 
 _CONDITION_MASKS: Final = (
     (nethack.BL_MASK_STONE, "petrifying"),
@@ -201,6 +202,7 @@ class ProjectedObservation:
     message: str
     prompt: PromptState
     inventory: tuple[InventoryItem, ...]
+    pickup_menu: PickupMenu | None = None
 
     def __post_init__(self) -> None:
         integer_value(self.step_index, "observation step_index", minimum=0)
@@ -237,6 +239,10 @@ class ProjectedObservation:
             raise TypeError("changed_cells must contain MapCellChange values")
         if not all(isinstance(item, InventoryItem) for item in self.inventory):
             raise TypeError("inventory must contain InventoryItem values")
+        if self.pickup_menu is not None and not isinstance(
+            self.pickup_menu, PickupMenu
+        ):
+            raise TypeError("pickup_menu must be a PickupMenu or None")
         for cell in self.changed_cells:
             if not 0 <= cell.x < width or not 0 <= cell.y < height:
                 raise ContractError("changed cell coordinates are outside the map")
@@ -271,6 +277,9 @@ class ProjectedObservation:
                 }
                 for item in self.inventory
             ],
+            "pickup_menu": None
+            if self.pickup_menu is None
+            else self.pickup_menu.to_json(),
         }
 
     @classmethod
@@ -287,6 +296,7 @@ class ProjectedObservation:
                 "prompt",
                 "inventory",
             },
+            optional={"pickup_menu"},
         )
         return cls(
             step_index=integer_value(
@@ -307,6 +317,11 @@ class ProjectedObservation:
             inventory=tuple(
                 _inventory_item_from_json(item)
                 for item in array_value(payload["inventory"], "observation inventory")
+            ),
+            pickup_menu=(
+                None
+                if payload.get("pickup_menu") is None
+                else PickupMenu.from_json(payload["pickup_menu"])
             ),
         )
 
@@ -507,6 +522,7 @@ class ObservationProjector:
                 wait_for_space=bool(observation.misc[2]),
             ),
             inventory=self._inventory(observation),
+            pickup_menu=pickup_menu_from_tty(observation.tty_chars),
         )
 
     def _changed_cells(self, current: MapView) -> tuple[MapCellChange, ...]:

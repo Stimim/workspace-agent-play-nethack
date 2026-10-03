@@ -1184,6 +1184,7 @@ def _ration(
         template.inventory[0],
         letter=letter,
         description=description,
+        glyph=nethack.GLYPH_OBJ_OFF + _FOOD,
         object_class=int(nethack.FOOD_CLASS),
         buc=buc,
     )
@@ -1218,7 +1219,7 @@ def test_hunger_skill_starts_only_at_hungry_or_worse(
         ("2 blessed +0 food rations", BucStatus.BLESSED, True),
         ("the cursed -1 food ration", BucStatus.CURSED, True),
         ("food ration", BucStatus.UNKNOWN, False),
-        ("a partly eaten food ration", BucStatus.UNKNOWN, False),
+        ("a partly eaten food ration", BucStatus.UNKNOWN, True),
         ("a lichen corpse", BucStatus.UNKNOWN, False),
         ("an uncursed food ration", BucStatus.UNKNOWN, False),
     ],
@@ -1565,16 +1566,14 @@ def test_corpse_skill_requires_fresh_identity_underfoot_and_exact_confirmation(
         )
         is None
     )
-    assert (
-        skill.select_action(
-            replace(observation, player=replace(observation.player, turn=22)),
-            memory,
-            actions,
-            kills,
-            set(),
-        )
-        is None
+    old_lichen = skill.select_action(
+        replace(observation, player=replace(observation.player, turn=400)),
+        memory,
+        actions,
+        kills,
+        set(),
     )
+    assert old_lichen is not None and old_lichen.intent.corpse.age == 398
     assert (
         skill.select_action(
             replace(observation, message="You see here a jackal corpse."),
@@ -1596,7 +1595,6 @@ def test_corpse_skill_requires_fresh_identity_underfoot_and_exact_confirmation(
     assert confirmation is not None
     assert confirmation.action_index == by_command[ord("y")].index
     for player in (
-        replace(prompt.player, turn=22),
         replace(prompt.player, hunger=0),
         replace(prompt.player, x=1),
     ):

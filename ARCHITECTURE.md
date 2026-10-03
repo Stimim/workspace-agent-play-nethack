@@ -63,8 +63,10 @@ member for every otherwise-missing `a-z`/`A-Z` inventory letter, deduplicated
 by integer command value. The additions have static role `prompt_key`; existing
 movement-letter collisions keep their routine movement role.
 `nle-survival-actions` retains that complete ordered hunger action tuple and
-appends the otherwise-absent `Command.PRAY` (59 actions total). Its PRAY role is
-distinct from EAT's hunger role. The `y` command is already
+appends the otherwise-absent `Command.PRAY` and `Command.PICKUP` (60 actions
+total). PRAY and PICKUP each get their own static role, distinct from EAT's
+hunger role; PICKUP is forbidden to any routine or fallback selection and may
+only be issued with a matching food permit. The `y` command is already
 `CompassDirection.NW`, so the new profile does not duplicate it.
 The adapter passes the selected tuple as NLE's `actions=` argument and fails construction
 unless the raw environment's action table equals it. A suite seed is
@@ -193,16 +195,27 @@ are never model choices. Per step, in order:
 2. `PrayerSkill` considers PRAY for Weak-or-worse hunger with no known ration,
    active prompt, or observed altar, after its conservative timeout bound;
 3. `HungerSkill` proposes `EAT` for the first exactly verified inventory food
-   ration at NLE hunger value 2 (Hungry) or worse, answering only its offered
-   inventory letter on the next prompt. This is also the only food policy on
-   `nle-hunger-actions`;
-4. `CorpseSkill`, only on `nle-survival-actions`, considers a not-Satiated hero's
-   own observed kill from the reviewed five-species allow-list. It requires
-   game-turn age at most 19, a visible corpse at the kill cell, and a passable
-   route of at most five steps. On that cell, only an exact matching look-here
-   message permits `EAT`; only the following exact matching floor prompt gets
-   `y`. A missing floor corpse that instead opens an inventory prompt gets ESC.
-   Other floor-corpse prompts are declined, not guessed;
+   ration, cram ration, K-ration, C-ration, lembas wafer, or reviewed
+   fruit/vegetable at NLE hunger value 2 (Hungry) or worse, including an
+   already partly eaten one, answering only its offered inventory letter on
+   the next prompt. This is also the only food policy on `nle-hunger-actions`;
+3b. `FoodSkill`, only on `nle-survival-actions`, collects an identified
+   reviewed comestible on a non-shop floor cell within a passable route of at
+   most five steps while unburdened (`Command.PICKUP`, confirmed from the
+   exact pickup menu text), or eats it from the floor at Hungry or worse,
+   confirming only the exact offered item;
+4. `CorpseSkill`, only on `nle-survival-actions`, considers a not-Satiated
+   hero's own observed kill from the reviewed allow-list (lichen, newt, sewer
+   rat, giant rat, gecko, garter snake, hobbit, goblin, iguana, shrieker, and
+   jackal/fox/coyote absent public lycanthropy evidence and polymorph). It
+   requires game-turn age at most 19 (uncapped for nonrotting lichen), a
+   visible corpse at the kill cell, and a passable route of at most five
+   steps. On that cell, only an exact matching look-here message permits
+   `EAT`; only the following exact matching floor prompt gets `y`. A pet can
+   drag a corpse off its kill cell; only lichen may then be identified at its
+   new cell by this same exact text, without kill-turn provenance. A missing
+   floor corpse that instead opens an inventory prompt gets ESC. Other
+   floor-corpse prompts are declined, not guessed;
 5. a pending direction prompt from exploration's own kick is answered;
 6. `SafePromptHandler` acknowledges wait-for-space prompts, cancels text input,
    and declines other recognizable yes/no prompts, including peaceful attacks
@@ -340,8 +353,12 @@ An interrupted partly eaten corpse may be resumed only under the same fresh-kill
 and exact-identity rules. See
 [note 0029](docs/notes/0029-corpse-meal-lifecycle-and-hunger-death-diagnosis.md).
 
-The survival profile excludes PRAY and ambiguous `y`/northwest from model
-fallback. Prayer needs a `deterministic_skill` selection, a one-turn
+The survival profile excludes PRAY, PICKUP, and ambiguous `y`/northwest from
+model fallback. PICKUP needs a `deterministic_skill` FoodSkill selection and a
+matching `FoodPermit`, verified against the live observation's identified
+comestible, non-shop cell, and unburdened encumbrance at gate time, the same
+predicate the evaluator replays. Prayer needs a `deterministic_skill`
+selection, a one-turn
 `PrayerPermit`, Weak-or-worse hunger, no verified ration, no active prompt, no
 observed altar under the hero, and a conservative timeout estimate: first
 PRAY from game turn 100 (initial 300 minus 100 = 200, below the major-trouble
@@ -517,13 +534,21 @@ The **not yet active** `survival-reviewed-v1` bundle retains staircase and
 exploration guidance and adds cited prayer/hunger and conservative fresh-corpse
 cards; `safe-interaction` remains in the default bundle but is omitted from
 the named one to meet the fixed context budget. Its verified context is 5,917
-characters / 1,480 estimated tokens. The current deterministic prayer and
-corpse skills implement the reviewed rules for the `nle-survival-actions`
-profile without activating this knowledge bundle or changing `POLICY_VERSION`.
-An observed kill on the corpse's cell within 19 game turns is required;
+characters / 1,480 estimated tokens. The **not yet active** `survival-reviewed-v2`
+bundle keeps `v1` byte-identical and reuses its `stairs-traversal`,
+`exploration-map`, and `prayer-hunger` cards, replacing the fresh-corpse card
+with `safe-corpses-v2` (widened species, lichen's nonrotting/pet-moved
+exemption, conditional jackal/fox/coyote) and adding `nutrition-foraging`
+(ration/fruit variants, non-shop floor-food collection, undead-garlic);
+its verified context is 5,985 characters / 1,497 estimated tokens. The current
+deterministic prayer, corpse, and food skills implement the reviewed rules
+for the `nle-survival-actions` profile without activating either knowledge
+bundle or changing `POLICY_VERSION`. An observed kill on the corpse's cell
+within 19 game turns is required (uncapped for nonrotting lichen);
 uncertainty about curse, age, identity, or prayer timeout is never converted
 into an asserted safe action
-([note 0024](docs/notes/0024-reviewed-survival-knowledge.md)).
+([note 0024](docs/notes/0024-reviewed-survival-knowledge.md),
+[note 0033](docs/notes/0033-reviewed-nutrition-probes.md)).
 
 ### Persistence and replay
 

@@ -148,6 +148,14 @@
         [1270, 1299]
       ],
       "note": "Frozen note 0032 development comparison at 1c2688a: frontier-first covered-cell fallback, all-goal cycle bounds, shop exclusion, adjacent attack peacefulness invalidation; scripted coordinator, reach_level(0,5), survival actions, cap 3000. Never fresh acceptance seeds."
+    },
+    {
+      "source": "note-0033-reviewed-nutrition-probes",
+      "seeds": [],
+      "ranges": [
+        [1300, 1329]
+      ],
+      "note": "Frozen note 0033 development sample at 6645966: A HEAD vs B nutrition package vs C nutrition plus frozen note-0032 corrections; scripted coordinator, reach_level(0,5), survival actions, cap 3000. Ship C if qualified, else B, else nothing. Never fresh acceptance seeds."
     }
   ]
 }
