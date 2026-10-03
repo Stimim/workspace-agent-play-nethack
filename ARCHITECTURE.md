@@ -888,6 +888,18 @@ Policy `hierarchical-task-specialists-v1` adds gold navigation on
 safe corpse eating, deterministic prayer, corrected meal lifecycle, and exit discovery;
 it runs `staircase-v4`, `traversal-v3`, `scout-v2`, `eat-v2`, and the schema-3 `descend-d5-v1` suite.
 
+The first real-model milestone-2 runs are recorded in
+[note 0036](docs/notes/0036-milestone-2-real-model-evaluation.md):
+`staircase-v4` passed 10/10; `traversal-v3` passed 4/5 descend and round-trip,
+but failed Mines at 1/5 (2/5 required); `scout-v2` passed its metric gates;
+`eat-v2` failed with two starvation deaths (at most one allowed).
+`descend-d5-v1` passed all must-pass baseline entries and 18/20 fresh
+objectives, with zero fresh starvation or Weak/Fainting deaths. All five
+reports have clean invalid-action, gate and integrity audits. ADR 0005's
+design is accepted, but the full milestone's regression acceptance failed.
+Reports and suite definitions stay immutable; remediation requires a new
+policy and evaluation rather than rerunning the observed fresh sample.
+
 Milestone 2 evaluation adds a reviewed representative-seed catalog
 (`evaluation/representative-seeds.json`, rendered to `representative-seeds.md`)
 and a used-seed ledger (`evaluation/seed-ledger.json`), strict typed files read

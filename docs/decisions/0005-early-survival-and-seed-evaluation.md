@@ -1,9 +1,15 @@
 # ADR 0005: Early survival and representative-plus-fresh seed evaluation
 
-- Status: proposed
+- Status: accepted (design implemented and evaluated; milestone acceptance failed)
 - Date: 2026-09-30
 - Refines: [ADR 0004](0004-traversal-goals-and-task-progression.md) sections 6-8
   (action profiles, evaluation suites, staged skills)
+- Evaluation: [note 0036](../notes/0036-milestone-2-real-model-evaluation.md)
+  records the first real-model runs. `descend-d5-v1` passed (18/20 fresh,
+  all must-pass baselines, no fresh hunger deaths), but milestone 2's full
+  acceptance failed: traversal's Mines case passed 1/5 against 2/5, and Eat
+  recorded two starvation deaths against at most one. Failed reports remain
+  immutable; a retry requires a new policy, suites, and fresh draw.
 
 ## Context
 

@@ -21,9 +21,9 @@ Acceptance: the fixed local policy succeeds on at least 6 of 10 committed determ
 - [x] Meet the milestone acceptance gate on the complete suite.
 - [x] Verify gameplay performs no non-loopback network requests.
 
-## Now: milestone 2 — Survive the early dungeon
+## Done: milestone 2 — Survive the early dungeon (evaluated; acceptance failed)
 
-Goal: reach Dungeons of Doom level 5, the shallowest Oracle level, without hunger deaths. Every failed episode in `traversal-v2`, `scout-v1`, and `eat-v1` (18 of 18) reached Fainting, while every successful one stayed not hungry: exhaustive hidden-passage search outlasts the food supply, and `TASK_ACTIONS` cannot pray ([note 0017](docs/notes/0017-scout-and-eat-task-suites.md)). Design: [ADR 0005](docs/decisions/0005-early-survival-and-seed-evaluation.md) (proposed).
+Goal: reach Dungeons of Doom level 5 without hunger deaths. Design: [ADR 0005](docs/decisions/0005-early-survival-and-seed-evaluation.md) (accepted as implemented and evaluated). The milestone suite passed 18/20 fresh episodes with no fresh hunger deaths, but the full milestone acceptance failed its traversal and Eat regression gates ([0036](docs/notes/0036-milestone-2-real-model-evaluation.md)).
 
 Acceptance is judged on the first committed real-model run of the milestone suite. A failed run is kept; a retry needs a new policy version and a new seed draw.
 
@@ -55,9 +55,24 @@ Work, in order:
   - Frontier-first covered-cell fallback and cycle corrections did not
     qualify paired with the reviewed nutrition package ([0032](docs/notes/0032-exit-discovery-correction-probes.md),
     [0033](docs/notes/0033-reviewed-nutrition-probes.md)).
-- [ ] New policy version, held-out probes, committed suites, one real-model run, and docs (`ARCHITECTURE.md`, `README.md`, development guide, a note); mark ADR 0005 accepted.
+- [x] New policy version, held-out probes, committed suites, one real-model run, and docs (`ARCHITECTURE.md`, `README.md`, development guide, a note); mark ADR 0005 accepted ([0036](docs/notes/0036-milestone-2-real-model-evaluation.md)).
 
 Out of scope: Oracle navigation and the `gold-v1` and `oracle-v1` suites (milestone 3 candidates), retreat, rest, or HP-based prayer unless probes show HP deaths, and model-owned choices.
+
+## Now: milestone 2 acceptance remediation
+
+- [ ] Diagnose Mines discovery/search under `nle-task-actions`: `traversal-v3`
+  entered the Mines only 1/5 (required 2/5); seeds 701-704 died while Fainting.
+- [ ] Diagnose Eat search/nutrition budgeting under `nle-hunger-actions`:
+  `eat-v2` had two starvation deaths (at most one allowed).
+- [ ] Investigate fresh branch recovery (seed 2105401147: 1797 SEARCH steps,
+  truncated after visiting the Mines) and combat risk (1259450733: werejackal
+  death while Not Hungry), using the retained evidence.
+- [ ] Qualify any fixes on separate predeclared development probes, then use
+  a new policy, immutable suite ids and a new fresh draw; encode ADR 0005's
+  fresh hunger-death conditions as explicit metric gates. Never rerun or
+  replace the first real-model reports ([0036](docs/notes/0036-milestone-2-real-model-evaluation.md)).
+
 
 ## Robust dungeon play (ADR 0004)
 

@@ -103,9 +103,10 @@ The evidence-gated combat and hunger changes in
 `hierarchical-task-progression-v1` (same bundle) added the
 `explore_dungeon` objective for `NetHackScout-v0` and `NetHackEat-v0`,
 evaluator-replayed exhaustion markers, and typed metric thresholds, with the
-`staircase-v3` and `traversal-v2` regression suites. The current policy,
-`hierarchical-task-specialists-v1`, adds deterministic gold navigation on
-`NetHackGold-v0` and has no committed suite yet. The checkout refuses all
+`staircase-v3` and `traversal-v2` regression suites. Policy
+`hierarchical-task-specialists-v1` added deterministic gold navigation on
+`NetHackGold-v0`. The current policy, `hierarchical-survival-exit-v1`, pins
+`survival-reviewed-v2` and its own milestone-2 suites. The checkout refuses
 older policy-pinned suites before creating an episode; they must not be
 relabeled or rerun as later-policy evidence. The task-progression policy's
 single real-model runs:
@@ -114,11 +115,15 @@ single real-model runs:
 no completed objective, because exhaustive search outlasts the hunger horizon
 ([note 0017](docs/notes/0017-scout-and-eat-task-suites.md)).
 
-The next milestone ([`TODO_LIST.md`](TODO_LIST.md),
-[ADR 0005](docs/decisions/0005-early-survival-and-seed-evaluation.md), proposed)
-targets reaching Dungeons of Doom level 5 without hunger deaths: prayer and
-fresh-corpse handling are implemented, while bounded hidden-passage search and
-the representative-plus-20-fresh-seed evaluation remain.
+Milestone 2's design ([ADR 0005](docs/decisions/0005-early-survival-and-seed-evaluation.md))
+is accepted as implemented and evaluated. Its first real-model `descend-d5-v1`
+report passed (18/20 fresh objectives, no fresh hunger deaths, no must-pass
+baseline regression), and `staircase-v4` and `scout-v2` passed. **Full milestone
+acceptance failed:** `traversal-v3` entered the Mines only 1/5 (2/5 required),
+and `eat-v2` had two starvation deaths (at most one allowed). Failed reports
+are retained; acceptance remediation is next, not a rerun or retuning of
+these suites ([note 0036](docs/notes/0036-milestone-2-real-model-evaluation.md),
+[`TODO_LIST.md`](TODO_LIST.md)).
 
 ## Documentation
 
