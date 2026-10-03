@@ -802,3 +802,30 @@ acceptance-suite seeds.
 ## Dependency policy
 
 `pyproject.toml` declares direct requirements; `uv.lock` is the reproducible full resolution. NLE is consumed as a package from the maintained `NetHack-LE/nle` project. Do not add a fork or submodule until a concrete engine change requires it.
+
+## Exit discovery probes (item 9)
+
+[Note 0031](notes/0031-exit-discovery-probes.md) replaces the unqualified SEARCH
+cap work with measured exit-discovery changes. The main-dungeon exploration
+skill can force known locked route gates only while downstairs are unknown,
+with at least 10 HP, hunger better than Weak, no closed-inventory or known
+shop/shopkeeper evidence, and fewer than eight direction-confirmed kicks.
+It records observed WHAMM/opened/Ouch outcomes and shares its predicate with
+the runtime gate and persisted-run evaluator. Engravings have no separate
+public field; only their text when emitted in messages is available. Shop
+greetings require the native possessive-owner form, not an XP-level welcome.
+
+Visited open doors can now be search stands for a blank outward extension.
+Unvisited walkable object-covered cells are visited while downstairs are
+unknown; existing look-here staircase recognition supplies the hidden terrain.
+There is no per-level SEARCH cap and no new corridor-priority tier: the
+development rerun solved 1237 without rank 4.
+
+Seeds 1240–1269 are registered development seeds, excluded from future fresh
+samples. The unchanged preregistered comparison improved objectives 19→23,
+deaths 5→4, hunger deaths 2→0, with zero invalid actions, gate rejections,
+and integrity problems. The complete per-seed tables, original shop-parser
+probe, corrected comparison, and 14-seed development rerun are in note 0031.
+This is feature qualification, not milestone/real-model acceptance.
+`POLICY_VERSION` remains unchanged; item 10 owns versioning and the next
+held-out committed suites.

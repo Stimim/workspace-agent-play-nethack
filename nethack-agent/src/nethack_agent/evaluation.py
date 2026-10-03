@@ -87,7 +87,11 @@ from nethack_agent.navigation import (
 )
 from nethack_agent.observation import ProjectedObservation
 from nethack_agent.ollama import OllamaClient, OllamaConfig, OllamaError
-from nethack_agent.replay import ExplorationReplay
+from nethack_agent.replay import (
+    ExplorationReplay,
+    derive_action_record,
+    kick_action_error,
+)
 from nethack_agent.run_manager import POLICY_VERSION, ModelFactory, RunManager
 from nethack_agent.skills import item_selection_commands, safe_food_rations
 from nethack_agent.storage import MAX_EVENT_PAGE_LIMIT, RunRecord, RunStore
@@ -1802,6 +1806,12 @@ def summarize_run(
             gold_error = _gold_intent_error(payload, decided_on)
             if gold_error is not None:
                 problems.append(f"step {len(step_payloads)} {gold_error}")
+            if decided_on is not None and _observation_is_live(decided_on):
+                prayer_memory.current.record(
+                    derive_action_record(
+                        payload.selection, payload.action.name, prayer_memory.current
+                    )
+                )
             decided_on = payload.observation
             if _observation_is_live(decided_on):
                 prayer_memory.observe(decided_on)
@@ -2235,6 +2245,15 @@ def _action_is_valid(
     ):
         return False
     selection = payload.selection
+    if (
+        kick_action_error(
+            action.name,
+            selection,
+            None if dungeon_memory is None else dungeon_memory.current,
+        )
+        is not None
+    ):
+        return False
     if action.name == PRAY_ACTION_NAME and (
         action_profile is not ActionProfile.NLE_SURVIVAL_ACTIONS
         or decided_on is None

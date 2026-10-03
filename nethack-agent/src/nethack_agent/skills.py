@@ -32,6 +32,7 @@ from nethack_agent.navigation import (
     LevelMemory,
     Point,
     RouteTree,
+    locked_door_kick_error,
     route_tree,
 )
 from nethack_agent.observation import (
@@ -40,7 +41,6 @@ from nethack_agent.observation import (
     ProjectedObservation,
 )
 from nethack_agent.traversal import (
-    DUNGEONS_OF_DOOM,
     STAND_ON_DOWNSTAIRS,
     LevelKey,
     StairDirection,
@@ -54,13 +54,9 @@ from nethack_agent.traversal import (
 # at Luck 0 (NetHackWiki "Search"); ten searches find it about 79% of the time.
 SEARCHES_PER_ROUND: Final = 10
 MONSTER_WAIT_LIMIT: Final = 8
-KICKS_PER_DOOR: Final = 8
 SEARCH_DENSITY_RADIUS: Final = 4
 MIN_SEARCH_SCORE: Final = 20
 SEARCH_DISTANCE_WEIGHT: Final = 2
-# Kicking doors is safe only where no shopkeeper or town watch can exist:
-# shops are generated below dungeon level 1 and Minetown is in the Mines.
-KICK_SAFE_LEVEL: Final = LevelKey(DUNGEONS_OF_DOOM, 1)
 _FRONTIER_PASSAGES: Final = frozenset(
     {
         CellKind.DOORWAY,
@@ -293,6 +289,27 @@ class ExploreLevelSkill:
             return ExploreResult(defense, None)
         stairs = () if target is None else tuple(stair_candidates(memory, target))
         tree = route_tree(memory)
+        if not memory.stairs(StairDirection.DOWN):
+            covered = [
+                p
+                for p in memory.objects
+                if p not in memory.visited
+                and p not in memory.abandoned_goals
+                and p not in memory.monsters
+                and p in tree.distances
+                and memory.passable(p)
+            ]
+            if covered:
+                point = min(covered, key=lambda p: (tree.distances[p], p[1], p[0]))
+                action = _route_step(
+                    memory,
+                    tree.route(point),
+                    actions_by_name,
+                    f"Check object-covered terrain at {_cell(point)} for stairs.",
+                    IntentDestination(DestinationKind.FRONTIER, *point),
+                )
+                if action is not None:
+                    return ExploreResult(action, None)
         goal = _frontier_goal(memory, tree, stairs)
         if goal is not None:
             action = _route_step(
@@ -872,20 +889,17 @@ def _kick_locked_door(
 ) -> SkillAction | None:
     """Kick a known-locked door that is the only way into unexplored space."""
     kick = actions_by_name.get("Command.KICK")
-    if kick is None or memory.level != KICK_SAFE_LEVEL:
+    if kick is None:
         return None
     candidates: list[tuple[int, int, int, Point, Point]] = []
     for door in sorted(memory.locked_doors):
-        if (
-            memory.kind(door) is not CellKind.CLOSED_DOOR
-            or door in memory.monsters
-            or memory.kicks.get(door, 0) >= KICKS_PER_DOOR
-            or not any(memory.unexplored(near) for near in memory.neighbors(door))
-        ):
-            continue
         for dx, dy in ORTHOGONAL_DELTAS:
             stand = (door[0] + dx, door[1] + dy)
-            if stand in tree.distances and stand not in memory.monsters:
+            if (
+                stand in tree.distances
+                and stand not in memory.monsters
+                and locked_door_kick_error(memory, door, stand) is None
+            ):
                 candidates.append(
                     (tree.distances[stand], stand[1], stand[0], stand, door)
                 )
@@ -896,8 +910,8 @@ def _kick_locked_door(
     if stand == origin:
         return SkillAction(
             kick.index,
-            f"Kick the locked door at {_cell(door)}: no other unexplored space is "
-            "reachable, and dungeon level 1 has no shopkeeper or watch to anger.",
+            f"Kick the locked route gate at {_cell(door)}: downstairs are unknown "
+            "and observed shop, health, hunger and retry checks permit it.",
             ActionRecord(ActionKind.KICK, origin, door),
             _toward(DestinationKind.LOCKED_DOOR, door),
         )
@@ -1001,6 +1015,15 @@ def _search_targets(memory: LevelMemory, point: Point) -> tuple[Point, ...]:
     """
     kind = memory.kind(point)
     inferred = kind is CellKind.FLOOR and memory.cmap(point) <= 0
+    if kind is CellKind.OPEN_DOOR and point in memory.visited:
+        x, y = point
+        return tuple(
+            (x + dx, y + dy)
+            for dx, dy in ORTHOGONAL_DELTAS
+            if memory.in_bounds((x + dx, y + dy))
+            and memory.kind((x + dx, y + dy)) is CellKind.UNKNOWN
+            and memory.passable((x - dx, y - dy))
+        )
     if kind is CellKind.CORRIDOR or inferred:
         if not _dead_end(memory, point):
             return ()

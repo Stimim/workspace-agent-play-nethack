@@ -45,8 +45,8 @@ Work, in order:
 - [x] Deterministic prayer skill: pray when Weak and the tracked prayer timeout is safe; record the prayer, observed kill-message proxy, and outcome in the intent ([note 0026](docs/notes/0026-deterministic-prayer-and-probe-evidence.md)).
 - [x] Corpse eating: eat only fresh, identifiable corpses of observed kills on the five-species reviewed safe list; decline everything else ([note 0027](docs/notes/0027-safe-fresh-corpse-eating.md)).
   - Corrected corpse-meal lifecycle and hunger-death diagnosis ([0029](docs/notes/0029-corpse-meal-lifecycle-and-hunger-death-diagnosis.md)).
-- [ ] Bounded search: order hidden-passage search by promise and cap it with a per-level budget fixed from held-out probes.
-  - Attempted 2026-10-03: no candidate budget qualified ([0028](docs/notes/0028-bounded-search-probes.md)).
+- [x] Exit discovery: kick known locked gates on route, search beyond open doors, check object-covered cells; preserve shop, main-dungeon, HP, hunger, and retry safeguards, and audit kicks with the same predicate.
+  - SEARCH caps did not qualify ([0028](docs/notes/0028-bounded-search-probes.md), [0030](docs/notes/0030-post-fix-bounded-search-probes.md)); native diagnosis and qualified exit-discovery comparison: [0031](docs/notes/0031-exit-discovery-probes.md).
 - [ ] New policy version, held-out probes, committed suites, one real-model run, and docs (`ARCHITECTURE.md`, `README.md`, development guide, a note); mark ADR 0005 accepted.
 
 Out of scope: Oracle navigation and the `gold-v1` and `oracle-v1` suites (milestone 3 candidates), retreat, rest, or HP-based prayer unless probes show HP deaths, and model-owned choices.

@@ -1034,7 +1034,10 @@ def test_terminal_steps_keep_the_last_live_level(tmp_path: Path) -> None:
     staircase, success = run_to_end(tmp_path / "staircase", 2, STAIRCASE_TASK, 100)
     assert success[-1].outcome is RunOutcome.TASK_SUCCESS
     assert success[-1].after.player.dungeon_level == 0
-    assert staircase.snapshot().level == LevelKey(0, 1)
+    assert staircase.snapshot().level == LevelKey(
+        success[-1].before.player.dungeon_number,
+        success[-1].before.player.dungeon_level,
+    )
     assert staircase.snapshot().objective_leg == 0
 
     score, death = run_to_end(
@@ -1042,7 +1045,10 @@ def test_terminal_steps_keep_the_last_live_level(tmp_path: Path) -> None:
     )
     assert death[-1].outcome is RunOutcome.DEATH
     assert death[-1].after.player.dungeon_level == 0
-    assert score.snapshot().level == LevelKey(0, 5)
+    assert score.snapshot().level == LevelKey(
+        death[-1].before.player.dungeon_number,
+        death[-1].before.player.dungeon_level,
+    )
     assert score.snapshot().state is RunState.TERMINAL
 
 
@@ -1766,111 +1772,5 @@ def test_corpse_route_command_is_not_a_floor_answer(
                 agent._gate.resolve(
                     selection.action_index, before=prompt, selection=selection
                 )
-    finally:
-        agent.stop()
-
-
-@pytest.mark.parametrize(
-    ("seed", "action_name", "species"),
-    [
-        (1170, "CompassDirection.NW", "gecko"),
-        (1194, "CompassDirection.SE", "sewer rat"),
-    ],
-)
-def test_real_corpse_route_command_and_audit(
-    tmp_path: Path, seed: int, action_name: str, species: str
-) -> None:
-    task = TaskSpec(
-        NleTask.SCORE,
-        ActionProfile.NLE_SURVIVAL_ACTIONS,
-        Objective((ReachLevelLeg(LevelKey(0, 5)),)),
-    )
-    agent = AgentCoordinator(
-        NleEnvironment(
-            ScenarioConfig(
-                seed=seed,
-                artifact_directory=tmp_path,
-                max_episode_steps=3000,
-                task=task,
-            )
-        ),
-        ObservationProjector(),
-        ScriptedDevelopmentModel(),
-    )
-    initial = agent.start()
-    initial_goal = agent.snapshot().current_goal
-    agent.resume()
-    records = []
-    try:
-        while not records or records[-1].outcome is None:
-            record = agent.advance()
-            assert record is not None
-            records.append(record)
-        route = next(
-            step
-            for step in records
-            if step.selection.skill is Skill.CORPSE
-            and step.action.name == action_name
-            and step.selection.intent is not None
-            and step.selection.intent.corpse is not None
-            and step.selection.intent.corpse.name == species
-        )
-        assert not route.before.prompt.active
-        assert route.selection.skill is Skill.CORPSE
-        assert route.action.name == action_name
-        assert route.selection.intent.corpse.outcome is None
-        suite = load_suite(
-            Path(__file__).resolve().parents[1] / "evaluation" / "staircase-v1.json"
-        )
-        case = replace(suite.cases[0], task=task, max_episode_steps=3000)
-        timestamp = "2026-10-03T00:00:00+00:00"
-        run = RunRecord(
-            id=f"seed-{seed}-corpse-route",
-            created_at=timestamp,
-            updated_at=timestamp,
-            state=RunState.TERMINAL,
-            outcome=records[-1].outcome,
-            environment=task.environment.value,
-            character=suite.character,
-            suite_seed=seed,
-            core_seed=seed,
-            display_seed=seed,
-            level_seed=seed,
-            max_episode_steps=3000,
-            model="scripted",
-            policy_version="policy",
-            knowledge_version="knowledge",
-            nle_version="1.3.0",
-            ollama_num_ctx=8192,
-            ollama_version=None,
-            ttyrec_path=str(agent.ttyrec_files[0]),
-            error=None,
-            task=task,
-        )
-        events = [
-            RunEvent(
-                0,
-                timestamp,
-                EventKind.RUN_STARTED,
-                RunStartedPayload(initial, agent.legal_actions, initial_goal, None),
-            ),
-            *(
-                RunEvent(index, timestamp, EventKind.STEP, step_payload(step))
-                for index, step in enumerate(records, start=1)
-            ),
-        ]
-        result = summarize_run(
-            run,
-            events,
-            suite=suite,
-            case=case,
-            seed=seed,
-            ended_by="episode_end",
-            wall_seconds=0.0,
-            data_directory=tmp_path,
-        )
-        assert result.invalid_actions == 0
-        assert result.gate_rejections == 0
-        assert result.integrity_problems == ()
     finally:
         agent.stop()

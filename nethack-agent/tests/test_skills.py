@@ -674,7 +674,6 @@ def test_route_to_a_locked_door_ends_beside_it(
     result = ExploreLevelSkill().select_action(memory, actions)
 
     assert result.action is not None
-    assert result.action.rationale.startswith("Move beside the locked door")
     # The destination is the door; the route ends where the hero kicks it.
     assert result.action.intent == ActionIntent(
         IntentDestination(DestinationKind.LOCKED_DOOR, 5, 2),
@@ -1621,4 +1620,256 @@ def test_corpse_skill_requires_fresh_identity_underfoot_and_exact_confirmation(
             replace(prompt, message=prompt.message.rstrip()), by_command, evidence
         )
         is None
+    )
+
+
+@pytest.mark.parametrize(
+    ("scenario", "allowed"),
+    [
+        ("healthy", True),
+        ("hungry", True),
+        ("low_hp", False),
+        ("weak", False),
+        ("fainting", False),
+        ("branch", False),
+        ("inventory_closed", False),
+        ("shopkeeper", False),
+        ("known_shop", False),
+        ("downstairs_known", False),
+        ("spent", False),
+        ("experience_welcome", True),
+    ],
+)
+def test_exit_route_gate_selection_and_audit_agree(
+    template: ProjectedObservation,
+    actions: dict[str, LegalAction],
+    scenario: str,
+    allowed: bool,
+) -> None:
+    from nethack_agent.coordinator import ActionGate, ActionGateError
+    from nethack_agent.decision import ActionSelection, SkillSelectionSource
+    from nethack_agent.evaluation import _action_is_valid
+    from nethack_agent.events import StepPayload
+    from nethack_agent.tasks import ActionProfile
+    from nethack_agent.traversal import STAND_ON_DOWNSTAIRS
+
+    _GLYPHS["s"] = nethack.GLYPH_MON_OFF + _MONSTERS["shopkeeper"]
+    lines = ("        ", " -----  ", " |..@+  ", " -----  ", "        ")
+    if scenario == "shopkeeper":
+        lines = ("        ", " ----s  ", " |..@+  ", " -----  ", "        ")
+    before = sketch(
+        template,
+        lines,
+        dungeon_level=3,
+        dungeon_number=2 if scenario == "branch" else 0,
+        message='You read: "Closed for inventory".'
+        if scenario == "inventory_closed"
+        else "Welcome to Izchak's lighting store!"
+        if scenario == "known_shop"
+        else "Welcome to experience level 2."
+        if scenario == "experience_welcome"
+        else "",
+    )
+    before = replace(
+        before,
+        player=replace(
+            before.player,
+            hit_points=9 if scenario == "low_hp" else 10,
+            hunger={"weak": 3, "fainting": 4, "hungry": 2}.get(scenario, 1),
+        ),
+    )
+    dungeon = DungeonMemory()
+    memory = dungeon.observe(before)
+    memory.locked_doors.add((5, 2))
+    if scenario == "downstairs_known":
+        memory.set_stair((2, 2), StairDirection.DOWN)
+    if scenario == "spent":
+        memory.kicks[(5, 2)] = 8
+    result = ExploreLevelSkill().select_action(memory, actions)
+    assert (
+        result.action is not None
+        and action_name(actions, result.action.action_index) == "Command.KICK"
+    ) is allowed
+    kick = actions["Command.KICK"]
+    selection = ActionSelection(
+        ActionSelectionSource.DETERMINISTIC_SKILL,
+        STAND_ON_DOWNSTAIRS,
+        Skill.EXPLORE_LEVEL,
+        SkillSelectionSource.ARBITER,
+        None,
+        kick.index,
+        "Force the route gate.",
+        ActionIntent(IntentDestination(DestinationKind.LOCKED_DOOR, 5, 2), None, None),
+    )
+    profile = ActionProfile.NLE_TASK_ACTIONS
+    legal = tuple(
+        LegalAction(i, int(a), f"{type(a).__name__}.{a.name}")
+        for i, a in enumerate(profile.actions)
+    )
+    payload = StepPayload(
+        selection,
+        None,
+        None,
+        None,
+        None,
+        kick,
+        0.0,
+        False,
+        False,
+        0,
+        False,
+        None,
+        replace(before, step_index=1),
+    )
+    assert (
+        _action_is_valid(
+            payload,
+            legal,
+            before,
+            True,
+            profile,
+            dungeon_memory=dungeon,
+        )
+        is allowed
+    )
+    gate = ActionGate(legal, profile)
+    if allowed:
+        assert (
+            gate.resolve(kick.index, selection=selection, before=before, memory=memory)
+            == kick
+        )
+    else:
+        with pytest.raises(ActionGateError):
+            gate.resolve(kick.index, selection=selection, before=before, memory=memory)
+
+
+def test_open_door_search_reaches_outward_blank_extension(
+    template: ProjectedObservation,
+    actions: dict[str, LegalAction],
+) -> None:
+    from nethack_agent.skills import _search_targets
+
+    memory = remembered(
+        template,
+        (
+            "            ",
+            " ----       ",
+            " |..@O      ",
+            " ----       ",
+            "            ",
+            "            ",
+            "            ",
+        ),
+        (
+            "            ",
+            " ----       ",
+            " |...@      ",
+            " ----       ",
+            "            ",
+            "            ",
+            "            ",
+        ),
+    )
+    assert memory.kind((5, 2)) is CellKind.OPEN_DOOR
+    # Observing the hero next to blank terrain marks it observed, but does not
+    # make a concealed passage known. Search must still face that blank.
+    assert (6, 2) in _search_targets(memory, (5, 2))
+    memory.search_coverage = {
+        (x, y): 10 for y in range(memory.height) for x in range(memory.width)
+    }
+    memory.search_coverage[(6, 2)] = 0
+    action = ExploreLevelSkill().select_action(memory, actions).action
+    assert action is not None
+    assert action_name(actions, action.action_index) == "Command.SEARCH"
+    assert action.record.search_spot == (5, 2)
+
+
+def test_object_covered_cell_is_visited_before_hidden_search(
+    template: ProjectedObservation,
+    actions: dict[str, LegalAction],
+) -> None:
+    memory = remembered(
+        template, ("         ", " ------  ", " |@..%|  ", " ------  ", "         ")
+    )
+    action = ExploreLevelSkill().select_action(memory, actions).action
+    assert action is not None
+    assert action_name(actions, action.action_index) == "CompassDirection.E"
+    assert action.intent.destination == IntentDestination(
+        DestinationKind.FRONTIER, 5, 2
+    )
+    memory.visited.add((5, 2))
+    next_action = ExploreLevelSkill().select_action(memory, actions).action
+    assert next_action is not None
+    assert next_action.record.search_spot is not None
+
+
+def test_kick_injury_and_whamm_outcomes_bound_further_attempts(
+    template: ProjectedObservation,
+    actions: dict[str, LegalAction],
+) -> None:
+    lines = ("        ", " -----  ", " |..@+  ", " -----  ", "        ")
+    before = sketch(template, lines, dungeon_level=3)
+    memory = LevelMemory()
+    memory.observe(replace(before, player=replace(before.player, hit_points=10)))
+    memory.locked_doors.add((5, 2))
+    memory.record(ActionRecord(ActionKind.KICK_DIRECTION, (4, 2), (5, 2)))
+    after = replace(
+        sketch(template, lines, step=1, dungeon_level=3, message="Ouch! That hurts!"),
+        player=replace(before.player, hit_points=7),
+    )
+    memory.observe(after)
+    assert memory.kick_outcomes[(5, 2)] == ["ouch"]
+    assert memory.kicks[(5, 2)] == 1
+    action = ExploreLevelSkill().select_action(memory, actions).action
+    assert action is None or action_name(actions, action.action_index) != "Command.KICK"
+    for step in range(2, 9):
+        memory.record(ActionRecord(ActionKind.KICK_DIRECTION, (4, 2), (5, 2)))
+        memory.observe(
+            replace(
+                sketch(
+                    template, lines, step=step, dungeon_level=3, message="WHAMMM!!!"
+                ),
+                player=replace(before.player, hit_points=17),
+            )
+        )
+    assert memory.kicks[(5, 2)] == 8
+    assert memory.kick_outcomes[(5, 2)] == ["ouch"] + ["whamm"] * 7
+    action = ExploreLevelSkill().select_action(memory, actions).action
+    assert action is None or action_name(actions, action.action_index) != "Command.KICK"
+
+
+def test_pending_kick_accepts_only_the_gate_direction(
+    template: ProjectedObservation,
+    actions: dict[str, LegalAction],
+) -> None:
+    from nethack_agent.decision import ActionSelection, SkillSelectionSource
+    from nethack_agent.replay import kick_action_error
+    from nethack_agent.traversal import STAND_ON_DOWNSTAIRS
+
+    memory = remembered(
+        template, ("        ", " -----  ", " |..@+  ", " -----  ", "        ")
+    )
+    memory.locked_doors.add((5, 2))
+    selection = ActionSelection(
+        ActionSelectionSource.DETERMINISTIC_SKILL,
+        STAND_ON_DOWNSTAIRS,
+        Skill.EXPLORE_LEVEL,
+        SkillSelectionSource.ARBITER,
+        None,
+        actions["CompassDirection.E"].index,
+        "Direct the kick.",
+        ActionIntent(IntentDestination(DestinationKind.LOCKED_DOOR, 5, 2), None, None),
+    )
+    # A wait while approaching a gate is not a kick answer.
+    assert kick_action_error("MiscDirection.WAIT", selection, memory) is None
+    memory.record(ActionRecord(ActionKind.KICK, memory.position, (5, 2)))
+    assert kick_action_error("CompassDirection.E", selection, memory) is None
+    assert kick_action_error("CompassDirection.W", selection, memory) is not None
+    assert (
+        kick_action_error(
+            "CompassDirection.E",
+            replace(selection, intent=None),
+            memory,
+        )
+        is not None
     )

@@ -57,7 +57,7 @@ from nethack_agent.navigation import (
 )
 from nethack_agent.observation import ObservationProjector, ProjectedObservation
 from nethack_agent.planner import ObjectivePlanner, leg_complete
-from nethack_agent.replay import routine_actions, stair_target
+from nethack_agent.replay import kick_action_error, routine_actions, stair_target
 from nethack_agent.skills import (
     CorpseSkill,
     ExploreLevelSkill,
@@ -136,6 +136,7 @@ class ActionGate:
             action
             for action, role in zip(legal_actions, roles, strict=True)
             if action.name not in LEVEL_CHANGE_ACTIONS
+            and action.name != "Command.KICK"
             and role
             not in {
                 ActionRole.HUNGER,
@@ -178,12 +179,19 @@ class ActionGate:
         on_altar: bool = False,
         before: ProjectedObservation | None = None,
         selection: ActionSelection | None = None,
+        memory: LevelMemory | None = None,
     ) -> LegalAction:
         if isinstance(action_index, bool) or not isinstance(action_index, int):
             raise ActionGateError("action index must be an integer")
         if not 0 <= action_index < len(self._legal_actions):
             raise ActionGateError(f"action index {action_index} is not legal")
         action = self._legal_actions[action_index]
+        if selection is not None:
+            error = kick_action_error(action.name, selection, memory)
+            if error is not None:
+                raise ActionGateError(error)
+        elif action.name == "Command.KICK":
+            raise ActionGateError("kicking requires deterministic locked-gate evidence")
         direction = LEVEL_CHANGE_ACTIONS.get(action.name)
         if direction is not None and (
             permit is None or permit.direction is not direction
@@ -541,6 +549,7 @@ class AgentCoordinator:
                         on_altar=self._on_altar(before),
                         before=before,
                         selection=selection,
+                        memory=self._dungeon.current,
                     )
                 except ActionGateError as error:
                     self._state = RunState.PAUSED

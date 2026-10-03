@@ -21,6 +21,7 @@ Movement rules follow NetHack 3.6.7 ``test_move`` (``src/hack.c``):
 
 from __future__ import annotations
 
+import re
 from collections import deque
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -90,6 +91,7 @@ _DOOR_OPEN_ATTEMPT_LIMIT: Final = 5
 # dokick.c messages for a kicked door that broke ("crashes open") or was
 # destroyed ("shatters to pieces").
 _DOOR_BROKEN_MESSAGES: Final = ("crashes open", "shatters")
+_SHOP_WELCOME: Final = re.compile(r"\bwelcome(?: again)? to .+?'s? ")
 # NetHack 3.6.7 `defsym.h` S_upstair and S_dnstair. Ladders (S_upladder and
 # S_dnladder, Gehennom and Vlad's Tower only) are not modelled as stairs.
 _STAIR_CMAPS: Final = {
@@ -273,6 +275,9 @@ class LevelMemory:
         self.locked_doors: set[Point] = set()
         self.door_attempts: dict[Point, int] = {}
         self.kicks: dict[Point, int] = {}
+        self.kick_outcomes: dict[Point, list[str]] = {}
+        self.inventory_closed_doors: set[Point] = set()
+        self.shop_cells: set[Point] = set()
         self.peaceful_glyphs: set[int] = set()
         self.knowledge = 0
         self.search_round = 0
@@ -292,6 +297,8 @@ class LevelMemory:
         self.step_index = -1
         self.position: Point = (0, 0)
         self.monsters: dict[Point, Monster] = {}
+        self.hit_points = 0
+        self.hunger = 0
         self.boulders: frozenset[Point] = frozenset()
         self.objects: frozenset[Point] = frozenset()
         # Cells whose current glyph is exactly `GOLD_GLYPH`; rederived from
@@ -332,6 +339,8 @@ class LevelMemory:
             )
         self.step_index = observation.step_index
         self.position = (player.x, player.y)
+        self.hit_points = player.hit_points
+        self.hunger = player.hunger
         self._update_cells(observation)
         record, self._pending = self._pending, None
         if record is not None:
@@ -339,6 +348,33 @@ class LevelMemory:
         self.visited.add(self.position)
         x, y = self.position
         self._correct_terrain_here(observation.message.lower())
+        message = observation.message.lower()
+        if "closed for inventory" in message:
+            self.inventory_closed_doors.update(
+                p
+                for p in self.neighbors(self.position)
+                if self.kind(p) is CellKind.CLOSED_DOOR
+            )
+            if record is not None and record.target is not None:
+                self.inventory_closed_doors.add(record.target)
+        seeds = set(self.shop_cells)
+        seeds.update(p for p, m in self.monsters.items() if m.name == "shopkeeper")
+        if _SHOP_WELCOME.search(message):
+            seeds.add(self.position)
+            seeds.update(self.neighbors(self.position))
+        queue = deque(seeds)
+        expanded: set[Point] = set()
+        while queue:
+            point = queue.popleft()
+            if point in expanded:
+                continue
+            expanded.add(point)
+            self.shop_cells.add(point)
+            queue.extend(
+                p
+                for p in self.neighbors(point)
+                if self.kind(p) is CellKind.FLOOR and p not in expanded
+            )
         for dx in (-1, 0, 1):
             for dy in (-1, 0, 1):
                 if self.in_bounds((x + dx, y + dy)):
@@ -488,6 +524,16 @@ class LevelMemory:
                 if attempts >= _DOOR_OPEN_ATTEMPT_LIMIT:
                     self.locked_doors.add(target)
         elif record.kind is ActionKind.KICK_DIRECTION and target is not None:
+            outcome = (
+                "opened"
+                if any(word in message for word in _DOOR_BROKEN_MESSAGES)
+                else "ouch"
+                if "ouch" in message
+                else "whamm"
+                if "whamm" in message
+                else "other"
+            )
+            self.kick_outcomes.setdefault(target, []).append(outcome)
             if any(word in message for word in _DOOR_BROKEN_MESSAGES):
                 # A monster may step into the broken doorway at once and hide it.
                 self._cmap[target[1]][target[0]] = _DOORWAY_CMAP
@@ -689,6 +735,49 @@ class LevelMemory:
             and len({position for position, _, _ in recent}) <= OSCILLATION_MAX_CELLS
             and len({knowledge for _, knowledge, _ in recent}) == 1
         )
+
+
+KICKS_PER_DOOR: Final = 8
+# dokick.c's Ouch path costs at most 5 HP; require two such damage units.
+MIN_KICK_HP: Final = 10
+
+
+def locked_door_kick_error(
+    memory: LevelMemory, door: Point, stand: Point
+) -> str | None:
+    """Shared selection, execution-gate and evaluator predicate for route gates."""
+    if memory.level is None or memory.level.dungeon_number != 0:
+        return "kicking route gates is restricted to the main dungeon"
+    if memory.hit_points < MIN_KICK_HP or memory.hunger >= 3:
+        return "kicking requires at least 10 HP and hunger better than Weak"
+    if memory.stairs(StairDirection.DOWN):
+        return "downstairs are already known"
+    if (
+        door not in memory.locked_doors
+        or memory.kind(door) is not CellKind.CLOSED_DOOR
+        or door in memory.monsters
+        or memory.kicks.get(door, 0) >= KICKS_PER_DOOR
+    ):
+        return "door is not an available known locked gate"
+    if (
+        door in memory.inventory_closed_doors
+        or any(p in memory.shop_cells for p in memory.neighbors(door))
+        or any(
+            m.name == "shopkeeper"
+            for p, m in memory.monsters.items()
+            if max(abs(p[0] - door[0]), abs(p[1] - door[1])) <= 1
+        )
+    ):
+        return "door is protected by known shop or closed-inventory evidence"
+    delta = (door[0] - stand[0], door[1] - stand[1])
+    beyond = (door[0] + delta[0], door[1] + delta[1])
+    if (
+        delta not in ORTHOGONAL_DELTAS
+        or not memory.in_bounds(beyond)
+        or not memory.unexplored(beyond)
+    ):
+        return "door is not on a route to unexplored space"
+    return None
 
 
 class DungeonMemory:

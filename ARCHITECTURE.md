@@ -274,20 +274,33 @@ list covers passive-damage monsters (floating eye, gas spore, molds and
 jellies) and the always-peaceful Oracle by exact public monster glyph/name, so
 the first adjacent observation cannot attack her before peacefulness is
 learned. NLE's task action set has no fight command, so attacks move into the
-monster. Exploration then walks to the nearest
-reachable frontier, a known cell next to never-observed blank space, with
-doorways and corridors winning distance ties and a remembered but unreachable
-`>` biasing the choice toward it. A frontier reachable only past a monster is
-approached, fought, or waited on (bounded). With no frontier it kicks a known
-locked door that leads into unexplored space, only on dungeon level 1, where no
-shopkeeper or watch exists. Otherwise it searches: candidate spots are room
-cells beside straight walls and corridor dead ends, scored by never-observed
-cells near the walls or rock they cover minus twice the travel distance; each
-adjacent cell counts until searched 10 times per round, and the chosen spot
-stays committed until spent. Routing that dithers among at most six cells for
-12 moves, or 100 routed moves without new knowledge, abandons the goal until
-the map changes. When no spot remains the skill reports `search_exhausted` (or
-`monster_blocked`).
+monster. When downstairs are unknown, exploration first visits reachable,
+unvisited walkable cells covered by displayed objects, skipping monsters and
+abandoned goals; standing there reuses existing underfoot stair discovery.
+It then walks to the nearest reachable frontier, a known cell next to
+never-observed blank space, with doorways and corridors winning distance ties
+and a remembered but unreachable `>` biasing the choice toward it. A frontier
+reachable only past a monster is approached, fought, or waited on (bounded).
+With no frontier it can force a known locked door whose outward cell is
+unexplored while no downstairs is known. The shared predicate requires main
+dungeon 0, at least 10 HP, hunger better than Weak, fewer than eight previous
+direction-confirmed kicks on that door, and no closed-inventory or known
+shop/shopkeeper evidence. Known shop floor regions and `"Closed for inventory"`
+messages persist in level memory. Shop greetings are possessive-owner
+`Welcome[ again] to ...` messages, not XP-level greetings. Separate engraving
+data are not exposed; only engraving text emitted in public messages is used.
+Kick outcomes (WHAMM, opened/shattered, Ouch, other) are learned from recorded
+messages. Model fallbacks are not offered KICK; runtime gates and evaluator
+replay share the same safety predicate, including pending direction matching.
+Otherwise exploration searches: room cells beside straight walls, corridor
+dead ends, and visited open doors facing an outward blank extension are
+candidates. Scores use never-observed cells near their targets minus twice
+travel distance; each adjacent cell counts until searched 10 times per round,
+and the chosen spot stays committed until spent. There is no global SEARCH
+cap or new corridor-priority tier ([note 0031](docs/notes/0031-exit-discovery-probes.md)).
+Routing that dithers among at most six cells for 12 moves, or 100 routed moves
+without new knowledge, abandons the goal until the map changes. When no spot
+remains the skill reports `search_exhausted` (or `monster_blocked`).
 
 A stuck report triggers a model skill consultation, at most once per 20 stuck
 steps. Choosing `explore_level` re-arms exploration (a new search round, cleared

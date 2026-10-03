@@ -29,11 +29,13 @@ from nethack_agent.decision import (
 from nethack_agent.environment import LegalAction
 from nethack_agent.events import StepPayload
 from nethack_agent.navigation import (
+    MOVE_ACTION_NAMES,
     ActionKind,
     ActionRecord,
     CellKind,
     DungeonMemory,
     LevelMemory,
+    locked_door_kick_error,
 )
 from nethack_agent.observation import ProjectedObservation
 from nethack_agent.planner import ObjectivePlanner, leg_complete
@@ -151,6 +153,41 @@ def derive_action_record(
     return ActionRecord(ActionKind.OTHER, origin)
 
 
+def kick_action_error(
+    action_name: str, selection: ActionSelection, memory: LevelMemory | None
+) -> str | None:
+    """Audit exactly the safety predicate used by deterministic door forcing."""
+    destination = None if selection.intent is None else selection.intent.destination
+    directed = (
+        destination is not None and destination.kind is DestinationKind.LOCKED_DOOR
+    )
+    if action_name != _KICK_ACTION_NAME:
+        if memory is None or memory.pending_kick is None:
+            return None
+        if action_name not in MOVE_ACTION_NAMES.values():
+            return None
+    if (
+        memory is None
+        or not directed
+        or selection.skill is not Skill.EXPLORE_LEVEL
+        or selection.source is not ActionSelectionSource.DETERMINISTIC_SKILL
+    ):
+        return "kicking requires deterministic locked-gate evidence"
+    door = (destination.x, destination.y)
+    error = locked_door_kick_error(memory, door, memory.position)
+    if error is not None:
+        return error
+    if action_name != _KICK_ACTION_NAME and (
+        memory.pending_kick != door
+        or MOVE_ACTION_NAMES.get(
+            (door[0] - memory.position[0], door[1] - memory.position[1])
+        )
+        != action_name
+    ):
+        return "kick direction does not match the pending gate"
+    return None
+
+
 class ExplorationReplay:
     """Rebuild dungeon memory step by step and validate exhaustion markers.
 
@@ -209,6 +246,8 @@ class ExplorationReplay:
         ):
             memory.rearm()
         self._first_step = False
+        if problem is None:
+            problem = kick_action_error(payload.action.name, payload.selection, memory)
         memory.record(
             derive_action_record(payload.selection, payload.action.name, memory)
         )

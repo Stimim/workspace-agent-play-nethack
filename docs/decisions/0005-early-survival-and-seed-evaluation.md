@@ -180,13 +180,27 @@ permanent test that uses it, if any. Initial entries:
 - Everything else, including the "eat it?" prompt for other corpses, stays
   declined.
 
-### 7. Bounded search
+### 7. Exit discovery, not a search-volume cap
 
-- Hidden-passage search is ordered by promise: dead-end corridors first, then
-  walls facing the largest unexplored regions.
-- A per-level search budget, fixed from held-out probes, ends the search. The
-  level is then treated as exhausted for planning, and the diagnostics record
-  that the budget ran out.
+The cap proposal did not qualify in [0028](../notes/0028-bounded-search-probes.md)
+or [0030](../notes/0030-post-fix-bounded-search-probes.md). Native-memory replay
+in [0031](../notes/0031-exit-discovery-probes.md) found eleven known locked
+gates, two excluded open-door search stands, and one unvisited object-covered
+downstairs among the fourteen legacy failures. SEARCH volume was the symptom,
+not the dominant missing capability.
+
+- Force known locked route gates while downstairs are unknown, in dungeon 0
+  only, with at least 10 HP, hunger better than Weak, no closed-inventory or
+  known shop/shopkeeper evidence, and at most eight kicks per door. Runtime
+  execution and evaluation use the same predicate and observed outcomes.
+- Search from visited open doors facing a blank outward corridor extension;
+  the adjacent blank can have been observed without its passage being known.
+- Visit unvisited walkable object-covered cells and reuse underfoot stair
+  discovery instead of assuming the visible object proves ordinary floor.
+- Keep the existing per-cell search rounds and commitment. No global per-level
+  SEARCH cap or corridor reprioritization is installed: 1237 was solved by
+  changes above. The ADR remains proposed; policy versioning and real-model
+  milestone evaluation are still the next item.
 
 ### 8. Diagnostics
 
@@ -204,7 +218,7 @@ meal with its outcome.
 5. The `nle-survival-actions` profile and its gate roles.
 6. The prayer skill.
 7. Corpse eating.
-8. Bounded search.
+8. Exit discovery with guarded locked gates, open-door search, and covered cells.
 9. A new policy version, held-out probes, committed suites, and one real-model
    run.
 10. `ARCHITECTURE.md`, `README.md`, the development guide, a note, and this ADR
