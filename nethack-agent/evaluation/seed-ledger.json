@@ -113,7 +113,10 @@
       "source": "note-0028-bounded-search-baseline",
       "seeds": [],
       "ranges": [
-        [1170, 1189]
+        [
+          1170,
+          1189
+        ]
       ],
       "note": "Scripted real-coordinator item-8 baseline at 802b23b, corrected after the corpse gate fix at a30b300; reach_level(0,5), survival actions, cap 3000. Development evidence, never fresh acceptance seeds."
     },
@@ -121,7 +124,10 @@
       "source": "note-0028-bounded-search-budget-comparison",
       "seeds": [],
       "ranges": [
-        [1190, 1209]
+        [
+          1190,
+          1209
+        ]
       ],
       "note": "Pre-registered legacy baseline versus promise-v1 per-level SEARCH budgets 300/450/600, real coordinator, reach_level(0,5), survival actions, cap 3000. Initial arms invalidated by the budget-independent corpse event bug; all four repeated after d43cc64. Not acceptance seeds."
     },
@@ -129,7 +135,10 @@
       "source": "note-0030-post-fix-bounded-search-probes",
       "seeds": [],
       "ranges": [
-        [1210, 1239]
+        [
+          1210,
+          1239
+        ]
       ],
       "note": "Preregistered development sample at 02dbf36: 30 unused seeds audited against the ledger and every evaluation/*.json; actual scripted coordinator, reach_level(0,5), survival actions, cap 3000; legacy versus frozen promise-v1 SEARCH caps 300/450/600. Never fresh acceptance seeds."
     },
@@ -137,7 +146,10 @@
       "source": "note-0031-exit-discovery-probes",
       "seeds": [],
       "ranges": [
-        [1240, 1269]
+        [
+          1240,
+          1269
+        ]
       ],
       "note": "Note 0031 frozen development seeds at a84bac7: HEAD versus guarded locked gates, open-door search stands, and object-covered cells; scripted coordinator, reach_level(0,5), survival actions, cap 3000. Never fresh acceptance seeds."
     },
@@ -145,7 +157,10 @@
       "source": "note-0032-exit-discovery-correction-probes",
       "seeds": [],
       "ranges": [
-        [1270, 1299]
+        [
+          1270,
+          1299
+        ]
       ],
       "note": "Frozen note 0032 development comparison at 1c2688a: frontier-first covered-cell fallback, all-goal cycle bounds, shop exclusion, adjacent attack peacefulness invalidation; scripted coordinator, reach_level(0,5), survival actions, cap 3000. Never fresh acceptance seeds."
     },
@@ -153,9 +168,23 @@
       "source": "note-0033-reviewed-nutrition-probes",
       "seeds": [],
       "ranges": [
-        [1300, 1329]
+        [
+          1300,
+          1329
+        ]
       ],
       "note": "Frozen note 0033 development sample at 6645966: A HEAD vs B nutrition package vs C nutrition plus frozen note-0032 corrections; scripted coordinator, reach_level(0,5), survival actions, cap 3000. Ship C if qualified, else B, else nothing. Never fresh acceptance seeds."
+    },
+    {
+      "source": "note-0034",
+      "seeds": [],
+      "ranges": [
+        [
+          1330,
+          1359
+        ]
+      ],
+      "note": "0034 confirmatory probes: A (baseline 6645966) vs B (shipped nutrition 10cb81d)"
     }
   ]
 }

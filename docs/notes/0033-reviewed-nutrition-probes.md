@@ -126,6 +126,10 @@ reproduces the exact scenario on the real seed. This fix applied to arms B
 and C before any reported episode below; no seed's recorded outcome used the
 defective code.
 
+## Disclosure: superseded first run
+
+The defect described above was discovered by a full 30-seed qualification run of arms B and C on the frozen 1300–1329 sample. That "run 1" was interrupted by the ActionGateError on seed 1300 at step 1580, causing both B and C to fail the qualification requirement of "zero invalid actions, gate rejections and integrity problems". The candidate was mutated to fix the bug, and the failed run was replaced by the reported "run 2". This violated the preregistration rules "no candidate mutation during a suite" and "never replace a failed run". Because the shipped B lacked a clean frozen test, a confirmatory probe on a new fresh sample is preregistered in note 0034.
+
 ## Fresh three-arm comparison
 
 All three arms ran the frozen setup on seeds 1300-1329: actual
