@@ -11,6 +11,8 @@ Baseline HEAD is `10cb81d`. Freeze this section; append implementation, audit, r
 - **Selection:** if B fails qualification, revert the nutrition package (preserving the regression test if it applies to A's code; otherwise drop it) and record why. If B passes, it remains shipped.
 - **If something ships or reverts:** record the two-arm tables and decision here. Update the seed ledger. Commit through `omp_commit.py` as `Confirm the nutrition package on fresh seeds` (or `Revert the nutrition package` if it fails).
 
+Three initial attempts to launch the runner script for this suite aborted during preflight JSON parsing without starting any episode, leaving no artifacts; the reported run is the first and only execution of the seeds.
+
 ## Fresh two-arm comparison
 
 All two arms ran the frozen setup on seeds 1330-1359: actual

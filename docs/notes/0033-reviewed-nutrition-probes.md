@@ -123,7 +123,7 @@ on `evidence.kill_turn is None` first, matching the pattern the route-step
 auditor already used. A permanent regression test
 (`test_real_seed_1300_eats_untracked_lichen_shadowed_by_a_later_same_cell_kill`)
 reproduces the exact scenario on the real seed. This fix applied to arms B
-and C before any reported episode below; no seed's recorded outcome used the
+and C before any reported episode below; no reported outcome below used the
 defective code.
 
 ## Disclosure: superseded first run
