@@ -140,6 +140,14 @@
         [1240, 1269]
       ],
       "note": "Note 0031 frozen development seeds at a84bac7: HEAD versus guarded locked gates, open-door search stands, and object-covered cells; scripted coordinator, reach_level(0,5), survival actions, cap 3000. Never fresh acceptance seeds."
+    },
+    {
+      "source": "note-0032-exit-discovery-correction-probes",
+      "seeds": [],
+      "ranges": [
+        [1270, 1299]
+      ],
+      "note": "Frozen note 0032 development comparison at 1c2688a: frontier-first covered-cell fallback, all-goal cycle bounds, shop exclusion, adjacent attack peacefulness invalidation; scripted coordinator, reach_level(0,5), survival actions, cap 3000. Never fresh acceptance seeds."
     }
   ]
 }
