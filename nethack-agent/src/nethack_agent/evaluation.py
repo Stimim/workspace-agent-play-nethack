@@ -40,6 +40,7 @@ from nethack_agent.decision import (
     ActionSelectionSource,
     CorpseEvidence,
     CorpseOutcome,
+    CorpseOutcomeKind,
     DecisionMetrics,
     DestinationKind,
     PrayerEvidence,
@@ -1684,7 +1685,6 @@ def summarize_run(
     corpse_kills: dict[tuple[LevelKey, int, int], CorpseKill] = {}
     consumed_corpses: set[tuple[LevelKey, int, int, int]] = set()
     pending_corpse: CorpseEvidence | None = None
-    pending_meal: CorpseEvidence | None = None
 
     sequences = [event.sequence for event in events]
     if sequences != list(range(len(events))):
@@ -1725,7 +1725,6 @@ def summarize_run(
                 corpse_kills=corpse_kills,
                 consumed_corpses=consumed_corpses,
                 pending_corpse=pending_corpse,
-                pending_meal=pending_meal,
                 dungeon_memory=prayer_memory,
                 on_altar=(
                     prayer_memory.current.cmap(prayer_memory.current.position) == 27
@@ -1763,43 +1762,27 @@ def summarize_run(
                             evidence.kill_turn,
                         )
                     )
-                    if (
-                        "You start eating" in payload.observation.message
-                        or "You begin eating" in payload.observation.message
-                    ) and classify_corpse_outcome(
-                        evidence.name, payload.observation.message
-                    ) is None:
-                        pending_meal = evidence
             elif pending_corpse is not None:
                 evidence = pending_corpse
                 if payload.action.command in (YES_COMMAND, ord("n"), ESC_COMMAND):
-                    consumed_corpses.add(
-                        (
-                            _observation_level(decided_on),
-                            evidence.cell.x,
-                            evidence.cell.y,
-                            evidence.kill_turn,
-                        )
+                    outcome = (
+                        _observed_corpse_outcome(evidence.name, payload)
+                        if valid and payload.action.command == YES_COMMAND
+                        else None
                     )
                     if (
-                        valid
-                        and payload.action.command == YES_COMMAND
-                        and not payload.terminated
-                        and not payload.truncated
-                        and classify_corpse_outcome(
-                            evidence.name, payload.observation.message
-                        )
-                        is None
+                        outcome is None
+                        or outcome.kind is not CorpseOutcomeKind.INTERRUPTED
                     ):
-                        pending_meal = evidence
+                        consumed_corpses.add(
+                            (
+                                _observation_level(decided_on),
+                                evidence.cell.x,
+                                evidence.cell.y,
+                                evidence.kill_turn,
+                            )
+                        )
                 pending_corpse = None
-            if pending_meal is not None and (
-                classify_corpse_outcome(pending_meal.name, payload.observation.message)
-                is not None
-                or payload.terminated
-                or payload.truncated
-            ):
-                pending_meal = None
             if decided_on is not None:
                 kill = observed_corpse_kill(
                     decided_on, payload.action, payload.observation
@@ -2212,8 +2195,6 @@ def _observed_corpse_outcome(name: str, payload: StepPayload) -> CorpseOutcome |
     ):
         return None
     kind = classify_corpse_outcome(name, payload.observation.message)
-    if kind is None:
-        return None
     return CorpseOutcome(
         kind,
         payload.observation.player.turn,
@@ -2237,7 +2218,6 @@ def _action_is_valid(
     corpse_kills: dict[tuple[LevelKey, int, int], CorpseKill] | None = None,
     consumed_corpses: set[tuple[LevelKey, int, int, int]] | None = None,
     pending_corpse: CorpseEvidence | None = None,
-    pending_meal: CorpseEvidence | None = None,
     dungeon_memory: DungeonMemory | None = None,
 ) -> bool:
     if not isinstance(legal_actions, tuple):
@@ -2284,13 +2264,9 @@ def _action_is_valid(
     ):
         return False
     if action.name == "Command.EAT":
-        if (
-            decided_on is None
-            or pending_meal is not None
-            or (
-                selection.skill is Skill.CORPSE
-                and action_profile is not ActionProfile.NLE_SURVIVAL_ACTIONS
-            )
+        if decided_on is None or (
+            selection.skill is Skill.CORPSE
+            and action_profile is not ActionProfile.NLE_SURVIVAL_ACTIONS
         ):
             return False
         corpse = selection.intent.corpse if selection.intent is not None else None
@@ -2323,24 +2299,7 @@ def _action_is_valid(
         ):
             return False
     if selection.skill is Skill.CORPSE and action.name == "MiscDirection.WAIT":
-        intent = selection.intent
-        if (
-            action_profile is not ActionProfile.NLE_SURVIVAL_ACTIONS
-            or pending_meal is None
-            or intent is None
-            or intent.corpse is None
-            or intent.destination is not None
-            or intent.attack_target is not None
-            or intent.path is not None
-            or decided_on is None
-            or decided_on.prompt.active
-            or intent.corpse
-            != replace(
-                pending_meal,
-                outcome=_observed_corpse_outcome(pending_meal.name, payload),
-            )
-        ):
-            return False
+        return False
     if (
         action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
         and action.command == ord("n")
@@ -2406,14 +2365,6 @@ def _action_is_valid(
         )
         if intent.corpse != replace(pending_corpse, outcome=expected):
             return False
-    if pending_meal is not None and (
-        (action.name == "MiscDirection.WAIT" and selection.skill is not Skill.CORPSE)
-        or (
-            action.name != "MiscDirection.WAIT"
-            and (selection.intent is None or selection.intent.attack_target is None)
-        )
-    ):
-        return False
     if (
         action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
         and action.command == YES_COMMAND

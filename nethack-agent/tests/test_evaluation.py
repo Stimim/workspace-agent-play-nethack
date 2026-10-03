@@ -1471,87 +1471,50 @@ def test_corpse_eat_and_yes_audit_requires_original_observed_kill() -> None:
         consumed_corpses=set(),
         pending_corpse=evidence,
     )
-    midmeal = replace(
-        finished,
-        player=replace(before.player, turn=4),
-        message="You start eating the lichen corpse.",
-    )
-    assert classify_corpse_outcome("lichen", midmeal.message) is None
-    midmeal_yes = replace(
-        answered,
-        observation=midmeal,
-        selection=replace(
-            answered.selection,
-            intent=ActionIntent(
-                None,
-                None,
-                None,
-                corpse=evidence,
-            ),
-        ),
-    )
-    assert evaluation._action_is_valid(
-        midmeal_yes,
-        (yes,),
-        floor_prompt,
-        True,
-        profile,
-        corpse_kills=history,
-        consumed_corpses=set(),
-        pending_corpse=evidence,
-    )
-    assert not evaluation._action_is_valid(
-        eat_step,
-        (eat,),
-        before,
-        True,
-        profile,
-        corpse_kills=history,
-        consumed_corpses=set(),
-        pending_meal=evidence,
-    )
-    wait = LegalAction(0, ord("."), "MiscDirection.WAIT")
-    waiting = replace(
-        synthetic_step(finished),
-        action=wait,
-        selection=replace(
-            selection,
-            intent=ActionIntent(
-                None,
-                None,
-                None,
-                corpse=replace(
-                    evidence,
-                    outcome=CorpseOutcome(
-                        CorpseOutcomeKind.FINISHED,
-                        7,
-                        0,
-                        finished.message,
+    for message, kind in (
+        ("Blecch!  Rotten food!", CorpseOutcomeKind.ENDED_UNRECOGNIZED),
+        ("You hear someone cursing shoplifters.", CorpseOutcomeKind.ENDED_UNRECOGNIZED),
+        ("You stop eating the lichen corpse.", CorpseOutcomeKind.INTERRUPTED),
+    ):
+        ended = replace(
+            finished, player=replace(before.player, turn=4), message=message
+        )
+        assert classify_corpse_outcome("lichen", ended.message) is kind
+        ended_yes = replace(
+            answered,
+            observation=ended,
+            selection=replace(
+                answered.selection,
+                intent=ActionIntent(
+                    None,
+                    None,
+                    None,
+                    corpse=replace(
+                        evidence,
+                        outcome=CorpseOutcome(kind, 4, ended.player.hunger, message),
                     ),
                 ),
             ),
-        ),
-    )
-    assert evaluation._action_is_valid(
-        waiting,
-        (wait,),
-        midmeal,
-        True,
-        profile,
-        pending_meal=evidence,
-    )
-    assert not evaluation._action_is_valid(
-        waiting,
-        (wait,),
-        midmeal,
-        True,
-        profile,
-    )
+        )
+        assert evaluation._action_is_valid(
+            ended_yes,
+            (yes,),
+            floor_prompt,
+            True,
+            profile,
+            corpse_kills=history,
+            consumed_corpses=set(),
+            pending_corpse=evidence,
+        )
+        missing = replace(
+            ended_yes.selection, intent=ActionIntent(None, None, None, corpse=evidence)
+        )
+        with pytest.raises(ContractError, match="observed outcome"):
+            replace(ended_yes, selection=missing)
     # Completion evidence is mandatory on live completion observations, but
     # terminal/truncated observations must not manufacture a meal outcome.
     for completed, decided_on, action, pending in (
         (answered, floor_prompt, yes, {"pending_corpse": evidence}),
-        (waiting, midmeal, wait, {"pending_meal": evidence}),
     ):
         missing = replace(
             completed.selection,

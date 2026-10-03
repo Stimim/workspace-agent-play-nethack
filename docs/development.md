@@ -741,16 +741,24 @@ Only lichen, newt, sewer rat, giant rat, and gecko qualify. The coordinator
 records an actual `You kill the <name>!` combat observation and its monster
 cell, at most 19 game turns old on the current level. It routes only to a
 visible corpse on that cell through at most five passable BFS steps. On arrival,
-`EAT` needs the exact `You see here a <name> corpse.` look-here observation,
-matching the own-kill identity; an inventory prompt instead of a floor offer
-is canceled with ESC. Only the immediately following exact
-`There is a <name> corpse here; eat it? [ynq] (n) ` prompt for the **same**
-species receives `y` through `PromptPermit(y, CORPSE_CONFIRMATION)`. All
-other floor offers are declined. A pending meal cannot be started again
-mid-meal. The persisted typed intent records the species, kill turn, age,
-cell, and observable finished/interrupted/declined outcome; terminal and
-truncated confirmation/meal steps do not classify an outcome. Live completion
-messages require matching evidence, while ongoing meals have no outcome yet.
+`EAT` needs an exact `You see here a <name> corpse.` clause in the look-here
+message (possibly after a door or stair clause), matching the own-kill identity;
+an inventory prompt instead of a floor offer is canceled with ESC. Only the
+immediately following exact `There is a <name> corpse here; eat it? [ynq] (n) `
+prompt for the **same** species receives `y` through
+`PromptPermit(y, CORPSE_CONFIRMATION)`. A `partly eaten` corpse uses the same
+identity, age, and confirmation checks after an interruption. Other floor
+offers are declined.
+
+NLE 1.3.0 runs eating occupations to their end or interruption within one
+environment step. No meal-continuation WAIT or persistent meal latch exists,
+so eating cannot suppress a later eligible prayer or ration decision. Every
+live confirmation records `finished`, `interrupted`, or `ended_unrecognized`;
+the last kind means the step ended but its final public message does not prove
+completion or interruption (including rotten food or a later unrelated message).
+Declines record `declined`; terminal/truncated answers carry no live outcome.
+An interrupted corpse remains eligible to resume only while fresh and identified.
+See [note 0029](notes/0029-corpse-meal-lifecycle-and-hunger-death-diagnosis.md).
 The evaluator rebuilds kill provenance, age, identity, and prompt matching
 from event observations rather than accepting the intent on trust.
 
@@ -769,11 +777,11 @@ turn 3 while Not Hungry, look-here and EAT at turn 4, exact `y` completion at
 turn 8 with Satiated hunger, and zero invalid evaluator actions or gate
 rejections. Development seeds 1130–1149 are reserved in the used-seed ledger.
 
-To exercise the corpse gate, negative prompts, ongoing meals, and
+To exercise corpse identity, meal-end outcomes, nutrition priority, and
 terminal/truncated replay boundaries:
 
 ```bash
-uv run pytest -q tests/test_coordinator.py -k 'corpse or midmeal or seed_1131'
+uv run pytest -q tests/test_coordinator.py -k 'corpse or seed_1131'
 uv run pytest -q tests/test_evaluation.py -k corpse
 ```
 

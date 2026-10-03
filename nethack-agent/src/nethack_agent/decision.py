@@ -46,7 +46,8 @@ PRAY_ACTION_NAME: Final = "Command.PRAY"
 YES_COMMAND: Final = ord("y")
 _PRAYER_CONFIRMATION: Final = "Are you sure you want to pray? [yn] (n) "
 _FLOOR_CORPSE_CONFIRMATION: Final = re.compile(
-    r"There is a ([a-z][a-z -]*) corpse here; eat it\? \[ynq\] \(n\) \Z"
+    r"There is a (?:partly eaten )?([a-z][a-z -]*) corpse here; "
+    r"eat it\? \[ynq\] \(n\) \Z"
 )
 EAT_ACTION_NAME: Final = "Command.EAT"
 ESC_COMMAND: Final = 27
@@ -547,6 +548,7 @@ class CorpseOutcomeKind(Enum):
     FINISHED = "finished"
     INTERRUPTED = "interrupted"
     DECLINED = "declined"
+    ENDED_UNRECOGNIZED = "ended_unrecognized"
 
 
 @dataclass(frozen=True, slots=True)
@@ -609,7 +611,7 @@ class CorpseEvidence:
                 raise ContractError("corpse outcome predates the observed kill")
             classified = classify_corpse_outcome(self.name, self.outcome.message)
             if self.outcome.kind is CorpseOutcomeKind.DECLINED:
-                if classified is not None:
+                if classified is not CorpseOutcomeKind.ENDED_UNRECOGNIZED:
                     raise ContractError(
                         "declined corpse outcome cannot describe a meal"
                     )
@@ -645,13 +647,26 @@ class CorpseEvidence:
         )
 
 
-def classify_corpse_outcome(name: str, message: str) -> CorpseOutcomeKind | None:
-    """Do not call an unfinished multi-turn meal an interruption."""
+def classify_corpse_outcome(name: str, message: str) -> CorpseOutcomeKind:
+    """Classify the final message after NLE has ended an eating occupation."""
     if f"You finish eating the {name} corpse." in message:
         return CorpseOutcomeKind.FINISHED
     if "You stop eating" in message or "You are interrupted" in message:
         return CorpseOutcomeKind.INTERRUPTED
-    return None
+    return CorpseOutcomeKind.ENDED_UNRECOGNIZED
+
+
+def corpse_underfoot_matches(name: str, message: str) -> bool:
+    """Match an exact species clause, including a resumable partly eaten corpse."""
+    return (
+        re.search(
+            r"(?:^|(?<=[.!?])\s+)You see here a (?:partly eaten )?"
+            + re.escape(name)
+            + r" corpse\.(?=$|\s)",
+            message,
+        )
+        is not None
+    )
 
 
 def is_corpse_decline(command: int, selection: ActionSelection) -> bool:
@@ -1455,7 +1470,7 @@ def hunger_action_error(
             or hunger < 1
             or (observation.player.x, observation.player.y)
             != (evidence.cell.x, evidence.cell.y)
-            or observation.message != f"You see here a {evidence.name} corpse."
+            or not corpse_underfoot_matches(evidence.name, observation.message)
         ):
             return "EAT requires the observed fresh corpse under the hero"
         return None

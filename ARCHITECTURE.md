@@ -318,12 +318,14 @@ match the live observation. A separate exact-name
 `PromptPermit(y, CORPSE_CONFIRMATION)` is valid only for the pending EAT and
 matching floor confirmation. The evaluator reconstructs kills and consumed
 corpses from stored observations and replays the same predicates; a claim in
-an intent alone never proves a corpse safe. A meal is not restarted while
-NetHack reports it still in progress. Finished/interrupted/declined outcomes
-are recorded only on live observations; terminal or truncated confirmation
-and continuation steps carry no classified outcome. A live completion message
-must carry its matching outcome, while a still-running meal has none. See
-[note 0027](docs/notes/0027-safe-fresh-corpse-eating.md).
+an intent alone never proves a corpse safe. NLE ends an eating occupation
+within its confirmation step; the coordinator keeps no meal-continuation latch
+or WAIT issuer. Live confirmations record finished/interrupted/ended_unrecognized
+outcomes, while declines record declined. The explicit unrecognized end is not
+proof of finishing. Terminal/truncated answers carry no classified outcome.
+An interrupted partly eaten corpse may be resumed only under the same fresh-kill
+and exact-identity rules. See
+[note 0029](docs/notes/0029-corpse-meal-lifecycle-and-hunger-death-diagnosis.md).
 
 The survival profile excludes PRAY and ambiguous `y`/northwest from model
 fallback. Prayer needs a `deterministic_skill` selection, a one-turn
@@ -388,7 +390,7 @@ zeroes the bottom-line stats, so the outcome remains absent.
 Corpse intents record the allow-listed species, the observed kill turn, the
 current game-turn age, and the kill cell. A routed move targets that cell; EAT
 and its exact confirmation retain the corpse evidence and classify the live
-meal as finished, interrupted, or declined when observable. An unobserved,
+meal as finished, interrupted, ended_unrecognized, or declined. An unobserved,
 covered, displaced, old, or non-allow-listed corpse cannot inherit permission
 from a look-here message alone.
 

@@ -382,7 +382,6 @@ class AgentCoordinator:
         self._consumed_corpses: set[CorpseKill] = set()
         self._pending_corpse: CorpseEvidence | None = None
         self._pending_corpse_step: int | None = None
-        self._meal_corpse: CorpseEvidence | None = None
         self._prayer_count = 0
         self._last_prayer_turn: int | None = None
         self._prayer_kill_count = 0
@@ -436,7 +435,6 @@ class AgentCoordinator:
             self._consumed_corpses.clear()
             self._pending_corpse = None
             self._pending_corpse_step = None
-            self._meal_corpse = None
             try:
                 raw = self._environment.reset()
                 self._observation = self._projector.project(raw, step_index=0)
@@ -675,12 +673,6 @@ class AgentCoordinator:
                     arbiter,
                     None,
                     skill_model_decision,
-                )
-        if not before.prompt.active and self._meal_corpse is not None:
-            meal = CorpseSkill.continue_meal(before, actions, self._meal_corpse)
-            if meal is not None:
-                return self._skill_plan(
-                    meal, goal, Skill.CORPSE, arbiter, None, skill_model_decision
                 )
         if self._prayer is not None:
             pending = (
@@ -1181,13 +1173,6 @@ class AgentCoordinator:
             self._corpse_kills[(kill.level, kill.cell)] = kill
         pending = self._pending_corpse
         if pending is not None:
-            key = (
-                LevelKey(before.player.dungeon_number, before.player.dungeon_level),
-                pending.cell,
-            )
-            original = self._corpse_kills.get(key)
-            if original is not None and original.turn == pending.kill_turn:
-                self._consumed_corpses.add(original)
             self._pending_corpse = None
             self._pending_corpse_step = None
             if (
@@ -1198,12 +1183,20 @@ class AgentCoordinator:
                 assert intent is not None and intent.corpse == pending
                 if action.command == YES_COMMAND:
                     kind = classify_corpse_outcome(pending.name, after.message)
-                    if kind is None:
-                        self._meal_corpse = pending
                 elif is_corpse_decline(action.command, selection):
                     kind = CorpseOutcomeKind.DECLINED
                 else:
                     kind = None
+                if kind is not CorpseOutcomeKind.INTERRUPTED:
+                    key = (
+                        LevelKey(
+                            before.player.dungeon_number, before.player.dungeon_level
+                        ),
+                        pending.cell,
+                    )
+                    original = self._corpse_kills.get(key)
+                    if original is not None and original.turn == pending.kill_turn:
+                        self._consumed_corpses.add(original)
                 if kind is not None and live:
                     outcome = (
                         observed_corpse_decline(
@@ -1239,38 +1232,6 @@ class AgentCoordinator:
                 original = self._corpse_kills.get(key)
                 if original is not None and original.turn == evidence.kill_turn:
                     self._consumed_corpses.add(original)
-                if (
-                    "You begin eating" in after.message
-                    or "You start eating" in after.message
-                ):
-                    self._meal_corpse = evidence
-        meal = self._meal_corpse
-        if (
-            meal is not None
-            and not (selection.skill is Skill.CORPSE and action.name == EAT_ACTION_NAME)
-            and not (
-                selection.skill is Skill.CORPSE
-                and selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
-                and action.command == YES_COMMAND
-            )
-        ):
-            kind = classify_corpse_outcome(meal.name, after.message)
-            if kind is not None:
-                self._meal_corpse = None
-                if (
-                    live
-                    and selection.skill is Skill.CORPSE
-                    and action.name == "MiscDirection.WAIT"
-                ):
-                    intent = selection.intent
-                    assert intent is not None and intent.corpse == meal
-                    outcome = CorpseOutcome(
-                        kind, after.player.turn, after.player.hunger, after.message
-                    )
-                    selection = replace(
-                        selection,
-                        intent=replace(intent, corpse=replace(meal, outcome=outcome)),
-                    )
         return selection
 
     def _select_skill(

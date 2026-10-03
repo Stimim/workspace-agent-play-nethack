@@ -1518,12 +1518,30 @@ def test_corpse_skill_routes_at_most_five_real_steps_to_visible_kill_cell(
             assert proposal is None
 
 
+@pytest.mark.parametrize(
+    ("underfoot", "floor_question"),
+    [
+        (
+            "You see here a lichen corpse.",
+            "There is a lichen corpse here; eat it? [ynq] (n) ",
+        ),
+        (
+            "There is an open door here.  You see here a lichen corpse.",
+            "There is a lichen corpse here; eat it? [ynq] (n) ",
+        ),
+        (
+            "You see here a partly eaten lichen corpse.",
+            "There is a partly eaten lichen corpse here; eat it? [ynq] (n) ",
+        ),
+    ],
+)
 def test_corpse_skill_requires_fresh_identity_underfoot_and_exact_confirmation(
-    template: ProjectedObservation, actions: dict[str, LegalAction]
+    template: ProjectedObservation,
+    actions: dict[str, LegalAction],
+    underfoot: str,
+    floor_question: str,
 ) -> None:
-    observation = sketch(
-        template, ("@.",), message="You see here a lichen corpse.", step=4
-    )
+    observation = sketch(template, ("@.",), message=underfoot, step=4)
     observation = replace(
         observation, player=replace(observation.player, turn=21, hunger=1)
     )
@@ -1572,7 +1590,7 @@ def test_corpse_skill_requires_fresh_identity_underfoot_and_exact_confirmation(
     by_command = {action.command: action for action in actions.values()}
     prompt = replace(
         observation,
-        message="There is a lichen corpse here; eat it? [ynq] (n) ",
+        message=floor_question,
         prompt=PromptState(True, False, False),
     )
     confirmation = skill.confirm(prompt, by_command, evidence)

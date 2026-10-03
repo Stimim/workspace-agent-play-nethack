@@ -196,3 +196,9 @@ sewer-rat route as `CompassDirection.SE`, with no outcome, and its typed event
 is accepted. The northwest regression remains covered without pinning an
 incidental step index. This changes recording consistency, not search ordering,
 corpse eligibility, or gameplay choices.
+
+The later [meal-lifecycle diagnosis and correction in note 0029](0029-corpse-meal-lifecycle-and-hunger-death-diagnosis.md)
+supersedes this note's original ongoing-meal/WAIT assumptions. Real NLE 1.3.0
+ends the eating occupation inside one step; live confirmations now always
+record an explicit end (including `ended_unrecognized`) rather than latching
+an apparent meal that can suppress prayer and ration eating indefinitely.

@@ -331,10 +331,10 @@ class StepPayload:
                     kind = classify_corpse_outcome(
                         corpse.name, self.observation.message
                     )
-                    if self.observation.player.dungeon_level < 1 or corpse.outcome != (
-                        None
-                        if kind is None
-                        else CorpseOutcome(
+                    if (
+                        self.observation.player.dungeon_level < 1
+                        or corpse.outcome
+                        != CorpseOutcome(
                             kind,
                             self.observation.player.turn,
                             self.observation.player.hunger,
@@ -352,27 +352,9 @@ class StepPayload:
         ):
             corpse = intent.corpse
             if self.action.name == "MiscDirection.WAIT":
-                kind = (
-                    None
-                    if self.terminated or self.truncated
-                    else classify_corpse_outcome(corpse.name, self.observation.message)
+                survival_error = (
+                    "corpse eating occupations do not continue across steps"
                 )
-                if (
-                    self.selection.source
-                    is not ActionSelectionSource.DETERMINISTIC_SKILL
-                    or corpse.outcome
-                    != (
-                        None
-                        if kind is None
-                        else CorpseOutcome(
-                            kind,
-                            self.observation.player.turn,
-                            self.observation.player.hunger,
-                            self.observation.message,
-                        )
-                    )
-                ):
-                    survival_error = "meal continuation requires its observed outcome"
             elif is_corpse_decline(self.action.command, self.selection):
                 expected = observed_corpse_decline(
                     self.action.command,
@@ -393,9 +375,7 @@ class StepPayload:
                 self.selection.source is not ActionSelectionSource.DETERMINISTIC_SKILL
                 or corpse.outcome is not None
             ):
-                survival_error = (
-                    "corpse outcome requires its confirmation or meal continuation"
-                )
+                survival_error = "corpse outcome requires its confirmation"
         if (
             prayer is not None
             and self.action.name != PRAY_ACTION_NAME

@@ -564,12 +564,6 @@ class CorpseSkill:
             evidence = eligible_corpse(kill, observation)
             if evidence is None:
                 continue
-            point = (evidence.cell.x, evidence.cell.y)
-            if (
-                point == origin
-                and observation.message != f"You see here a {evidence.name} corpse."
-            ):
-                continue
             visible.append(evidence)
         if not visible:
             return None
@@ -654,24 +648,6 @@ class CorpseSkill:
             ActionRecord(
                 ActionKind.OTHER, (observation.player.x, observation.player.y)
             ),
-            ActionIntent(None, None, None, corpse=evidence),
-        )
-
-    @staticmethod
-    def continue_meal(
-        observation: ProjectedObservation,
-        actions_by_name: dict[str, LegalAction],
-        evidence: CorpseEvidence,
-    ) -> SkillAction | None:
-        if observation.prompt.active:
-            return None
-        wait = actions_by_name.get("MiscDirection.WAIT")
-        if wait is None:
-            return None
-        return SkillAction(
-            wait.index,
-            f"Let the ongoing {evidence.name} corpse meal finish.",
-            ActionRecord(ActionKind.WAIT, (observation.player.x, observation.player.y)),
             ActionIntent(None, None, None, corpse=evidence),
         )
 

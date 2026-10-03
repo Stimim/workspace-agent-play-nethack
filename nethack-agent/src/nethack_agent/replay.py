@@ -137,7 +137,8 @@ def derive_action_record(
         return ActionRecord(
             ActionKind.MOVE, origin, point, None if monster is None else monster.glyph
         )
-    assert destination is not None
+    if destination is None:
+        return ActionRecord(ActionKind.OTHER, origin)
     cell = (destination.x, destination.y)
     if action_name == _KICK_ACTION_NAME:
         return ActionRecord(ActionKind.KICK, origin, cell)

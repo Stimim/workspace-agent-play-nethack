@@ -12,6 +12,7 @@ from nethack_agent.decision import (
     ALLOWED_CORPSES,
     CorpseEvidence,
     MapCell,
+    corpse_underfoot_matches,
     parse_floor_corpse_prompt,
 )
 from nethack_agent.environment import LegalAction
@@ -98,7 +99,7 @@ def eligible_corpse(
         return None
     here = (x, y) == (player.x, player.y)
     if here:
-        if observation.message != f"You see here a {kill.name} corpse.":
+        if not corpse_underfoot_matches(kill.name, observation.message):
             return None
     elif not nethack.glyph_is_body(observation.map.glyph_rows[y][x]):
         return None

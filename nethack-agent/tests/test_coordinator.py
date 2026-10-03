@@ -1,3 +1,4 @@
+import json
 import threading
 from dataclasses import replace
 from pathlib import Path
@@ -13,7 +14,7 @@ from nethack_agent.coordinator import (
     CoordinatorBusyError,
     StepRecord,
 )
-from nethack_agent.corpse import CorpseKill
+from nethack_agent.corpse import CorpseKill, observed_corpse_kill
 from nethack_agent.decision import (
     LEVEL_CHANGE_ACTIONS,
     PRAYER_FIRST_SAFE_TURN,
@@ -1377,8 +1378,20 @@ def test_survival_declines_jackal_floor_and_cancels_inventory_prompt_after_corps
         agent.stop()
 
 
-def test_midmeal_waits_without_repeating_eat_until_explicit_finish(
+@pytest.mark.parametrize(
+    ("message", "kind"),
+    [
+        ("Blecch!  Rotten food!", CorpseOutcomeKind.ENDED_UNRECOGNIZED),
+        ("You feel a mild buzz.", CorpseOutcomeKind.ENDED_UNRECOGNIZED),
+        ("You stop eating the lichen corpse.", CorpseOutcomeKind.INTERRUPTED),
+    ],
+)
+@pytest.mark.parametrize("ration_available", [False, True])
+def test_corpse_meal_end_never_preempts_prayer_or_ration(
     tmp_path: Path,
+    message: str,
+    kind: CorpseOutcomeKind,
+    ration_available: bool,
 ) -> None:
     task = TaskSpec(
         NleTask.SCORE,
@@ -1400,11 +1413,10 @@ def test_midmeal_waits_without_repeating_eat_until_explicit_finish(
     initial = agent.start()
     try:
         evidence = CorpseEvidence(
-            "lichen",
-            initial.player.turn,
-            0,
-            MapCell(initial.player.x, initial.player.y),
+            "lichen", 100, 0, MapCell(initial.player.x, initial.player.y)
         )
+        kill = CorpseKill("lichen", 100, LevelKey(0, 1), evidence.cell)
+        agent._corpse_kills[(kill.level, kill.cell)] = kill
         agent._pending_corpse = evidence
         agent._pending_corpse_step = 0
         floor = replace(
@@ -1412,49 +1424,118 @@ def test_midmeal_waits_without_repeating_eat_until_explicit_finish(
             step_index=1,
             message="There is a lichen corpse here; eat it? [ynq] (n) ",
             prompt=PromptState(True, False, False),
-            player=replace(initial.player, hunger=1),
+            player=replace(initial.player, turn=100, hunger=1),
         )
         plan = agent._decide(floor, None, lambda: False, 0)
         assert plan is not None
         yes = agent.legal_actions[plan.selection.action_index]
         assert yes.command == ord("y")
-        midmeal = replace(
+        ended = replace(
             floor,
             step_index=2,
-            message="This lichen corpse tastes okay.",
+            message=message,
             prompt=PromptState(False, False, False),
+            player=replace(floor.player, turn=104, hunger=3),
+            inventory=initial.inventory if ration_available else (),
         )
         confirmed = agent._commit_corpse_locked(
-            plan.selection, yes, floor, midmeal, Mock(terminated=False, truncated=False)
+            plan.selection, yes, floor, ended, Mock(terminated=False, truncated=False)
         )
         assert confirmed.intent is not None
         assert confirmed.intent.corpse is not None
-        assert confirmed.intent.corpse.outcome is None
-        agent._dungeon.observe(midmeal)
+        assert confirmed.intent.corpse.outcome is not None
+        assert confirmed.intent.corpse.outcome.kind is kind
+        assert (kill in agent._consumed_corpses) is (
+            kind is not CorpseOutcomeKind.INTERRUPTED
+        )
+        agent._dungeon.observe(ended)
         agent._dungeon.current.monsters.clear()
-        waiting = agent._decide(midmeal, None, lambda: False, 0)
-        assert waiting is not None
-        assert waiting.selection.skill is Skill.CORPSE
-        wait = agent.legal_actions[waiting.selection.action_index]
-        assert wait.name == "MiscDirection.WAIT"
-        finished = replace(
-            midmeal,
-            step_index=3,
-            message="You finish eating the lichen corpse.",
-            player=replace(midmeal.player, hunger=0),
+        # The next eligible decision recovers nutrition immediately, a zero-
+        # decision preemption bound rather than even one continuation WAIT.
+        next_plan = agent._decide(ended, None, lambda: False, 0)
+        assert next_plan is not None
+        assert next_plan.selection.skill is (
+            Skill.HUNGER if ration_available else Skill.PRAYER
         )
-        completed = agent._commit_corpse_locked(
-            waiting.selection,
-            wait,
-            midmeal,
-            finished,
-            Mock(terminated=False, truncated=False),
+        assert agent.legal_actions[next_plan.selection.action_index].name == (
+            "Command.EAT" if ration_available else "Command.PRAY"
         )
-        assert completed.intent is not None
-        assert completed.intent.corpse is not None
-        assert completed.intent.corpse.outcome is not None
-        assert completed.intent.corpse.outcome.kind is CorpseOutcomeKind.FINISHED
-        assert agent._meal_corpse is None
+    finally:
+        agent.stop()
+
+
+@pytest.mark.parametrize(
+    ("seed", "end_message", "recovery_skill"),
+    [
+        (1194, "Blecch!  Rotten food!", Skill.HUNGER),
+        (1204, "You feel a mild buzz.", Skill.PRAYER),
+    ],
+)
+def test_real_corpse_end_allows_nutrition_recovery(
+    tmp_path: Path, seed: int, end_message: str, recovery_skill: Skill
+) -> None:
+    task = TaskSpec(
+        NleTask.SCORE,
+        ActionProfile.NLE_SURVIVAL_ACTIONS,
+        Objective((ReachLevelLeg(LevelKey(0, 5)),)),
+    )
+    environment = NleEnvironment(ScenarioConfig(seed, tmp_path, 3000, task))
+    projector = ObservationProjector()
+    agent = AgentCoordinator(environment, projector, ScriptedDevelopmentModel())
+    observation = agent.start()
+    replay = next(
+        case
+        for case in json.loads(
+            (
+                Path(__file__).parent / "fixtures" / "corpse-meal-replays.json"
+            ).read_text()
+        )
+        if case["seed"] == seed
+    )
+    observed_end = False
+    try:
+        for step, index in enumerate(replay["actions"], start=1):
+            before = observation
+            agent._dungeon.observe(before)
+            if step == replay["confirmation_step"]:
+                cell = MapCell(before.player.x, before.player.y)
+                level = LevelKey(
+                    before.player.dungeon_number, before.player.dungeon_level
+                )
+                kill = agent._corpse_kills[(level, cell)]
+                evidence = CorpseEvidence(
+                    kill.name, kill.turn, before.player.turn - kill.turn, cell
+                )
+                agent._pending_corpse = evidence
+                agent._pending_corpse_step = before.step_index - 1
+                plan = agent._decide(before, None, lambda: False, 0)
+                assert plan is not None and plan.selection.action_index == index
+            action = environment.legal_actions[index]
+            transition = environment.step(index)
+            observation = projector.project(transition.observation, step_index=step)
+            kill = observed_corpse_kill(before, action, observation)
+            if kill is not None:
+                agent._corpse_kills[(kill.level, kill.cell)] = kill
+            if step == replay["confirmation_step"]:
+                committed = agent._commit_corpse_locked(
+                    plan.selection, action, before, observation, transition
+                )
+                assert observation.message == end_message
+                assert (
+                    committed.intent.corpse.outcome.kind
+                    is CorpseOutcomeKind.ENDED_UNRECOGNIZED
+                )
+                observed_end = True
+        assert observed_end
+        agent._observation = observation
+        agent._dungeon.observe(observation)
+        agent.resume()
+        recovery = agent.advance()
+        assert recovery is not None and recovery.selection.skill is recovery_skill
+        completed = agent.advance()
+        assert completed is not None
+        assert completed.before.player.hunger >= 2
+        assert completed.after.player.hunger == 1
     finally:
         agent.stop()
 
