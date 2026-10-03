@@ -359,11 +359,16 @@ The Ollama URL must resolve to a loopback hostname or address. Gameplay must rem
 ## Evaluation suites
 
 Suite schema 2 pins the policy version and reviewed knowledge-bundle id and
-contains one or more cases. Each case supplies a strict typed `TaskSpec`, its
-own seeds and step cap, and its success threshold. Suite-wide acceptance still
-requires the configured limits on invalid actions and gate rejections and, for
-the committed suites, complete SQLite and ttyrec records. A pin mismatch is
-rejected before the evaluator creates a run store, report, or episode.
+contains one or more cases. Evaluation loads that exact named bundle from the
+repository `nethack-agent/knowledge/` directory and passes it to the in-process
+`RunManager`; it does not use the service default for a pinned suite. A missing
+or invalid pinned bundle fails before the run store, report, or first episode
+is created. Schema-1 suites have no knowledge pin and retain the default bundle.
+Each case supplies a strict typed `TaskSpec`, its own seeds and step cap, and
+its success threshold. Suite-wide acceptance still requires the configured
+limits on invalid actions and gate rejections and, for the committed suites,
+complete SQLite and ttyrec records. Policy mismatches are also rejected before
+creating run data.
 
 Policy `hierarchical-traversal-v1` and knowledge bundle
 `staircase-reviewed-v3` have two committed suites:
@@ -398,6 +403,11 @@ relabel their reports as later-policy evidence. Policy
 the cases, seeds, caps, and thresholds above under new suite ids; they, and the
 `scout-v1` and `eat-v1` baselines, are in turn refused by the current policy,
 which has no committed suite yet.
+
+Those committed suites continue to pin `staircase-reviewed-v3`; their
+historical reports and rendered bytes are unchanged. Other runs through
+`serve`/UI and the client-side `run` commands retain the default bundle and
+cannot override it.
 
 A case may also declare typed `metric_thresholds` (metric, statistic, and an
 `at_least`/`at_most` bound). A case with at least one threshold may set

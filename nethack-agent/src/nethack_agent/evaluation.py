@@ -72,7 +72,12 @@ from nethack_agent.events import (
     RunStartedPayload,
     StepPayload,
 )
-from nethack_agent.knowledge import load_default_knowledge_bundle
+from nethack_agent.knowledge import (
+    KnowledgeBundle,
+    KnowledgeManifestError,
+    load_default_knowledge_bundle,
+    load_knowledge_bundle,
+)
 from nethack_agent.model import ScriptedDevelopmentModel
 from nethack_agent.navigation import (
     GOLD_GLYPH,
@@ -5137,6 +5142,22 @@ def require_suite_configuration(
         )
 
 
+def _suite_knowledge_bundle(suite: EvaluationSuite) -> KnowledgeBundle:
+    if suite.legacy:
+        return load_default_knowledge_bundle()
+    assert suite.knowledge_bundle_id is not None
+    knowledge_directory = Path(__file__).resolve().parents[2] / "knowledge"
+    try:
+        return load_knowledge_bundle(
+            knowledge_directory, bundle_id=suite.knowledge_bundle_id
+        )
+    except KnowledgeManifestError as error:
+        raise SuiteValidationError(
+            f"suite {suite.suite_id} pins unavailable knowledge bundle "
+            f"{suite.knowledge_bundle_id}: {error}"
+        ) from error
+
+
 def _prior_drawn_seeds(directory: Path) -> frozenset[int]:
     seen: set[int] = set()
     for path in sorted(directory.glob("*.json")):
@@ -5254,7 +5275,8 @@ def run_evaluation(
     progress: TextIO | None = sys.stderr,
 ) -> EvaluationRun:
     suite = options.suite
-    knowledge_bundle = load_default_knowledge_bundle()
+    require_suite_policy(suite, POLICY_VERSION)
+    knowledge_bundle = _suite_knowledge_bundle(suite)
     require_suite_configuration(suite, POLICY_VERSION, knowledge_bundle.bundle_id)
     comparison_source = (
         _load_comparison_report(options.compare_report, suite)
@@ -5534,7 +5556,7 @@ def _creation_failure(
 def _inputs_unchanged(report: EvaluationReport) -> bool:
     try:
         suite_digest = hashlib.sha256(report.suite.path.read_bytes()).hexdigest()
-        knowledge_version = load_default_knowledge_bundle().version
+        knowledge_version = _suite_knowledge_bundle(report.suite).version
         catalog_unchanged = True
         if report.suite.baseline:
             catalog_path = report.suite.catalog_path

@@ -105,6 +105,19 @@ def load_knowledge_bundle(
     except ContractError as error:
         raise KnowledgeManifestError(str(error)) from error
     manifest_name = MANIFEST_NAME if requested is None else f"manifest.{requested}.json"
+    if requested is not None and not (root / manifest_name).is_file():
+        default_path = root / MANIFEST_NAME
+        try:
+            default_manifest = load_json_object(
+                default_path.read_text(encoding="utf-8"), "knowledge manifest"
+            )
+        except (OSError, UnicodeError, ContractError):
+            default_manifest = None
+        if (
+            isinstance(default_manifest, dict)
+            and default_manifest.get("bundle_id") == requested
+        ):
+            manifest_name = MANIFEST_NAME
     manifest_path = root / manifest_name
     try:
         manifest_text = manifest_path.read_text(encoding="utf-8")

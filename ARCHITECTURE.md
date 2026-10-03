@@ -481,6 +481,13 @@ its version in every run; packaged wheels include the same directory. Explicit
 scripted development runs record the service's bundle version for comparable
 metadata but do not consume its prompt context.
 
+`eval run` loads the exact bundle id pinned by a schema-2 or schema-3 suite from
+the repository `nethack-agent/knowledge/` directory and supplies it to its
+single `RunManager` before any episode. It rejects a missing or invalid pinned
+manifest before creating run data. Schema-1 suites have no knowledge pin and
+retain the default bundle. Normal `serve`/UI and `run` paths continue to use the
+default bundle; no CLI override is provided.
+
 The current `staircase-reviewed-v3` bundle makes scenario `autoopen` explicit
 and replaces the milestone staircase card with the direction- and
 identity-neutral `stairs-traversal` card. That card distinguishes standing on
