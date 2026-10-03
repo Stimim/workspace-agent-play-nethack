@@ -108,6 +108,22 @@
         ]
       ],
       "note": "bounded-search probe at a58902a, coordinator, reach_level(0,5), cap 3000"
+    },
+    {
+      "source": "note-0028-bounded-search-baseline",
+      "seeds": [],
+      "ranges": [
+        [1170, 1189]
+      ],
+      "note": "Scripted real-coordinator item-8 baseline at 802b23b, corrected after the corpse gate fix at a30b300; reach_level(0,5), survival actions, cap 3000. Development evidence, never fresh acceptance seeds."
+    },
+    {
+      "source": "note-0028-bounded-search-budget-comparison",
+      "seeds": [],
+      "ranges": [
+        [1190, 1209]
+      ],
+      "note": "Pre-registered legacy baseline versus promise-v1 per-level SEARCH budgets 300/450/600, real coordinator, reach_level(0,5), survival actions, cap 3000. Initial arms invalidated by the budget-independent corpse event bug; all four repeated after d43cc64. Not acceptance seeds."
     }
   ]
 }
