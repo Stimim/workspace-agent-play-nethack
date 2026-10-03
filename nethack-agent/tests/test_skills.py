@@ -1578,6 +1578,16 @@ def test_corpse_skill_requires_fresh_identity_underfoot_and_exact_confirmation(
     confirmation = skill.confirm(prompt, by_command, evidence)
     assert confirmation is not None
     assert confirmation.action_index == by_command[ord("y")].index
+    for player in (
+        replace(prompt.player, turn=22),
+        replace(prompt.player, hunger=0),
+        replace(prompt.player, x=1),
+    ):
+        unverified = replace(prompt, player=player)
+        assert skill.confirm(unverified, by_command, evidence) is None
+        declined = skill.decline(unverified, by_command, evidence)
+        assert declined is not None
+        assert declined.action_index == by_command[ord("n")].index
     assert (
         skill.confirm(
             replace(

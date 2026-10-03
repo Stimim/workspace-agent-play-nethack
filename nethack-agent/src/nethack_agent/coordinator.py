@@ -263,7 +263,10 @@ class ActionGate:
             )
             if error is not None:
                 raise ActionGateError(error)
-            if selection.skill is Skill.CORPSE:
+            if selection.skill is Skill.CORPSE and (
+                before.prompt.active
+                or selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
+            ):
                 evidence = None if selection.intent is None else selection.intent.corpse
                 error = corpse_confirmation_error(
                     action.command,

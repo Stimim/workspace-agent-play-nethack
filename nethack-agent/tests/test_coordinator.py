@@ -26,7 +26,9 @@ from nethack_agent.decision import (
     CorpseEvidence,
     CorpseOutcomeKind,
     DecisionMetrics,
+    DestinationKind,
     HungerPermit,
+    IntentDestination,
     MapCell,
     ModelActionDecision,
     ModelSkillDecision,
@@ -1590,6 +1592,155 @@ def test_real_seed_1131_eats_observed_lichen_and_evaluator_audits_cleanly(
             suite=suite,
             case=case,
             seed=1131,
+            ended_by="episode_end",
+            wall_seconds=0.0,
+            data_directory=tmp_path,
+        )
+        assert result.invalid_actions == 0
+        assert result.gate_rejections == 0
+        assert result.integrity_problems == ()
+    finally:
+        agent.stop()
+
+
+def test_corpse_northwest_route_is_not_a_floor_confirmation(tmp_path: Path) -> None:
+    task = TaskSpec(
+        NleTask.SCORE,
+        ActionProfile.NLE_SURVIVAL_ACTIONS,
+        Objective((ReachLevelLeg(LevelKey(0, 5)),)),
+    )
+    agent = AgentCoordinator(
+        NleEnvironment(
+            ScenarioConfig(seed=1170, artifact_directory=tmp_path, task=task)
+        ),
+        ObservationProjector(),
+        ScriptedDevelopmentModel(),
+    )
+    initial = agent.start()
+    try:
+        before = replace(
+            initial,
+            step_index=534,
+            message="You kill the gecko!",
+            prompt=PromptState(False, False, False),
+            player=replace(initial.player, x=44, y=5, turn=530, hunger=1),
+        )
+        evidence = CorpseEvidence("gecko", 530, 0, MapCell(43, 4))
+        selection = ActionSelection(
+            source=ActionSelectionSource.DETERMINISTIC_SKILL,
+            goal=agent.snapshot().current_goal,
+            skill=Skill.CORPSE,
+            skill_selection=SkillSelectionSource.ARBITER,
+            stuck_reason=None,
+            action_index=agent._gate.actions_by_command[ord("y")].index,
+            rationale="Approach the observed gecko kill cell.",
+            intent=ActionIntent(
+                IntentDestination(DestinationKind.CORPSE, 43, 4),
+                None,
+                (MapCell(43, 4),),
+                corpse=evidence,
+            ),
+        )
+        action = agent._gate.resolve(
+            selection.action_index, before=before, selection=selection
+        )
+        assert action.name == "CompassDirection.NW"
+        prompt = replace(
+            before,
+            prompt=PromptState(True, False, False),
+            message="There is a gecko corpse here; eat it? [ynq] (n) ",
+        )
+        with pytest.raises(ActionGateError):
+            agent._gate.resolve(
+                selection.action_index, before=prompt, selection=selection
+            )
+    finally:
+        agent.stop()
+
+
+def test_real_seed_1170_corpse_northwest_route_and_audit(tmp_path: Path) -> None:
+    task = TaskSpec(
+        NleTask.SCORE,
+        ActionProfile.NLE_SURVIVAL_ACTIONS,
+        Objective((ReachLevelLeg(LevelKey(0, 5)),)),
+    )
+    agent = AgentCoordinator(
+        NleEnvironment(
+            ScenarioConfig(
+                seed=1170,
+                artifact_directory=tmp_path,
+                max_episode_steps=3000,
+                task=task,
+            )
+        ),
+        ObservationProjector(),
+        ScriptedDevelopmentModel(),
+    )
+    initial = agent.start()
+    initial_goal = agent.snapshot().current_goal
+    agent.resume()
+    records = []
+    try:
+        while not records or records[-1].outcome is None:
+            record = agent.advance()
+            assert record is not None
+            records.append(record)
+        route = records[534]
+        assert route.before.player.turn == 530
+        assert route.before.message == "You kill the gecko!"
+        assert not route.before.prompt.active
+        assert route.selection.skill is Skill.CORPSE
+        assert route.action.name == "CompassDirection.NW"
+        assert route.selection.intent is not None
+        assert route.selection.intent.corpse == CorpseEvidence(
+            "gecko", 530, 0, MapCell(43, 4)
+        )
+        suite = load_suite(
+            Path(__file__).resolve().parents[1] / "evaluation" / "staircase-v1.json"
+        )
+        case = replace(suite.cases[0], task=task, max_episode_steps=3000)
+        timestamp = "2026-10-03T00:00:00+00:00"
+        run = RunRecord(
+            id="seed-1170-corpse-route",
+            created_at=timestamp,
+            updated_at=timestamp,
+            state=RunState.TERMINAL,
+            outcome=records[-1].outcome,
+            environment=task.environment.value,
+            character=suite.character,
+            suite_seed=1170,
+            core_seed=1170,
+            display_seed=1170,
+            level_seed=1170,
+            max_episode_steps=3000,
+            model="scripted",
+            policy_version="policy",
+            knowledge_version="knowledge",
+            nle_version="1.3.0",
+            ollama_num_ctx=8192,
+            ollama_version=None,
+            ttyrec_path=str(agent.ttyrec_files[0]),
+            error=None,
+            task=task,
+        )
+        events = [
+            RunEvent(
+                0,
+                timestamp,
+                EventKind.RUN_STARTED,
+                RunStartedPayload(initial, agent.legal_actions, initial_goal, None),
+            ),
+            *(
+                RunEvent(index, timestamp, EventKind.STEP, step_payload(step))
+                for index, step in enumerate(records, start=1)
+            ),
+        ]
+        result = summarize_run(
+            run,
+            events,
+            suite=suite,
+            case=case,
+            seed=1170,
             ended_by="episode_end",
             wall_seconds=0.0,
             data_directory=tmp_path,

@@ -20,6 +20,7 @@ from nethack_agent.decision import (
     PromptKind,
     StuckReason,
     confirmation_prompt_kind,
+    corpse_confirmation_matches,
 )
 from nethack_agent.environment import LegalAction
 from nethack_agent.navigation import (
@@ -614,9 +615,7 @@ class CorpseSkill:
         actions_by_command: dict[int, LegalAction],
         evidence: CorpseEvidence,
     ) -> SkillAction | None:
-        if not observation.prompt.single_character_choice:
-            return None
-        if parse_floor_corpse_prompt(observation.message) != evidence.name:
+        if not corpse_confirmation_matches(observation, evidence):
             return None
         yes = actions_by_command.get(ord("y"))
         if yes is None:
@@ -639,9 +638,9 @@ class CorpseSkill:
         if not observation.prompt.single_character_choice:
             return None
         species = parse_floor_corpse_prompt(observation.message)
-        if species is not None and species != evidence.name:
+        if species is not None:
             action = actions_by_command.get(ord("n"))
-            reason = f"Decline the different {species} corpse floor prompt."
+            reason = f"Decline the unverified {species} corpse floor prompt."
         elif item_selection_commands(observation) is not None:
             action = actions_by_command.get(27)
             reason = "Cancel inventory selection after a floor-corpse EAT."

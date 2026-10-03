@@ -1438,6 +1438,22 @@ def hunger_action_error(
     return None
 
 
+def corpse_confirmation_matches(
+    observation: ProjectedObservation, evidence: CorpseEvidence
+) -> bool:
+    """Match the live floor prompt to the fresh corpse identified before EAT."""
+    age = observation.player.turn - evidence.kill_turn
+    return (
+        observation.prompt.single_character_choice
+        and parse_floor_corpse_prompt(observation.message) == evidence.name
+        and evidence.name in ALLOWED_CORPSES
+        and 0 <= evidence.age <= age <= 19
+        and observation.player.hunger >= 1
+        and (observation.player.x, observation.player.y)
+        == (evidence.cell.x, evidence.cell.y)
+    )
+
+
 def corpse_confirmation_error(
     command: int,
     selection: ActionSelection,
@@ -1472,13 +1488,7 @@ def corpse_confirmation_error(
         or not prompt_active
         or parse_floor_corpse_prompt(prompt_message) != corpse_evidence.name
         or observation is None
-        or corpse_evidence.name not in ALLOWED_CORPSES
-        or corpse_evidence.age > observation.player.turn - corpse_evidence.kill_turn
-        or observation.player.hunger < 1
-        or (observation.player.x, observation.player.y)
-        != (corpse_evidence.cell.x, corpse_evidence.cell.y)
-        or observation.player.turn - corpse_evidence.kill_turn > 19
-        or observation.player.turn < corpse_evidence.kill_turn
+        or not corpse_confirmation_matches(observation, corpse_evidence)
     ):
         return "yes requires a matching observed fresh floor corpse and exact prompt"
     return None

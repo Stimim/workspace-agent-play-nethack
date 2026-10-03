@@ -132,3 +132,51 @@ result in this item.
 This is a one-seed behavioral regression, not a milestone survival evaluation.
 The entire reserved 1130–1149 development range is excluded from the future
 fresh sample in the used-seed ledger.
+
+## Follow-up fix
+
+On 2026-10-03, baseline `802b23b` failed at observation step **534**
+(attempted action 535), game turn **530**, on development seed **1170**.
+The hero at `(44, 5)` had just observed `You kill the gecko!`, with all prompt
+flags false and no pending corpse confirmation. The deterministic corpse skill
+proposed northwest toward the fresh gecko kill at `(43, 4)`, with kill turn
+530 and age 0. Northwest is command `y`: the general confirmation predicate
+correctly accepted ordinary movement, but the gate then incorrectly applied
+the floor-corpse confirmation predicate to every corpse-skill `y`.
+
+The gate now applies that additional check only in confirmation context.
+The skill, gate, and replay also share the live fresh-floor matching predicate;
+an exact-name offer with expired evidence, wrong position, or Satiated hunger
+is declined rather than proposed as an unauthorized confirmation. No gate
+exception is caught or suppressed. The same northwest ambiguity occurred for
+seed **1177**, observation step 269 / attempted action 270, turn 273, routing
+to a newt kill at `(59, 5)`, and seed **1185**, observation step 492 / attempted
+action 493, turn 494, routing to a newt kill at `(40, 11)`. Both paths executed
+successfully after the fix.
+
+A synthetic regression fails with the baseline gate and passes after the fix.
+A real seed-1170 coordinator regression advances through the formerly rejected
+action to episode end, with evaluator `invalid_actions = 0`,
+`gate_rejections = 0`, and no integrity problems. The complete test suite passes
+**559 tests**; Ruff lint, Ruff format check, and `git diff --check` pass.
+
+Scripted coordinator smoke (`reach_level(0,5)`, survival actions, cap 3000)
+observed **zero ActionGateError exceptions across seeds 1170–1189**:
+
+| Seed | Outcome | Steps | Seed | Outcome | Steps |
+| --- | --- | ---: | --- | --- | ---: |
+| 1170 | death | 1001 | 1180 | truncated | 3000 |
+| 1171 | objective_complete | 1647 | 1181 | truncated | 3000 |
+| 1172 | truncated | 3000 | 1182 | objective_complete | 383 |
+| 1173 | objective_complete | 329 | 1183 | objective_complete | 522 |
+| 1174 | death | 1184 | 1184 | objective_complete | 1516 |
+| 1175 | objective_complete | 246 | 1185 | objective_complete | 1704 |
+| 1176 | truncated | 3000 | 1186 | death | 978 |
+| 1177 | objective_complete | 765 | 1187 | objective_complete | 365 |
+| 1178 | objective_complete | 380 | 1188 | objective_complete | 298 |
+| 1179 | objective_complete | 199 | 1189 | objective_complete | 1516 |
+
+The scripted `NetHackStaircase-v0` / `nle-task-actions` regression, cap 1000,
+still reports `task_success` on seeds 1–10 at steps 217, 44, 222, 47, 147,
+151, 286, 222, 102, and 430. These are development smoke results, not a
+fresh-sample milestone acceptance run.
