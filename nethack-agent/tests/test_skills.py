@@ -5,6 +5,7 @@ import pytest
 from nle import nethack
 
 from nethack_agent.coordinator import AgentCoordinator
+from nethack_agent.corpse import CorpseKill
 from nethack_agent.decision import (
     LEVEL_CHANGE_ACTIONS,
     PRAYER_FIRST_SAFE_TURN,
@@ -43,6 +44,7 @@ from nethack_agent.observation import (
 )
 from nethack_agent.skills import (
     SEARCHES_PER_ROUND,
+    CorpseSkill,
     ExploreLevelSkill,
     GoldNavigationSkill,
     HungerSkill,
@@ -1460,6 +1462,135 @@ def test_prayer_skill_defends_and_confirms_only_exact_pending_prompt(
             commands,
             prior_prayers=1,
             pending=evidence,
+        )
+        is None
+    )
+
+
+def test_corpse_skill_routes_at_most_five_real_steps_to_visible_kill_cell(
+    template: ProjectedObservation, actions: dict[str, LegalAction]
+) -> None:
+    body = nethack.GLYPH_BODY_OFF + _MONSTERS["lichen"]
+    skill = CorpseSkill()
+    for length in (5, 6):
+        observation = sketch(template, ("@" + "." * (length - 1) + "%",), step=3)
+        observation = replace(
+            observation,
+            player=replace(observation.player, turn=5, hunger=1),
+            map=replace(
+                observation.map,
+                glyph_rows=(observation.map.glyph_rows[0][:-1] + (body,),),
+            ),
+        )
+        memory = LevelMemory()
+        memory.observe(observation)
+        kill = CorpseKill("lichen", 2, LevelKey(0, 1), MapCell(length, 0))
+        proposal = skill.select_action(
+            observation, memory, actions, {(kill.level, kill.cell): kill}, set()
+        )
+        if length == 5:
+            assert proposal is not None
+            assert action_name(actions, proposal.action_index) == "CompassDirection.E"
+            assert proposal.intent is not None
+            assert proposal.intent.destination == IntentDestination(
+                DestinationKind.CORPSE, length, 0
+            )
+            assert len(proposal.intent.path or ()) == 5
+            assert_followed_route(proposal, (0, 0))
+            disguised_ration = replace(
+                observation,
+                map=replace(
+                    observation.map,
+                    glyph_rows=(observation.map.glyph_rows[0][:-1] + (_GLYPHS["%"],),),
+                ),
+            )
+            assert (
+                skill.select_action(
+                    disguised_ration,
+                    memory,
+                    actions,
+                    {(kill.level, kill.cell): kill},
+                    set(),
+                )
+                is None
+            )
+        else:
+            assert proposal is None
+
+
+def test_corpse_skill_requires_fresh_identity_underfoot_and_exact_confirmation(
+    template: ProjectedObservation, actions: dict[str, LegalAction]
+) -> None:
+    observation = sketch(
+        template, ("@.",), message="You see here a lichen corpse.", step=4
+    )
+    observation = replace(
+        observation, player=replace(observation.player, turn=21, hunger=1)
+    )
+    memory = LevelMemory()
+    memory.observe(observation)
+    kill = CorpseKill("lichen", 2, LevelKey(0, 1), MapCell(0, 0))
+    kills = {(kill.level, kill.cell): kill}
+    skill = CorpseSkill()
+    proposal = skill.select_action(observation, memory, actions, kills, set())
+    assert proposal is not None
+    assert action_name(actions, proposal.action_index) == "Command.EAT"
+    assert proposal.intent is not None and proposal.intent.corpse is not None
+    evidence = proposal.intent.corpse
+    assert evidence.age == 19
+    assert (
+        skill.select_action(
+            replace(observation, player=replace(observation.player, hunger=0)),
+            memory,
+            actions,
+            kills,
+            set(),
+        )
+        is None
+    )
+    assert (
+        skill.select_action(
+            replace(observation, player=replace(observation.player, turn=22)),
+            memory,
+            actions,
+            kills,
+            set(),
+        )
+        is None
+    )
+    assert (
+        skill.select_action(
+            replace(observation, message="You see here a jackal corpse."),
+            memory,
+            actions,
+            kills,
+            set(),
+        )
+        is None
+    )
+    assert skill.select_action(observation, memory, actions, kills, {kill}) is None
+    by_command = {action.command: action for action in actions.values()}
+    prompt = replace(
+        observation,
+        message="There is a lichen corpse here; eat it? [ynq] (n) ",
+        prompt=PromptState(True, False, False),
+    )
+    confirmation = skill.confirm(prompt, by_command, evidence)
+    assert confirmation is not None
+    assert confirmation.action_index == by_command[ord("y")].index
+    assert (
+        skill.confirm(
+            replace(
+                prompt, message="There is a jackal corpse here; eat it? [ynq] (n) "
+            ),
+            by_command,
+            evidence,
+        )
+        is None
+    )
+    assert (
+        skill.confirm(
+            replace(prompt, message=prompt.message.rstrip()), by_command, evidence
         )
         is None
     )

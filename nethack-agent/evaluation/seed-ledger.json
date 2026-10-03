@@ -86,6 +86,28 @@
         ]
       ],
       "note": "Real NLE prayer probes: SEARCH-only first-Weak seeds 1100-1109; scripted coordinator combat first-Weak seeds 1110-1129; early-turn controls on 1110-1112 (note 0026)."
+    },
+    {
+      "source": "note-0027-corpse-development-probes",
+      "seeds": [],
+      "ranges": [
+        [
+          1130,
+          1149
+        ]
+      ],
+      "note": "Real-NLE scripted coordinator corpse development seeds 1130-1149, including the safe-meal regression (note 0027)."
+    },
+    {
+      "source": "bounded-search-development-probes",
+      "seeds": [],
+      "ranges": [
+        [
+          1150,
+          1169
+        ]
+      ],
+      "note": "bounded-search probe at a58902a, coordinator, reach_level(0,5), cap 3000"
     }
   ]
 }

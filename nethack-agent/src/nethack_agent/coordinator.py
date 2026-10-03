@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Final
 
+from nethack_agent.corpse import CorpseKill, eligible_corpse, observed_corpse_kill
 from nethack_agent.decision import (
     EAT_ACTION_NAME,
     LEVEL_CHANGE_ACTIONS,
@@ -13,6 +14,9 @@ from nethack_agent.decision import (
     YES_COMMAND,
     ActionSelection,
     ActionSelectionSource,
+    CorpseEvidence,
+    CorpseOutcome,
+    CorpseOutcomeKind,
     HungerPermit,
     MapCell,
     ModelActionDecision,
@@ -29,9 +33,11 @@ from nethack_agent.decision import (
     SkillSelectionSource,
     StuckReason,
     TraversalPermit,
+    classify_corpse_outcome,
     classify_prayer_outcome,
     confirmation_answer_error,
     confirmation_prompt_kind,
+    corpse_confirmation_error,
     hunger_action_error,
     level_change_error,
     model_selectable_skills,
@@ -51,6 +57,7 @@ from nethack_agent.observation import ObservationProjector, ProjectedObservation
 from nethack_agent.planner import ObjectivePlanner, leg_complete
 from nethack_agent.replay import routine_actions, stair_target
 from nethack_agent.skills import (
+    CorpseSkill,
     ExploreLevelSkill,
     GoldNavigationSkill,
     HungerSkill,
@@ -58,6 +65,7 @@ from nethack_agent.skills import (
     SafePromptHandler,
     SkillAction,
     StaircaseNavigationSkill,
+    _attack_adjacent_hostile,
     item_selection_commands,
     safe_food_rations,
 )
@@ -187,6 +195,25 @@ class ActionGate:
             raise ActionGateError(
                 f"{action.name} is forbidden: EAT requires a hunger permit"
             )
+        if (
+            role is ActionRole.HUNGER
+            and hunger_permit is not None
+            and hunger_permit.corpse is not None
+        ):
+            if before is None or selection is None:
+                raise ActionGateError("corpse EAT requires observed selection evidence")
+            error = hunger_action_error(
+                action.name,
+                selection,
+                hunger=before.player.hunger,
+                prompt_active=before.prompt.active,
+                safe_ration_available=bool(safe_food_rations(before)),
+                corpse_evidence=hunger_permit.corpse,
+                observed_corpse=hunger_permit.corpse,
+                observation=before,
+            )
+            if error is not None:
+                raise ActionGateError(error)
         if role is ActionRole.PRAYER:
             if selection is None:
                 raise ActionGateError("PRAY requires a deterministic prayer skill")
@@ -236,6 +263,19 @@ class ActionGate:
             )
             if error is not None:
                 raise ActionGateError(error)
+            if selection.skill is Skill.CORPSE:
+                evidence = None if selection.intent is None else selection.intent.corpse
+                error = corpse_confirmation_error(
+                    action.command,
+                    selection,
+                    prompt_active=before.prompt.single_character_choice,
+                    prompt_message=before.message,
+                    corpse_evidence=evidence,
+                    observed_corpse=evidence,
+                    observation=before,
+                )
+                if error is not None:
+                    raise ActionGateError(error)
         return action
 
 
@@ -328,6 +368,16 @@ class AgentCoordinator:
             if task.action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
             else None
         )
+        self._corpse = (
+            CorpseSkill()
+            if task.action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
+            else None
+        )
+        self._corpse_kills: dict[tuple[LevelKey, MapCell], CorpseKill] = {}
+        self._consumed_corpses: set[CorpseKill] = set()
+        self._pending_corpse: CorpseEvidence | None = None
+        self._pending_corpse_step: int | None = None
+        self._meal_corpse: CorpseEvidence | None = None
         self._prayer_count = 0
         self._last_prayer_turn: int | None = None
         self._prayer_kill_count = 0
@@ -377,6 +427,11 @@ class AgentCoordinator:
             self._prayer_kill_count = 0
             self._pending_prayer = None
             self._pending_prayer_step = None
+            self._corpse_kills.clear()
+            self._consumed_corpses.clear()
+            self._pending_corpse = None
+            self._pending_corpse_step = None
+            self._meal_corpse = None
             try:
                 raw = self._environment.reset()
                 self._observation = self._projector.project(raw, step_index=0)
@@ -498,6 +553,9 @@ class AgentCoordinator:
                     selection = self._commit_prayer_locked(
                         selection, action, before, after, transition
                     )
+                    selection = self._commit_corpse_locked(
+                        selection, action, before, after, transition
+                    )
                     self._commit_plan_locked(plan, before)
                     outcome = self._terminal_outcome(transition)
                     if outcome is None:
@@ -554,14 +612,7 @@ class AgentCoordinator:
         canceled: Callable[[], bool],
         leg: int,
     ) -> _Plan | None:
-        """Choose one action; return None when a lifecycle change canceled it.
-
-        The objective planner sets the step's goal. Verified ration and its
-        pending item answer precede a pending exploration kick. Then an exact
-        pending prayer prompt, safe adjacent defense, and a guarded first prayer
-        precede safe prompt handling and ordinary navigation/exploration.
-        Exhausted exploration may consult the model for a fallback.
-        """
+        """Select prompt answers, then defense, prayer, ration, corpse, navigation."""
         memory = self._dungeon.observe(before)
         goal = self._plan_goal(leg, memory)
         skill_model_decision: ModelSkillDecision | None = None
@@ -573,16 +624,33 @@ class AgentCoordinator:
         actions = self._gate.actions_by_name
         arbiter = SkillSelectionSource.ARBITER
 
-        if self._hunger is not None:
+        if (
+            before.prompt.active
+            and self._pending_corpse is not None
+            and self._pending_corpse_step == before.step_index - 1
+        ):
+            corpse = CorpseSkill.confirm(
+                before, self._gate.actions_by_command, self._pending_corpse
+            )
+            if corpse is None:
+                corpse = CorpseSkill.decline(
+                    before, self._gate.actions_by_command, self._pending_corpse
+                )
+            if corpse is not None:
+                return self._skill_plan(
+                    corpse,
+                    goal,
+                    Skill.CORPSE,
+                    arbiter,
+                    None,
+                    skill_model_decision,
+                    source=ActionSelectionSource.DETERMINISTIC_PROMPT,
+                )
+        if before.prompt.active and self._hunger is not None:
             hunger = self._hunger.select_action(
                 before, actions, self._gate.actions_by_command
             )
             if hunger is not None:
-                source = (
-                    ActionSelectionSource.DETERMINISTIC_PROMPT
-                    if before.prompt.active
-                    else ActionSelectionSource.DETERMINISTIC_SKILL
-                )
                 return self._skill_plan(
                     hunger,
                     goal,
@@ -590,15 +658,25 @@ class AgentCoordinator:
                     arbiter,
                     None,
                     skill_model_decision,
-                    source=source,
+                    source=ActionSelectionSource.DETERMINISTIC_PROMPT,
                 )
-
-        kick = self._exploration.continue_kick(before, memory, actions)
-        if kick is not None:
-            return self._skill_plan(
-                kick, goal, Skill.EXPLORE_LEVEL, arbiter, None, skill_model_decision
-            )
-
+        if not before.prompt.active and self._corpse is not None:
+            defense = _attack_adjacent_hostile(memory, actions, None)
+            if defense is not None:
+                return self._skill_plan(
+                    defense,
+                    goal,
+                    Skill.EXPLORE_LEVEL,
+                    arbiter,
+                    None,
+                    skill_model_decision,
+                )
+        if not before.prompt.active and self._meal_corpse is not None:
+            meal = CorpseSkill.continue_meal(before, actions, self._meal_corpse)
+            if meal is not None:
+                return self._skill_plan(
+                    meal, goal, Skill.CORPSE, arbiter, None, skill_model_decision
+                )
         if self._prayer is not None:
             pending = (
                 self._pending_prayer
@@ -630,6 +708,28 @@ class AgentCoordinator:
                     skill_model_decision,
                     source=source,
                 )
+        if not before.prompt.active and self._hunger is not None:
+            hunger = self._hunger.select_action(
+                before, actions, self._gate.actions_by_command
+            )
+            if hunger is not None:
+                return self._skill_plan(
+                    hunger, goal, Skill.HUNGER, arbiter, None, skill_model_decision
+                )
+        if not before.prompt.active and self._corpse is not None:
+            corpse = self._corpse.select_action(
+                before, memory, actions, self._corpse_kills, self._consumed_corpses
+            )
+            if corpse is not None:
+                return self._skill_plan(
+                    corpse, goal, Skill.CORPSE, arbiter, None, skill_model_decision
+                )
+
+        kick = self._exploration.continue_kick(before, memory, actions)
+        if kick is not None:
+            return self._skill_plan(
+                kick, goal, Skill.EXPLORE_LEVEL, arbiter, None, skill_model_decision
+            )
         prompt = self._prompt_handler.select_action(
             before, actions, self._gate.actions_by_command
         )
@@ -876,15 +976,28 @@ class AgentCoordinator:
         if not 0 <= index < len(legal) or legal[index].name != EAT_ACTION_NAME:
             return None
         rations = safe_food_rations(before)
+        evidence = None if selection.intent is None else selection.intent.corpse
+        observed = None
+        if evidence is not None:
+            level = LevelKey(before.player.dungeon_number, before.player.dungeon_level)
+            kill = self._corpse_kills.get((level, evidence.cell))
+            if kill is not None and kill not in self._consumed_corpses:
+                observed = eligible_corpse(kill, before)
         error = hunger_action_error(
             legal[index].name,
             selection,
             hunger=before.player.hunger,
             prompt_active=before.prompt.active,
             safe_ration_available=bool(rations),
+            corpse_evidence=evidence,
+            observed_corpse=observed,
+            observation=before,
         )
         if error is not None:
             raise ActionGateError(error)
+        if evidence is not None:
+            assert observed is not None
+            return HungerPermit(corpse=observed)
         return HungerPermit(rations[0].letter)
 
     def _on_altar(self, observation: ProjectedObservation) -> bool:
@@ -954,6 +1067,33 @@ class AgentCoordinator:
             if error is not None:
                 raise ActionGateError(error)
             return permit
+        if (
+            selection.skill is Skill.CORPSE
+            and selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
+        ):
+            pending = self._pending_corpse
+            evidence = None if selection.intent is None else selection.intent.corpse
+            if (
+                pending is None
+                or self._pending_corpse_step != before.step_index - 1
+                or evidence != pending
+            ):
+                raise ActionGateError(
+                    "corpse prompt requires the preceding EAT evidence"
+                )
+            if action.command == YES_COMMAND:
+                error = corpse_confirmation_error(
+                    action.command,
+                    selection,
+                    prompt_active=before.prompt.single_character_choice,
+                    prompt_message=before.message,
+                    corpse_evidence=evidence,
+                    observed_corpse=pending,
+                    observation=before,
+                )
+                if error is not None:
+                    raise ActionGateError(error)
+                return PromptPermit(YES_COMMAND, PromptKind.CORPSE_CONFIRMATION)
         if not self._gate.is_prompt_key(action) and not (
             selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
             and selection.skill is Skill.HUNGER
@@ -1016,6 +1156,106 @@ class AgentCoordinator:
             self._pending_prayer = None
             self._pending_prayer_step = None
         self._prayer_kill_count += after.message.count("You kill")
+        return selection
+
+    def _commit_corpse_locked(
+        self,
+        selection: ActionSelection,
+        action: LegalAction,
+        before: ProjectedObservation,
+        after: ProjectedObservation,
+        transition: StepTransition,
+    ) -> ActionSelection:
+        if self._corpse is None:
+            return selection
+        # NLE zeroes a terminal observation's statistics, so outcomes are
+        # recorded only for live transitions (as for prayer).
+        live = not transition.terminated and not transition.truncated
+        kill = observed_corpse_kill(before, action, after)
+        if kill is not None:
+            self._corpse_kills[(kill.level, kill.cell)] = kill
+        pending = self._pending_corpse
+        if pending is not None:
+            key = (
+                LevelKey(before.player.dungeon_number, before.player.dungeon_level),
+                pending.cell,
+            )
+            original = self._corpse_kills.get(key)
+            if original is not None and original.turn == pending.kill_turn:
+                self._consumed_corpses.add(original)
+            self._pending_corpse = None
+            self._pending_corpse_step = None
+            if (
+                selection.skill is Skill.CORPSE
+                and selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
+            ):
+                intent = selection.intent
+                assert intent is not None and intent.corpse == pending
+                if action.command == YES_COMMAND:
+                    kind = classify_corpse_outcome(pending.name, after.message)
+                    if kind is None:
+                        self._meal_corpse = pending
+                elif action.command in (ord("n"), 27):
+                    kind = CorpseOutcomeKind.DECLINED
+                else:
+                    kind = None
+                if kind is not None and live:
+                    outcome = CorpseOutcome(
+                        kind, after.player.turn, after.player.hunger, after.message
+                    )
+                    selection = replace(
+                        selection,
+                        intent=replace(
+                            intent, corpse=replace(pending, outcome=outcome)
+                        ),
+                    )
+        if selection.skill is Skill.CORPSE and action.name == EAT_ACTION_NAME:
+            intent = selection.intent
+            assert intent is not None and intent.corpse is not None
+            evidence = intent.corpse
+            key = (
+                LevelKey(before.player.dungeon_number, before.player.dungeon_level),
+                evidence.cell,
+            )
+            if after.prompt.active:
+                self._pending_corpse = evidence
+                self._pending_corpse_step = before.step_index
+            else:
+                original = self._corpse_kills.get(key)
+                if original is not None and original.turn == evidence.kill_turn:
+                    self._consumed_corpses.add(original)
+                if (
+                    "You begin eating" in after.message
+                    or "You start eating" in after.message
+                ):
+                    self._meal_corpse = evidence
+        meal = self._meal_corpse
+        if (
+            meal is not None
+            and not (selection.skill is Skill.CORPSE and action.name == EAT_ACTION_NAME)
+            and not (
+                selection.skill is Skill.CORPSE
+                and selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
+                and action.command == YES_COMMAND
+            )
+        ):
+            kind = classify_corpse_outcome(meal.name, after.message)
+            if kind is not None:
+                self._meal_corpse = None
+                if (
+                    live
+                    and selection.skill is Skill.CORPSE
+                    and action.name == "MiscDirection.WAIT"
+                ):
+                    intent = selection.intent
+                    assert intent is not None and intent.corpse == meal
+                    outcome = CorpseOutcome(
+                        kind, after.player.turn, after.player.hunger, after.message
+                    )
+                    selection = replace(
+                        selection,
+                        intent=replace(intent, corpse=replace(meal, outcome=outcome)),
+                    )
         return selection
 
     def _select_skill(

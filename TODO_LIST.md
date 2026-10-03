@@ -43,7 +43,7 @@ Work, in order:
 - [x] Reviewed, cited knowledge cards for prayer and hunger and for safe corpse eating (`survival-reviewed-v1`, not yet active; [note 0024](docs/notes/0024-reviewed-survival-knowledge.md)).
 - [x] Survival action profile and gate roles: PRAY, eating, and the prayer and eating confirmations accepted only as offered answers; the evaluator audits them with the same predicate. Item 6 kept PRAY blocked pending the deterministic skill ([note 0025](docs/notes/0025-survival-action-profile-and-prayer-gate.md)).
 - [x] Deterministic prayer skill: pray when Weak and the tracked prayer timeout is safe; record the prayer, observed kill-message proxy, and outcome in the intent ([note 0026](docs/notes/0026-deterministic-prayer-and-probe-evidence.md)).
-- [ ] Corpse eating: eat fresh corpses on the reviewed safe list; decline everything else.
+- [x] Corpse eating: eat only fresh, identifiable corpses of observed kills on the five-species reviewed safe list; decline everything else ([note 0027](docs/notes/0027-safe-fresh-corpse-eating.md)).
 - [ ] Bounded search: order hidden-passage search by promise and cap it with a per-level budget fixed from held-out probes.
 - [ ] New policy version, held-out probes, committed suites, one real-model run, and docs (`ARCHITECTURE.md`, `README.md`, development guide, a note); mark ADR 0005 accepted.
 
@@ -61,7 +61,8 @@ Dependency order for the four capability items below: traversal goals, then NLE 
   - [x] Hunger: `nle-hunger-actions` adds only ESC and deduplicated inventory letters to `TASK_ACTIONS`; eat an exactly recognized inventory ration at Hungry or worse and answer its matching item prompt.
   - [x] Covered stairs: recognized from look-here messages as part of traversal memory (seed 5).
   - [ ] Prompt handlers ship with the actions that cause them:
-    - [x] Inventory-ration item selection and conservative `eat it?` decline.
+    - [x] Inventory-ration item selection and conservative decline of unverified floor-food `eat it?` prompts.
+    - [x] Exact-name fresh-corpse floor confirmation and conservative decline of every other corpse offer.
   - [ ] Navigation and general inventory skills only after a failure class recurs in traversal or task-suite evidence.
 - [ ] Evaluate whether Laya improves routine action ranking enough to justify another model runtime.
 - [ ] Survey the [Janelia FlyEM male CNS connectome](https://www.janelia.org/project-team/flyem/male-cns-connectome) and define a bounded, evidence-driven comparison of any connectome-inspired planning or action-ranking approach against current baselines; this is research, not a production commitment.

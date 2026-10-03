@@ -6,7 +6,7 @@ Build a local, autonomous NetHack agent whose long-term success criterion is asc
 
 ## Current status
 
-The deterministic NLE adapter, immutable observation projector, typed traversal planner, per-level dungeon memory, deterministic staircase-navigation, exploration, gold-navigation and bounded hunger skills, contextual action gate, structured Ollama decision model, reviewed local knowledge, typed SQLite event log, loopback control service and browser UI, scenario orchestrator, network-boundary verifier, exhaustion-marker replay, and policy-pinned evaluation harness with typed metric thresholds are implemented. Milestone 1, traversal-policy, and survival-policy evidence remain accepted or recorded as they were; the current behavior is `hierarchical-task-progression-v1`.
+The deterministic NLE adapter, immutable observation projector, typed traversal planner, per-level dungeon memory, deterministic staircase-navigation, exploration, gold-navigation, bounded hunger, prayer, and safe-corpse skills, contextual action gate, structured Ollama decision model, reviewed local knowledge, typed SQLite event log, loopback control service and browser UI, scenario orchestrator, network-boundary verifier, exhaustion-marker replay, and policy-pinned evaluation harness with typed metric thresholds are implemented. Milestone 1, traversal-policy, and survival-policy evidence remain accepted or recorded as they were; `POLICY_VERSION` remains `hierarchical-task-specialists-v1`.
 
 ## System context
 
@@ -185,30 +185,35 @@ or implement a deterministic skill for a simple recurring case.
 offering exactly the planner's goal and the skills that can serve it
 (`decision.model_selectable_skills`): staircase navigation and exploration for
 a stair goal, exploration alone for an `explore_level` goal. A deterministic
-arbiter owns execution; the hunger, prayer, and gold-navigation skills are
-never model choices. Per step, in order:
+arbiter owns execution; the hunger, prayer, corpse, and gold-navigation skills
+are never model choices. Per step, in order:
 
-1. on `nle-hunger-actions` and `nle-survival-actions` runs, `HungerSkill`
-   continues its one-prompt sequence or, with no prompt active, proposes `EAT`
-   only at NLE hunger value 2 (Hungry) or worse and only for the first
-   inventory-letter-sorted item
-   whose typed letter, food object class, exact normalized food-ration
-   description, and BUC evidence agree;
-2. a pending direction prompt from exploration's own kick is answered;
-3. on `nle-survival-actions`, `PrayerSkill` answers an exact pending prayer
-   confirmation, fights a safely attackable adjacent hostile before praying,
-   then considers PRAY for Weak-or-worse hunger without a verified ration,
-   a prompt, or an observed altar, after its conservatively estimated timeout;
-4. `SafePromptHandler` acknowledges wait-for-space prompts, cancels text input,
+1. on `nle-survival-actions`, finish a pending prayer, ration, or corpse prompt;
+   otherwise defend against a safely attackable adjacent hostile;
+2. `PrayerSkill` considers PRAY for Weak-or-worse hunger with no known ration,
+   active prompt, or observed altar, after its conservative timeout bound;
+3. `HungerSkill` proposes `EAT` for the first exactly verified inventory food
+   ration at NLE hunger value 2 (Hungry) or worse, answering only its offered
+   inventory letter on the next prompt. This is also the only food policy on
+   `nle-hunger-actions`;
+4. `CorpseSkill`, only on `nle-survival-actions`, considers a not-Satiated hero's
+   own observed kill from the reviewed five-species allow-list. It requires
+   game-turn age at most 19, a visible corpse at the kill cell, and a passable
+   route of at most five steps. On that cell, only an exact matching look-here
+   message permits `EAT`; only the following exact matching floor prompt gets
+   `y`. A missing floor corpse that instead opens an inventory prompt gets ESC.
+   Other floor-corpse prompts are declined, not guessed;
+5. a pending direction prompt from exploration's own kick is answered;
+6. `SafePromptHandler` acknowledges wait-for-space prompts, cancels text input,
    and declines other recognizable yes/no prompts, including peaceful attacks
-   and floor-food `eat it?`;
-5. any other prompt goes to the model as a fallback action;
-6. `StaircaseNavigationSkill` ranks remembered compatible staircases by
+   and unfamiliar floor-food `eat it?` prompts;
+7. any other prompt goes to the model as a fallback action;
+8. `StaircaseNavigationSkill` ranks remembered compatible staircases by
    established identity before a probe, then route distance, row, and column.
    On the chosen staircase it fights an adjacent safe-to-melee hostile before
    either waiting or traversing. Stepping onto an adjacent staircase still
    completes or enables the goal immediately;
-7. on `NetHackGold-v0` under an `explore_level` goal, `GoldNavigationSkill`
+9. on `NetHackGold-v0` under an `explore_level` goal, `GoldNavigationSkill`
    routes onto the reachable cell whose current glyph is exactly the gold-piece
    glyph (`LevelMemory.gold`, rederived from every observation and never
    remembered), ranked by route distance, row, and column and skipping goals
@@ -217,7 +222,7 @@ never model choices. Per step, in order:
    Its intent has a `gold` destination, only `gold_navigation` steps may carry
    one, and the evaluator reports an integrity problem when that cell did not
    show the gold glyph on the level of the observation the step was decided on;
-8. `ExploreLevelSkill` acts, biased toward unreachable compatible staircases
+10. `ExploreLevelSkill` acts, biased toward unreachable compatible staircases
    of a stair goal, or reports a typed `StuckReason`. The first
    `search_exhausted` report at the level's current knowledge marks the level
    exhausted and explored and records `selection.exhausted_level` on that
@@ -250,8 +255,9 @@ cannot be told apart before one of these rules applies. Current limits: a
 Mines entrance behind a secret door can be missed; Sokoban's dungeon number is
 inferred from `dungeon.def` order and has not been reached; and ladders and
 portals are not stairs. Survival policy is intentionally narrow: it has no
-retreat, rest, weapon, floor-food, general inventory, prayer, or speculative
-navigation policy.
+retreat, rest, weapon, arbitrary floor-food, general inventory, or speculative
+navigation policy; only guarded Weak prayer and specifically verified fresh
+corpses extend the known-ration policy.
 
 Breadth-first routes follow NetHack 3.6.7 `test_move`: no diagonal move into or
 out of an open or closed door (doorless and broken doorways allow diagonals),
@@ -290,22 +296,34 @@ re-armed exploration that still cannot act, yields a model fallback action.
 
 Every proposal passes through `ActionGate`, which verifies the finite action
 index and its profile role. Level changes require a matching
-`TraversalPermit`; `EAT` requires a `HungerPermit`; added `prompt_key` actions
+`TraversalPermit`; `EAT` requires a `HungerPermit` for either the verified
+inventory ration or a matching fresh corpse; added `prompt_key` actions
 require a `PromptPermit` for the same integer command. None of those actions is
 offered to model fallback, and fallback inventory rendering omits raw letters.
 An existing movement-letter collision remains a routine action, but the same
 prompt predicate can authorize it as a deterministic response when that exact
 letter is offered.
 
-The hunger permit predicate requires a `deterministic_skill` selection by
-`hunger`, no active prompt, NLE hunger 2 or worse, and an explicitly recognized
-safe ration in the decided-on typed inventory. The prompt permit predicate
-requires `deterministic_prompt`/`hunger`, an active exact NLE eat-item prompt,
-and either ESC or a command literally present in its offered letters. The
-one-step pending ration is cleared after the next observation; changed,
-missing, or unoffered item evidence cancels the recognized prompt with ESC.
-The shared structural predicate also rejects invalid persisted EAT and added
-prompt-key selections during event construction.
+For inventory rations, the hunger permit predicate requires a
+`deterministic_skill` selection by `hunger`, no active prompt, NLE hunger 2 or
+worse, and an exactly recognized safe ration in the decided-on typed inventory.
+The item prompt predicate requires `deterministic_prompt`/`hunger`, an active
+exact NLE eat-item prompt, and either ESC or a command literally present in its
+offered letters. The one-step pending ration is cleared after the next
+observation; changed, missing, or unoffered item evidence cancels with ESC.
+
+For corpses, the same hunger-role gate issues its typed permit only when the
+recorded kill, allow-listed name, cell, freshness, and exact look-here identity
+match the live observation. A separate exact-name
+`PromptPermit(y, CORPSE_CONFIRMATION)` is valid only for the pending EAT and
+matching floor confirmation. The evaluator reconstructs kills and consumed
+corpses from stored observations and replays the same predicates; a claim in
+an intent alone never proves a corpse safe. A meal is not restarted while
+NetHack reports it still in progress. Finished/interrupted/declined outcomes
+are recorded only on live observations; terminal or truncated confirmation
+and continuation steps carry no classified outcome. A live completion message
+must carry its matching outcome, while a still-running meal has none. See
+[note 0027](docs/notes/0027-safe-fresh-corpse-eating.md).
 
 The survival profile excludes PRAY and ambiguous `y`/northwest from model
 fallback. Prayer needs a `deterministic_skill` selection, a one-turn
@@ -318,13 +336,15 @@ hidden-state risk. The count of literal `You kill` messages is recorded as
 evidence but never used as a gate: it is not the hidden alignment record.
 The `y` command remains available for deterministic northwest movement outside
 prompts. During the exact NLE prayer confirmation, it needs a pending PRAY and
-matching typed `PromptPermit(y, PRAYER_CONFIRMATION)`. The hunger item prompt
-can still literally offer inventory letter `y`; a corpse `eat it?` confirmation
-is still declined until the separate corpse-eating skill exists. The event
-contract validates typed prayer evidence and following outcome, while the
-evaluator reconstructs prayer history from stored steps and replays the shared
-predicate against each decided-on observation (including the known ration and
-literal kill-message count). See [note 0026](docs/notes/0026-deterministic-prayer-and-probe-evidence.md).
+matching typed `PromptPermit(y, PRAYER_CONFIRMATION)`. During a matching fresh
+corpse confirmation, it needs a pending corpse EAT and a distinct
+`PromptPermit(y, CORPSE_CONFIRMATION)` with the same expected species. An
+unrecognized or different corpse offer is declined. The hunger item prompt
+can still literally offer inventory letter `y`. The event contract validates
+typed prayer and corpse evidence and outcomes, while the evaluator reconstructs
+the history from stored steps and replays the shared predicates. See
+[notes 0026](docs/notes/0026-deterministic-prayer-and-probe-evidence.md) and
+[0027](docs/notes/0027-safe-fresh-corpse-eating.md).
 
 The traversal permit remains as in ADR 0004. The shared
 `decision.level_change_error` predicate requires a level-changing objective,
@@ -364,6 +384,13 @@ trigger, game turn, timeout bound, and count of literal `You kill` messages;
 its exact confirmation step records the first live outcome and message. A
 terminal/truncated confirmation has no reliable live outcome because NLE
 zeroes the bottom-line stats, so the outcome remains absent.
+
+Corpse intents record the allow-listed species, the observed kill turn, the
+current game-turn age, and the kill cell. A routed move targets that cell; EAT
+and its exact confirmation retain the corpse evidence and classify the live
+meal as finished, interrupted, or declined when observable. An unobserved,
+covered, displaced, old, or non-allow-listed corpse cannot inherit permission
+from a look-here message alone.
 
 The destination is usually not the adjacent cell the action steps into. The
 coordinator stamps every skill intent with the `level` (dungeon number and
@@ -464,15 +491,16 @@ current goal stands on or uses a staircase, and model fallbacks are never
 offered `<` or `>`. The earlier `staircase-reviewed-v1` and `-v2` bundles
 remain the knowledge of the accepted milestone 1 reports.
 
-The new **not yet active** `survival-reviewed-v1` bundle retains staircase
-and exploration guidance, and adds cited prayer/hunger and conservative
-fresh-corpse cards; `safe-interaction` remains in the default bundle but is
-omitted from the named one to meet the fixed context budget. Its verified
-context is 5,917 characters / 1,480 estimated tokens. An observed kill on
-the corpse's cell within 19 game turns is required for ordinary low-risk
-corpses; uncertainty about curse, age, identity, or prayer timeout is never
-converted into an asserted safe action. Gate/skill adoption belongs to a
-later policy version, not this review
+The **not yet active** `survival-reviewed-v1` bundle retains staircase and
+exploration guidance and adds cited prayer/hunger and conservative fresh-corpse
+cards; `safe-interaction` remains in the default bundle but is omitted from
+the named one to meet the fixed context budget. Its verified context is 5,917
+characters / 1,480 estimated tokens. The current deterministic prayer and
+corpse skills implement the reviewed rules for the `nle-survival-actions`
+profile without activating this knowledge bundle or changing `POLICY_VERSION`.
+An observed kill on the corpse's cell within 19 game turns is required;
+uncertainty about curse, age, identity, or prayer timeout is never converted
+into an asserted safe action
 ([note 0024](docs/notes/0024-reviewed-survival-knowledge.md)).
 
 ### Persistence and replay

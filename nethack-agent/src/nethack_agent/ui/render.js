@@ -69,7 +69,7 @@ const FIELD_HELP = Object.freeze({
   Evidence: "The exact typed event field that qualifies this row as deterministic execution.",
   Player: "The hero's cell from the projected player coordinates. This highlight wins over every other map highlight.",
   Pet: "A cell whose glyph NLE identifies as a pet (the observation's pet_rows). Observations recorded before pet evidence existed show none. The fill stays visible beneath a destination box, attack-target box, or path tint.",
-  Destination: "The cell the latest step's deterministic skill works toward: a frontier, remembered downstairs or upstairs, search spot, locked door, or displayed gold. Usually not the adjacent cell stepped into; hidden when it is the player's own cell. A step that used a staircase recorded its intent on the previous level, so the new level's map shows none.",
+  Destination: "The cell the latest step's deterministic skill works toward: a frontier, remembered downstairs or upstairs, search spot, locked door, displayed gold, or verified fresh corpse. Usually not the adjacent cell stepped into; hidden when it is the player's own cell. A step that used a staircase recorded its intent on the previous level, so the new level's map shows none.",
   "Attack target": "The displayed hostile monster the latest step's deterministic skill attacks by moving into it. Its box wins over a destination box on the same cell.",
   Path: "The breadth-first route a deterministic skill's step followed, in order from the cell it stepped into to its destination (for a locked door, the cell beside it where the hero kicks). The map tints it beneath the destination and attack-target boxes; the player's cell hides it. Show path turns the map tint off. Waiting, searching, kicking, adjacent-hostile defense, prompt answers, model fallbacks, and steps recorded before routes existed have none.",
 });
@@ -78,6 +78,7 @@ const VALUE_HELP = Object.freeze({
   staircase_navigation: "Skill.STAIRCASE_NAVIGATION: route to the nearest remembered reachable staircase that matches the goal, handling an adjacent hostile first, then wait on it or use it as the goal requires.",
   explore_level: "Skill.EXPLORE_LEVEL: explore unseen space, handle doors and adjacent hostiles, and search for hidden passages.",
   gold_navigation: "Skill.GOLD_NAVIGATION: on NetHackGold-v0, route onto the nearest reachable displayed gold, which NLE's pickup_types:$ option picks up; handles an adjacent hostile first. Never offered to the model.",
+  corpse: "Skill.CORPSE: consider only a visible corpse at the cell of an observed, fresh, allow-listed kill; follow at most five reachable steps, then verify its exact species before eating. Never offered to the model.",
   arbiter: "The deterministic arbiter selected the skill for this step.",
   model: "The model selected the skill after deterministic exploration reported that it was stuck.",
   deterministic_skill: "A deterministic skill selected this action.",
@@ -462,6 +463,7 @@ const DESTINATION_LABELS = Object.freeze({
   search_spot: "search spot",
   locked_door: "locked door",
   gold: "gold",
+  corpse: "fresh corpse",
 });
 
 const DESTINATION_HELP = Object.freeze({
@@ -471,11 +473,12 @@ const DESTINATION_HELP = Object.freeze({
   search_spot: "Destination search spot: the committed cell exploration walks to and searches for hidden passages from.",
   locked_door: "Destination locked door: the known-locked door exploration walks beside, kicks, and aims its kick at.",
   gold: "Destination gold: the displayed gold-piece stack gold navigation walks onto to pick it up.",
+  corpse: "Destination fresh corpse: the cell of a recent, observed, allow-listed kill with a visible corpse; its exact identity must be checked before eating.",
 });
 
 const ATTACK_HELP = "Attack target: the adjacent displayed hostile monster this action attacks by moving into it.";
 const NO_INTENT_HELP =
-  "No intent recorded: a prompt answer, a model fallback, a skill action without a map target, or a step stored before intents existed.";
+  "No intent recorded: a prompt answer without its own typed evidence, a model fallback, a skill action without a map target, or a step stored before intents existed.";
 
 function cellText(cell) {
   return `(${cell.x}, ${cell.y})`;
@@ -501,6 +504,12 @@ export function intentFact(intent) {
   if (intent.attack_target) {
     text.push(`attack target: ${cellText(intent.attack_target)}`);
     help.push(ATTACK_HELP);
+  }
+  if (intent.corpse) {
+    const corpse = intent.corpse;
+    const outcome = corpse.outcome?.kind ?? "pending";
+    text.push(`corpse: ${corpse.name}, kill turn ${corpse.kill_turn}, age ${corpse.age}, cell ${cellText(corpse.cell)}, ${outcome}`);
+    help.push("Corpse evidence: the observed monster killed on this cell, its game-turn age when the action was selected, and the observed meal outcome. The evaluator rechecks identity, freshness, and prompt text.");
   }
   if (intent.level) {
     text.push(`level ${levelText(intent.level)}`);

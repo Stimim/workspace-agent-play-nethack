@@ -17,6 +17,7 @@ from nethack_agent.contracts import (
     optional_enum_value,
     string_value,
 )
+from nethack_agent.observation import ProjectedObservation
 from nethack_agent.tasks import PROMPT_KEY_ACTION_NAMES
 from nethack_agent.traversal import (
     DUNGEON_EXIT_LEVEL,
@@ -45,15 +46,25 @@ PRAY_ACTION_NAME: Final = "Command.PRAY"
 YES_COMMAND: Final = ord("y")
 _PRAYER_CONFIRMATION: Final = "Are you sure you want to pray? [yn] (n) "
 _FLOOR_CORPSE_CONFIRMATION: Final = re.compile(
-    r"There is a [a-z][a-z -]* corpse here; eat it\? \[ynq\] \(n\) "
+    r"There is a ([a-z][a-z -]*) corpse here; eat it\? \[ynq\] \(n\) \Z"
 )
 EAT_ACTION_NAME: Final = "Command.EAT"
 ESC_COMMAND: Final = 27
+ALLOWED_CORPSES: Final = frozenset(
+    {"lichen", "newt", "sewer rat", "giant rat", "gecko"}
+)
+
+
+def parse_floor_corpse_prompt(message: str) -> str | None:
+    """Return only the exact corpse noun in NetHack's floor-eat question."""
+    match = _FLOOR_CORPSE_CONFIRMATION.fullmatch(message)
+    return None if match is None else match.group(1)
 
 
 class Skill(Enum):
     STAIRCASE_NAVIGATION = "staircase_navigation"
     EXPLORE_LEVEL = "explore_level"
+    CORPSE = "corpse"
     HUNGER = "hunger"
     PRAYER = "prayer"
     # Route to visible gold on NetHackGold-v0; deterministic, never offered to
@@ -106,6 +117,7 @@ class DestinationKind(Enum):
     LOCKED_DOOR = "locked_door"
     # A displayed gold-piece stack gold navigation routes onto.
     GOLD = "gold"
+    CORPSE = "corpse"
 
 
 STAIR_DESTINATIONS: Final = {
@@ -531,6 +543,117 @@ class IntentDestination:
         )
 
 
+class CorpseOutcomeKind(Enum):
+    FINISHED = "finished"
+    INTERRUPTED = "interrupted"
+    DECLINED = "declined"
+
+
+@dataclass(frozen=True, slots=True)
+class CorpseOutcome:
+    kind: CorpseOutcomeKind
+    turn: int
+    hunger: int
+    message: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.kind, CorpseOutcomeKind):
+            raise TypeError("corpse outcome kind must be a CorpseOutcomeKind")
+        integer_value(self.turn, "corpse outcome turn", minimum=0)
+        integer_value(self.hunger, "corpse outcome hunger", minimum=0)
+        string_value(self.message, "corpse outcome message", maximum=4096)
+
+    def to_json(self) -> dict[str, object]:
+        return {
+            "kind": self.kind.value,
+            "turn": self.turn,
+            "hunger": self.hunger,
+            "message": self.message,
+        }
+
+    @classmethod
+    def from_json(cls, value: object) -> Self:
+        payload = object_value(
+            value, "corpse outcome", {"kind", "turn", "hunger", "message"}
+        )
+        return cls(
+            kind=enum_value(payload["kind"], "corpse outcome kind", CorpseOutcomeKind),
+            turn=integer_value(payload["turn"], "corpse outcome turn", minimum=0),
+            hunger=integer_value(payload["hunger"], "corpse outcome hunger", minimum=0),
+            message=string_value(
+                payload["message"], "corpse outcome message", maximum=4096
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class CorpseEvidence:
+    name: str
+    kill_turn: int
+    age: int
+    cell: MapCell
+    outcome: CorpseOutcome | None = None
+
+    def __post_init__(self) -> None:
+        string_value(self.name, "corpse name", minimum=1, maximum=100)
+        if re.fullmatch(r"[a-z][a-z -]*", self.name) is None:
+            raise ContractError("corpse name must be a lowercase monster name")
+        integer_value(self.kill_turn, "corpse kill_turn", minimum=0)
+        integer_value(self.age, "corpse age", minimum=0)
+        if not isinstance(self.cell, MapCell):
+            raise TypeError("corpse cell must be a MapCell")
+        if self.outcome is not None:
+            if not isinstance(self.outcome, CorpseOutcome):
+                raise TypeError("corpse outcome must be a CorpseOutcome or None")
+            if self.outcome.turn < self.kill_turn:
+                raise ContractError("corpse outcome predates the observed kill")
+            classified = classify_corpse_outcome(self.name, self.outcome.message)
+            if self.outcome.kind is CorpseOutcomeKind.DECLINED:
+                if classified is not None:
+                    raise ContractError(
+                        "declined corpse outcome cannot describe a meal"
+                    )
+            elif self.outcome.kind is not classified:
+                raise ContractError("corpse outcome does not match observed meal text")
+
+    def to_json(self) -> dict[str, object]:
+        return {
+            "name": self.name,
+            "kill_turn": self.kill_turn,
+            "age": self.age,
+            "cell": self.cell.to_json(),
+            "outcome": None if self.outcome is None else self.outcome.to_json(),
+        }
+
+    @classmethod
+    def from_json(cls, value: object) -> Self:
+        payload = object_value(
+            value,
+            "corpse evidence",
+            {"name", "kill_turn", "age", "cell"},
+            optional={"outcome"},
+        )
+        outcome = payload.get("outcome")
+        return cls(
+            name=string_value(payload["name"], "corpse name", minimum=1, maximum=100),
+            kill_turn=integer_value(
+                payload["kill_turn"], "corpse kill_turn", minimum=0
+            ),
+            age=integer_value(payload["age"], "corpse age", minimum=0),
+            cell=MapCell.from_json(payload["cell"], "corpse cell"),
+            outcome=None if outcome is None else CorpseOutcome.from_json(outcome),
+        )
+
+
+def classify_corpse_outcome(name: str, message: str) -> CorpseOutcomeKind | None:
+    """Do not call an unfinished multi-turn meal an interruption."""
+    if f"You finish eating the {name} corpse." in message:
+        return CorpseOutcomeKind.FINISHED
+    if "You stop eating" in message or "You are interrupted" in message:
+        return CorpseOutcomeKind.INTERRUPTED
+    return None
+
+
 PRAYER_FIRST_SAFE_TURN: Final = 100
 PRAYER_REPEAT_WAIT_TURNS: Final = 1229
 
@@ -672,6 +795,7 @@ class ActionIntent:
     # intents recorded before levels were.
     level: LevelKey | None = None
     prayer: PrayerEvidence | None = None
+    corpse: CorpseEvidence | None = None
 
     def __post_init__(self) -> None:
         if self.destination is not None and not isinstance(
@@ -686,14 +810,20 @@ class ActionIntent:
             raise TypeError("intent level must be a LevelKey")
         if self.prayer is not None and not isinstance(self.prayer, PrayerEvidence):
             raise TypeError("intent prayer must be a PrayerEvidence or None")
+        if self.corpse is not None and not isinstance(self.corpse, CorpseEvidence):
+            raise TypeError("intent corpse must be a CorpseEvidence or None")
         if (
             self.destination is None
             and self.attack_target is None
             and self.prayer is None
+            and self.corpse is None
         ):
             raise ContractError(
-                "intent requires a destination, attack target, or prayer evidence"
+                "intent requires a destination, attack target, prayer, "
+                "or corpse evidence"
             )
+        if self.prayer is not None and self.corpse is not None:
+            raise ContractError("intent cannot mix prayer and corpse evidence")
         if self.path is not None:
             _validate_path(self.path, self.destination, self.attack_target)
 
@@ -702,6 +832,7 @@ class ActionIntent:
         return (
             *(cell for cell in targets if cell is not None),
             *(self.path or ()),
+            *((self.corpse.cell,) if self.corpse is not None else ()),
         )
 
     def to_json(self) -> dict[str, object]:
@@ -717,6 +848,8 @@ class ActionIntent:
         }
         if self.prayer is not None:
             payload["prayer"] = self.prayer.to_json()
+        if self.corpse is not None:
+            payload["corpse"] = self.corpse.to_json()
         return payload
 
     @classmethod
@@ -728,13 +861,14 @@ class ActionIntent:
             value,
             "intent",
             {"destination", "attack_target"},
-            optional={"path", "level", "prayer"},
+            optional={"path", "level", "prayer", "corpse"},
         )
         destination = payload["destination"]
         attack_target = payload["attack_target"]
         path = payload.get("path")
         level = payload.get("level")
         prayer = payload.get("prayer")
+        corpse = payload.get("corpse")
         if path is not None:
             path = array_value(path, "intent path")
             if len(path) > MAX_INTENT_PATH_LENGTH:
@@ -759,6 +893,7 @@ class ActionIntent:
             ),
             level=None if level is None else LevelKey.from_json(level, "intent level"),
             prayer=None if prayer is None else PrayerEvidence.from_json(prayer),
+            corpse=None if corpse is None else CorpseEvidence.from_json(corpse),
         )
 
 
@@ -839,15 +974,49 @@ class ActionSelection:
                 raise TypeError("intent must be an ActionIntent or None")
             if self.source is not ActionSelectionSource.DETERMINISTIC_SKILL and not (
                 self.source is ActionSelectionSource.DETERMINISTIC_PROMPT
-                and self.skill is Skill.PRAYER
-                and self.intent.prayer is not None
+                and self.skill in (Skill.PRAYER, Skill.CORPSE)
                 and self.intent.destination is None
                 and self.intent.attack_target is None
                 and self.intent.path is None
+                and (
+                    (self.skill is Skill.PRAYER and self.intent.prayer is not None)
+                    or (self.skill is Skill.CORPSE and self.intent.corpse is not None)
+                )
             ):
                 raise ContractError(
-                    "only deterministic skill or prayer prompt selections carry intent"
+                    "only deterministic skill or confirmation prompt selections "
+                    "carry intent"
                 )
+        if (
+            self.intent is not None
+            and self.intent.corpse is not None
+            and self.skill is not Skill.CORPSE
+        ):
+            raise ContractError("only the corpse skill carries corpse evidence")
+        corpse_route = (
+            self.intent is not None
+            and self.intent.destination is not None
+            and self.intent.destination.kind is DestinationKind.CORPSE
+        )
+        if corpse_route and self.skill is not Skill.CORPSE:
+            raise ContractError("only the corpse skill has a corpse destination")
+        if self.skill is Skill.CORPSE and (
+            self.intent is None
+            or self.intent.corpse is None
+            or self.intent.attack_target is not None
+            or (
+                self.intent.destination is not None
+                and self.intent.destination.kind is not DestinationKind.CORPSE
+            )
+            or (
+                self.intent.destination is not None
+                and (
+                    self.intent.destination.x != self.intent.corpse.cell.x
+                    or self.intent.destination.y != self.intent.corpse.cell.y
+                )
+            )
+        ):
+            raise ContractError("corpse skill needs matching corpse evidence and cell")
         gold_intent = (
             self.intent is not None
             and self.intent.destination is not None
@@ -972,9 +1141,16 @@ class TraversalPermit:
 class HungerPermit:
     """Authorization for one evidence-backed EAT command."""
 
-    item_letter: str
+    item_letter: str | None = None
+    corpse: CorpseEvidence | None = None
 
     def __post_init__(self) -> None:
+        if (self.item_letter is None) == (self.corpse is None):
+            raise ValueError("hunger permit requires exactly one ration or corpse")
+        if self.corpse is not None:
+            if not isinstance(self.corpse, CorpseEvidence):
+                raise TypeError("hunger permit corpse must be a CorpseEvidence")
+            return
         if (
             not isinstance(self.item_letter, str)
             or len(self.item_letter) != 1
@@ -1019,10 +1195,23 @@ def survival_action_selection_error(
     """Why a restricted action is invalid from its recorded selection fields."""
     if action_name == EAT_ACTION_NAME and (
         selection.source is not ActionSelectionSource.DETERMINISTIC_SKILL
-        or selection.skill is not Skill.HUNGER
-        or selection.intent is not None
+        or (
+            (selection.skill is Skill.HUNGER and selection.intent is not None)
+            or (
+                selection.skill is Skill.CORPSE
+                and (
+                    selection.intent is None
+                    or selection.intent.corpse is None
+                    or selection.intent.corpse.outcome is not None
+                    or selection.intent.destination is not None
+                    or selection.intent.attack_target is not None
+                    or selection.intent.path is not None
+                )
+            )
+            or selection.skill not in (Skill.HUNGER, Skill.CORPSE)
+        )
     ):
-        return "only the deterministic hunger skill may select EAT"
+        return "only deterministic hunger or evidenced corpse skill may select EAT"
     if action_name == PRAY_ACTION_NAME and (
         selection.source is not ActionSelectionSource.DETERMINISTIC_SKILL
         or selection.skill is not Skill.PRAYER
@@ -1039,15 +1228,24 @@ def survival_action_selection_error(
         )
     if action_name in PROMPT_KEY_ACTION_NAMES and (
         selection.source is not ActionSelectionSource.DETERMINISTIC_PROMPT
-        or selection.skill is not Skill.HUNGER
-        or selection.intent is not None
+        or not (
+            (selection.skill is Skill.HUNGER and selection.intent is None)
+            or (
+                selection.skill is Skill.CORPSE
+                and action_name == "Command.ESC"
+                and selection.intent is not None
+                and selection.intent.corpse is not None
+            )
+        )
     ):
-        return "prompt-key actions require the deterministic hunger prompt flow"
+        return (
+            "prompt-key actions require the deterministic hunger or corpse cancel flow"
+        )
     if (
         action_name == "CompassDirection.NW"
         and selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
         and (
-            selection.skill not in (Skill.PRAYER, Skill.HUNGER)
+            selection.skill not in (Skill.PRAYER, Skill.HUNGER, Skill.CORPSE)
             or (selection.skill is Skill.HUNGER and selection.intent is not None)
             or (
                 selection.skill is Skill.PRAYER
@@ -1059,9 +1257,21 @@ def survival_action_selection_error(
                     or selection.intent.path is not None
                 )
             )
+            or (
+                selection.skill is Skill.CORPSE
+                and (
+                    selection.intent is None
+                    or selection.intent.corpse is None
+                    or selection.intent.destination is not None
+                    or selection.intent.attack_target is not None
+                    or selection.intent.path is not None
+                )
+            )
         )
     ):
-        return "yes answers require a deterministic prayer or hunger prompt skill"
+        return (
+            "yes answers require a deterministic prayer, hunger, or corpse prompt skill"
+        )
     return None
 
 
@@ -1076,7 +1286,7 @@ def confirmation_prompt_kind(
         return None
     if message == _PRAYER_CONFIRMATION:
         return PromptKind.PRAYER_CONFIRMATION
-    if _FLOOR_CORPSE_CONFIRMATION.fullmatch(message):
+    if parse_floor_corpse_prompt(message) is not None:
         return PromptKind.CORPSE_CONFIRMATION
     if offered_item_commands is not None and YES_COMMAND in offered_item_commands:
         return PromptKind.ITEM
@@ -1145,9 +1355,11 @@ def confirmation_answer_error(
         return None  # Ordinary deterministic northwest movement.
     if prompt_kind is None:
         return "yes requires an exact recognized confirmation prompt"
-    skill = (
-        Skill.PRAYER if prompt_kind is PromptKind.PRAYER_CONFIRMATION else Skill.HUNGER
-    )
+    skill = {
+        PromptKind.PRAYER_CONFIRMATION: Skill.PRAYER,
+        PromptKind.CORPSE_CONFIRMATION: Skill.CORPSE,
+        PromptKind.ITEM: Skill.HUNGER,
+    }[prompt_kind]
     if (
         selection.source is not ActionSelectionSource.DETERMINISTIC_PROMPT
         or selection.skill is not skill
@@ -1157,6 +1369,16 @@ def confirmation_answer_error(
             and (
                 selection.intent is None
                 or selection.intent.prayer is None
+                or selection.intent.destination is not None
+                or selection.intent.attack_target is not None
+                or selection.intent.path is not None
+            )
+        )
+        or (
+            skill is Skill.CORPSE
+            and (
+                selection.intent is None
+                or selection.intent.corpse is None
                 or selection.intent.destination is not None
                 or selection.intent.attack_target is not None
                 or selection.intent.path is not None
@@ -1180,17 +1402,85 @@ def hunger_action_error(
     hunger: int,
     prompt_active: bool,
     safe_ration_available: bool,
+    corpse_evidence: CorpseEvidence | None = None,
+    observed_corpse: CorpseEvidence | None = None,
+    observation: ProjectedObservation | None = None,
 ) -> str | None:
-    """Why an EAT selection lacks the observation evidence needed for a permit."""
+    """Authorize ration EAT or an observed fresh corpse under the hero."""
     error = survival_action_selection_error(action_name, selection)
     if error is not None or action_name != EAT_ACTION_NAME:
         return error
     if prompt_active:
         return "EAT cannot answer an active prompt"
+    if selection.skill is Skill.CORPSE:
+        evidence = selection.intent.corpse
+        if (
+            corpse_evidence != evidence
+            or evidence != observed_corpse
+            or evidence is None
+            or evidence.outcome is not None
+            or evidence.age > 19
+            or observation is None
+            or evidence.name not in ALLOWED_CORPSES
+            or observation.player.turn - evidence.kill_turn != evidence.age
+            or observation.player.hunger != hunger
+            or hunger < 1
+            or (observation.player.x, observation.player.y)
+            != (evidence.cell.x, evidence.cell.y)
+            or observation.message != f"You see here a {evidence.name} corpse."
+        ):
+            return "EAT requires the observed fresh corpse under the hero"
+        return None
     if hunger < 2:
         return "EAT requires Hungry or worse"
     if not safe_ration_available:
         return "EAT requires an explicitly known-safe inventory food ration"
+    return None
+
+
+def corpse_confirmation_error(
+    command: int,
+    selection: ActionSelection,
+    *,
+    prompt_active: bool,
+    prompt_message: str,
+    corpse_evidence: CorpseEvidence | None,
+    observed_corpse: CorpseEvidence | None,
+    observation: ProjectedObservation | None,
+) -> str | None:
+    """Authorize floor yes only for the matching pre-EAT kill and exact prompt."""
+    if command != YES_COMMAND:
+        return None
+    intent = selection.intent
+    if (
+        selection.source is not ActionSelectionSource.DETERMINISTIC_PROMPT
+        or selection.skill is not Skill.CORPSE
+        or intent is None
+        or intent.corpse is None
+        or intent.destination is not None
+        or intent.attack_target is not None
+        or intent.path is not None
+        or corpse_evidence is None
+        or observed_corpse is None
+        or corpse_evidence != observed_corpse
+        or (
+            intent.corpse.name != corpse_evidence.name
+            or intent.corpse.kill_turn != corpse_evidence.kill_turn
+            or intent.corpse.age != corpse_evidence.age
+            or intent.corpse.cell != corpse_evidence.cell
+        )
+        or not prompt_active
+        or parse_floor_corpse_prompt(prompt_message) != corpse_evidence.name
+        or observation is None
+        or corpse_evidence.name not in ALLOWED_CORPSES
+        or corpse_evidence.age > observation.player.turn - corpse_evidence.kill_turn
+        or observation.player.hunger < 1
+        or (observation.player.x, observation.player.y)
+        != (corpse_evidence.cell.x, corpse_evidence.cell.y)
+        or observation.player.turn - corpse_evidence.kill_turn > 19
+        or observation.player.turn < corpse_evidence.kill_turn
+    ):
+        return "yes requires a matching observed fresh floor corpse and exact prompt"
     return None
 
 
@@ -1207,12 +1497,22 @@ def prompt_response_error(
     error = survival_action_selection_error(action_name, selection)
     if error is not None:
         return error
-    if (
-        selection.source is not ActionSelectionSource.DETERMINISTIC_PROMPT
-        or selection.skill is not Skill.HUNGER
-        or selection.intent is not None
+    if selection.source is not ActionSelectionSource.DETERMINISTIC_PROMPT or not (
+        (selection.skill is Skill.HUNGER and selection.intent is None)
+        or (
+            selection.skill is Skill.CORPSE
+            and command == ESC_COMMAND
+            and selection.intent is not None
+            and selection.intent.corpse is not None
+            and selection.intent.destination is None
+            and selection.intent.attack_target is None
+            and selection.intent.path is None
+        )
     ):
-        return "only the deterministic hunger prompt flow may answer item prompts"
+        return (
+            "only the deterministic hunger or corpse cancel flow "
+            "may answer item prompts"
+        )
     if not prompt_active or not item_selection:
         return (
             "an item prompt response requires a matching active item-selection prompt"

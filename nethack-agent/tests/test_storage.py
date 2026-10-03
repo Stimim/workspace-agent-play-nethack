@@ -280,7 +280,10 @@ def test_recorded_eat_action_requires_the_deterministic_hunger_skill(
     payload["action"] = eat.to_json()
     payload["skill_decision"] = None
     payload["skill_metrics"] = None
-    with pytest.raises(ContractError, match="deterministic hunger skill"):
+    with pytest.raises(
+        ContractError,
+        match="only deterministic hunger or evidenced corpse skill may select EAT",
+    ):
         StepPayload.from_json(payload)
 
     payload["selection"]["skill"] = Skill.HUNGER.value  # type: ignore[index]
@@ -302,7 +305,12 @@ def test_recorded_added_prompt_key_requires_hunger_prompt_source(
     payload["action"] = prompt_key.to_json()
     payload["skill_decision"] = None
     payload["skill_metrics"] = None
-    with pytest.raises(ContractError, match="hunger prompt flow"):
+    with pytest.raises(
+        ContractError,
+        match=(
+            "prompt-key actions require the deterministic hunger or corpse cancel flow"
+        ),
+    ):
         StepPayload.from_json(payload)
 
     payload["selection"]["source"] = (  # type: ignore[index]

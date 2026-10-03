@@ -14,8 +14,12 @@ from nethack_agent.decision import (
     ActionIntent,
     ActionSelection,
     ActionSelectionSource,
+    CorpseEvidence,
+    CorpseOutcome,
+    CorpseOutcomeKind,
     DecisionError,
     DestinationKind,
+    HungerPermit,
     IntentDestination,
     MapCell,
     PrayerEvidence,
@@ -30,10 +34,12 @@ from nethack_agent.decision import (
     classify_prayer_outcome,
     confirmation_answer_error,
     confirmation_prompt_kind,
+    corpse_confirmation_error,
     hunger_action_error,
     level_change_error,
     model_selectable_skills,
     parse_action_decision,
+    parse_floor_corpse_prompt,
     parse_skill_decision,
     prayer_action_error,
     prompt_response_error,
@@ -919,3 +925,94 @@ def test_gold_intents_belong_only_to_gold_navigation_and_end_on_the_gold() -> No
             None,
             (MapCell(5, 3), MapCell(5, 4)),
         )
+
+
+def test_corpse_evidence_json_and_exact_floor_question() -> None:
+    corpse = CorpseEvidence("lichen", 2, 1, MapCell(3, 4))
+    intent = ActionIntent(None, None, None, corpse=corpse)
+    assert ActionIntent.from_json(intent.to_json()) == intent
+    assert HungerPermit("a").item_letter == "a"
+    assert HungerPermit(corpse=corpse).corpse == corpse
+    for corrupt in (
+        {**corpse.to_json(), "age": True},
+        {**corpse.to_json(), "name": "lichen; malicious"},
+        {**corpse.to_json(), "extra": "forged"},
+        {**corpse.to_json(), "outcome": {"kind": "finished", "turn": 3, "hunger": 0}},
+        {
+            **corpse.to_json(),
+            "outcome": {
+                "kind": "finished",
+                "turn": 3,
+                "hunger": 0,
+                "message": "You start eating the lichen corpse.",
+            },
+        },
+        {
+            **corpse.to_json(),
+            "outcome": {
+                "kind": "interrupted",
+                "turn": 1,
+                "hunger": 1,
+                "message": "You stop eating.",
+            },
+        },
+    ):
+        with pytest.raises(ContractError):
+            CorpseEvidence.from_json(corrupt)
+    completed = replace(
+        corpse,
+        outcome=CorpseOutcome(
+            CorpseOutcomeKind.FINISHED,
+            7,
+            0,
+            "You finish eating the lichen corpse.",
+        ),
+    )
+    assert CorpseEvidence.from_json(completed.to_json()) == completed
+    exact = "There is a lichen corpse here; eat it? [ynq] (n) "
+    assert parse_floor_corpse_prompt(exact) == "lichen"
+    assert parse_floor_corpse_prompt(exact.rstrip()) is None
+    assert parse_floor_corpse_prompt(exact + "You die.") is None
+
+
+def test_corpse_confirmation_rejects_mismatched_prompt_and_evidence() -> None:
+    corpse = CorpseEvidence("lichen", 2, 1, MapCell(3, 4))
+    selection = ActionSelection(
+        ActionSelectionSource.DETERMINISTIC_PROMPT,
+        STAND_ON_DOWNSTAIRS,
+        Skill.CORPSE,
+        SkillSelectionSource.ARBITER,
+        None,
+        0,
+        "Confirm the identified floor corpse.",
+        ActionIntent(None, None, None, corpse=corpse),
+    )
+    exact = "There is a lichen corpse here; eat it? [ynq] (n) "
+    assert (
+        confirmation_prompt_kind(exact, single_choice=True)
+        is PromptKind.CORPSE_CONFIRMATION
+    )
+    assert (
+        corpse_confirmation_error(
+            ord("y"),
+            selection,
+            prompt_active=True,
+            prompt_message=exact,
+            corpse_evidence=corpse,
+            observed_corpse=corpse,
+            observation=None,
+        )
+        is not None
+    )
+    assert (
+        corpse_confirmation_error(
+            ord("y"),
+            selection,
+            prompt_active=True,
+            prompt_message=exact.replace("lichen", "gecko"),
+            corpse_evidence=corpse,
+            observed_corpse=corpse,
+            observation=None,
+        )
+        is not None
+    )

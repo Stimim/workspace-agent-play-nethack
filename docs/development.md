@@ -234,15 +234,18 @@ present, including for records written before this evidence field existed.
 
 The map also shows the intent recorded by the step event that carries the
 displayed observation: a dashed accent box marks the destination the
-deterministic skill works toward (frontier, remembered downstairs, search spot,
-or locked door), and a solid danger-colored box marks the monster it attacks.
-The player highlight wins over both boxes, the attack-target box wins over the
-destination box on the same cell, and a pet keeps its fill under either box.
-The legend under the map explains each highlight, and the expanded step
-decision in Events shows the same **Intent** with an explanatory tooltip. Model
-fallbacks, prompt answers, and runs recorded before intents existed (such as the
-milestone 1 suite data) show "none recorded" and no boxes; the UI never derives
-a target from the action direction or rationale.
+deterministic skill works toward (frontier, remembered downstairs/upstairs,
+search spot, locked door, displayed gold, or fresh corpse), and a solid
+danger-colored box marks the monster it attacks. The player highlight wins
+over both boxes, the attack-target box wins over the destination box on the
+same cell, and a pet keeps its fill under either box. The legend under the
+map explains each highlight, and the expanded step decision in Events shows
+the same **Intent** with an explanatory tooltip. Corpse evidence there names
+the killed species, kill turn, age, cell, and observable meal result; prompt
+answers can carry that typed evidence without a map destination. Model
+fallbacks and records before intents existed (such as the milestone 1 suite)
+show "none recorded"; the UI never infers targets from action directions or
+rationales.
 
 When the step followed a route, the map also tints the recorded path: the
 cells from the one the hero stepped into to the destination (for a locked
@@ -665,9 +668,10 @@ are reviewed in [note 0024](notes/0024-reviewed-survival-knowledge.md).
 Choose `nle-survival-actions` in a `TaskSpec` to keep all 58
 `nle-hunger-actions` members, then append `Command.PRAY` (59 indexed actions).
 The profile preserves ration handling and the existing task objective. Item 6
-defined the gate without a prayer-skill issuer; item 7 enables that deterministic
-skill. The active knowledge bundle, `POLICY_VERSION`, and published evaluation
-suites remain unchanged; floor-corpse eating is not yet enabled.
+defined the roles and gate without a prayer or corpse issuer; item 7 enabled
+prayer, and item 8 enables only strictly verified fresh-corpse eating. The
+active knowledge bundle, `POLICY_VERSION`, and published evaluation suites
+remain unchanged.
 
 In NLE 1.3.0, the exact observed confirmation messages (the space before each
 closing quote is part of the raw observation) are:
@@ -681,11 +685,12 @@ Both have a single-character-choice prompt. The floor-corpse string was
 captured after killing a seed-10 lichen, moving onto its corpse, then issuing
 EAT; the prayer string was captured by issuing PRAY on seed 6 in a direct
 NLE-environment test. Those tests bypass the agent gate to inspect NLE, not to
-grant the policy permission to answer. The item-7 gate now allows PRAY only
-with the coordinator's evidence-backed prayer permit, and only answers the
-exact pending prayer confirmation with a matching typed prompt permit. The
-coordinator still declines floor-corpse yes/no confirmations by default. In
-the survival profile, the model is not offered ambiguous `y`/northwest.
+grant the policy permission to answer. The item-7 gate allows PRAY only with
+the coordinator's evidence-backed prayer permit, and answers only its exact
+pending confirmation with a matching typed prompt permit. Item 8 adds a
+separate exact-name fresh-corpse confirmation; all other floor-corpse
+confirmations are declined. In the survival profile, the model is not offered
+ambiguous `y`/northwest.
 An exact eat-item prompt can still offer inventory letter `y`, and ordinary
 deterministic northwest movement outside a prompt remains legal. The evaluator
 replays the gate predicates against the prior recorded observation, including
@@ -722,6 +727,59 @@ Both groups are development evidence, not a success-rate promise or fresh
 evaluation seeds. See [note 0026](notes/0026-deterministic-prayer-and-probe-evidence.md)
 for per-seed outcomes, turn-50 and immediate-repeat controls, the reviewed
 Prayer-page explanation, and the residual uncertainty.
+
+### Fresh-corpse eating (milestone 2, item 8)
+
+`nle-survival-actions` adds a deterministic corpse skill, not another NLE
+action. Priority is safe adjacent-hostile defense, eligible Weak prayer,
+verified inventory ration at Hungry or worse, then an eligible corpse before
+stairs or exploration. A known ration still preempts prayer under its existing
+no-ration safety guard. Never start eating while Satiated (NLE hunger 0);
+Not Hungry or worse permits use of a fresh corpse before the first Hungry turn.
+
+Only lichen, newt, sewer rat, giant rat, and gecko qualify. The coordinator
+records an actual `You kill the <name>!` combat observation and its monster
+cell, at most 19 game turns old on the current level. It routes only to a
+visible corpse on that cell through at most five passable BFS steps. On arrival,
+`EAT` needs the exact `You see here a <name> corpse.` look-here observation,
+matching the own-kill identity; an inventory prompt instead of a floor offer
+is canceled with ESC. Only the immediately following exact
+`There is a <name> corpse here; eat it? [ynq] (n) ` prompt for the **same**
+species receives `y` through `PromptPermit(y, CORPSE_CONFIRMATION)`. All
+other floor offers are declined. A pending meal cannot be started again
+mid-meal. The persisted typed intent records the species, kill turn, age,
+cell, and observable finished/interrupted/declined outcome; terminal and
+truncated confirmation/meal steps do not classify an outcome. Live completion
+messages require matching evidence, while ongoing meals have no outcome yet.
+The evaluator rebuilds kill provenance, age, identity, and prompt matching
+from event observations rather than accepting the intent on trust.
+
+The historical observation analysis found 54 fresh nearby opportunities worth
+5,426 potential nutrition on 25 previously stored episode records at Not Hungry
+or worse. Its five-square Chebyshev filter was not proof of a passable route,
+unlike the implemented five-action BFS limit. The opportunities
+included 35 / 4,284 nutrition before their first Hungry turn. Requiring
+Hungry or worse instead yielded only four / 432 nutrition opportunities.
+These are **opportunities**, not completed meals or an evaluated survival
+success rate. See [note 0027](notes/0027-safe-fresh-corpse-eating.md)
+for species counts, source revisions, real-NLE regression, and caveats.
+
+Seed 1131 is the real-NLE scripted-coordinator regression: lichen kill at
+turn 3 while Not Hungry, look-here and EAT at turn 4, exact `y` completion at
+turn 8 with Satiated hunger, and zero invalid evaluator actions or gate
+rejections. Development seeds 1130–1149 are reserved in the used-seed ledger.
+
+To exercise the corpse gate, negative prompts, ongoing meals, and
+terminal/truncated replay boundaries:
+
+```bash
+uv run pytest -q tests/test_coordinator.py -k 'corpse or midmeal or seed_1131'
+uv run pytest -q tests/test_evaluation.py -k corpse
+```
+
+Seeds 1150–1169 are also excluded as development probes: bounded-search probe
+at `a58902a`, coordinator, `reach_level(0,5)`, cap 3000. They are not fresh
+acceptance-suite seeds.
 
 ## Dependency policy
 

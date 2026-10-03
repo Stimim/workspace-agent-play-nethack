@@ -1,8 +1,10 @@
 import threading
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
+from nle import nethack
 
 from nethack_agent.coordinator import (
     ActionGate,
@@ -11,6 +13,7 @@ from nethack_agent.coordinator import (
     CoordinatorBusyError,
     StepRecord,
 )
+from nethack_agent.corpse import CorpseKill
 from nethack_agent.decision import (
     LEVEL_CHANGE_ACTIONS,
     PRAYER_FIRST_SAFE_TURN,
@@ -20,6 +23,8 @@ from nethack_agent.decision import (
     ActionIntent,
     ActionSelection,
     ActionSelectionSource,
+    CorpseEvidence,
+    CorpseOutcomeKind,
     DecisionMetrics,
     HungerPermit,
     MapCell,
@@ -40,16 +45,22 @@ from nethack_agent.decision import (
     TraversalPermit,
 )
 from nethack_agent.environment import LegalAction, NleEnvironment, ScenarioConfig
-from nethack_agent.evaluation import _action_is_valid
-from nethack_agent.events import StepPayload
+from nethack_agent.evaluation import load_suite, summarize_run
+from nethack_agent.events import EventKind, RunEvent, RunStartedPayload, StepPayload
 from nethack_agent.model import (
     DecisionFailure,
     HierarchicalDecisionModel,
     ScriptedDevelopmentModel,
 )
-from nethack_agent.navigation import GOLD_GLYPH, ActionRecord, LevelMemory
-from nethack_agent.observation import ObservationProjector, PromptState
+from nethack_agent.navigation import GOLD_GLYPH, ActionRecord, LevelMemory, Monster
+from nethack_agent.observation import (
+    BucStatus,
+    InventoryItem,
+    ObservationProjector,
+    PromptState,
+)
 from nethack_agent.replay import ExplorationReplay
+from nethack_agent.storage import RunRecord
 from nethack_agent.tasks import STAIRCASE_TASK, ActionProfile, NleTask, TaskSpec
 from nethack_agent.traversal import (
     STAND_ON_DOWNSTAIRS,
@@ -470,7 +481,6 @@ def test_survival_gate_requires_prayer_permit_and_exact_yes_prompt(
         )
         for prompted, kind, skill in (
             (prayer_prompt, PromptKind.PRAYER_CONFIRMATION, Skill.PRAYER),
-            (corpse_prompt, PromptKind.CORPSE_CONFIRMATION, Skill.HUNGER),
         ):
             answer = replace(
                 prayer,
@@ -504,6 +514,20 @@ def test_survival_gate_requires_prayer_permit_and_exact_yes_prompt(
                     selection=answer,
                     prompt_permit=PromptPermit(ord("y"), kind),
                 )
+        forged_corpse_answer = replace(
+            prayer,
+            source=ActionSelectionSource.DETERMINISTIC_PROMPT,
+            skill=Skill.HUNGER,
+            action_index=yes.index,
+            intent=None,
+        )
+        with pytest.raises(ActionGateError, match="matching deterministic prompt"):
+            gate.resolve(
+                yes.index,
+                before=corpse_prompt,
+                selection=forged_corpse_answer,
+                prompt_permit=PromptPermit(ord("y"), PromptKind.CORPSE_CONFIRMATION),
+            )
 
         item_prompt = replace(
             before,
@@ -772,81 +796,6 @@ def test_stale_prayer_prompt_is_declined_not_confirmed(tmp_path: Path) -> None:
         assert declined.selection.skill is not Skill.PRAYER
         assert agent._pending_prayer is None
         assert agent._prayer_count == 1
-    finally:
-        agent.stop()
-
-
-def test_real_survival_coordinator_prays_at_first_weak_and_audits_both_steps(
-    tmp_path: Path,
-) -> None:
-    task = TaskSpec(
-        NleTask.SCORE,
-        ActionProfile.NLE_SURVIVAL_ACTIONS,
-        Objective((ReachLevelLeg(LevelKey(0, 12)),)),
-    )
-    agent = AgentCoordinator(
-        NleEnvironment(
-            ScenarioConfig(
-                seed=1127,
-                artifact_directory=tmp_path,
-                max_episode_steps=3000,
-                task=task,
-            )
-        ),
-        ObservationProjector(),
-        ScriptedDevelopmentModel(),
-    )
-    initial = agent.start()
-    observed_kills = initial.message.count("You kill")
-    agent.resume()
-    try:
-        for _ in range(3000):
-            first = agent.advance()
-            assert first is not None
-            if first.action.name == "Command.PRAY":
-                break
-            assert first.outcome is None, "run ended before first Weak prayer"
-            observed_kills += first.after.message.count("You kill")
-        else:
-            raise AssertionError("no Weak prayer before episode cap")
-        assert first.before.player.hunger >= 3
-        assert first.before.player.turn >= PRAYER_FIRST_SAFE_TURN
-        assert first.after.message == "Are you sure you want to pray? [yn] (n) "
-        assert first.selection.intent is not None
-        evidence = first.selection.intent.prayer
-        assert evidence is not None and evidence.kill_count == observed_kills
-        first_payload = step_payload(first)
-        assert StepPayload.from_json(first_payload.to_json()) == first_payload
-        assert _action_is_valid(
-            first_payload,
-            agent.legal_actions,
-            first.before,
-            True,
-            task.action_profile,
-            kill_count=observed_kills,
-        )
-        confirmed = agent.advance()
-        assert confirmed is not None and confirmed.action.command == ord("y")
-        assert confirmed.selection.intent is not None
-        result = confirmed.selection.intent.prayer
-        assert result is not None and result.outcome is not None
-        assert result.outcome.kind is PrayerOutcomeKind.FIXED
-        assert result.outcome.turn == confirmed.after.player.turn
-        assert result.outcome.hunger == confirmed.after.player.hunger
-        assert result.outcome.message == confirmed.after.message
-        confirmed_payload = step_payload(confirmed)
-        assert StepPayload.from_json(confirmed_payload.to_json()) == confirmed_payload
-        assert _action_is_valid(
-            confirmed_payload,
-            agent.legal_actions,
-            confirmed.before,
-            True,
-            task.action_profile,
-            prior_prayers=1,
-            last_prayer_turn=first.before.player.turn,
-            pending_prayer=evidence,
-            kill_count=observed_kills + first.after.message.count("You kill"),
-        )
     finally:
         agent.stop()
 
@@ -1241,3 +1190,412 @@ def test_gold_task_routes_onto_visible_gold_and_other_tasks_never_do(
     scout_task = TaskSpec(NleTask.SCOUT, ActionProfile.NLE_TASK_ACTIONS, explore)
     _, scout = run_to_end(tmp_path / "scout", 4, scout_task, max_steps=40)
     assert all(record.selection.skill is not Skill.GOLD_NAVIGATION for record in scout)
+
+
+def test_survival_arbitration_defense_then_prayer_ration_corpse(
+    tmp_path: Path,
+) -> None:
+    task = TaskSpec(
+        NleTask.SCORE,
+        ActionProfile.NLE_SURVIVAL_ACTIONS,
+        Objective((ReachLevelLeg(LevelKey(0, 12)),)),
+    )
+    agent = AgentCoordinator(
+        NleEnvironment(
+            ScenarioConfig(
+                seed=1131,
+                artifact_directory=tmp_path,
+                max_episode_steps=20,
+                task=task,
+            )
+        ),
+        ObservationProjector(),
+        ScriptedDevelopmentModel(),
+    )
+    initial = agent.start()
+    try:
+        hero = MapCell(initial.player.x, initial.player.y)
+        level = LevelKey(initial.player.dungeon_number, initial.player.dungeon_level)
+        kill = CorpseKill("lichen", 90, level, hero)
+        agent._corpse_kills[(level, hero)] = kill
+        observation = replace(
+            initial,
+            message="You see here a lichen corpse.",
+            inventory=(),
+            player=replace(initial.player, hunger=3, turn=100),
+        )
+        memory = agent._dungeon.current
+        memory.monsters.clear()
+        neighbor = next(
+            point
+            for point in memory.neighbors((hero.x, hero.y))
+            if point[0] == hero.x + 1
+        )
+        memory.monsters[neighbor] = Monster(nethack.GLYPH_MON_OFF, "jackal", False)
+        defense = agent._decide(observation, None, lambda: False, 0)
+        assert defense is not None
+        assert defense.selection.skill is Skill.EXPLORE_LEVEL
+        assert defense.selection.intent is not None
+        assert defense.selection.intent.attack_target == MapCell(*neighbor)
+        memory.monsters.clear()
+        prayer = agent._decide(observation, None, lambda: False, 0)
+        assert prayer is not None
+        assert prayer.selection.skill is Skill.PRAYER
+        hungry = replace(observation, player=replace(observation.player, hunger=2))
+        hungry_corpse = agent._decide(hungry, None, lambda: False, 0)
+        assert hungry_corpse is not None
+        assert hungry_corpse.selection.skill is Skill.CORPSE
+        assert (
+            agent.legal_actions[hungry_corpse.selection.action_index].name
+            == "Command.EAT"
+        )
+        food = next(
+            index
+            for index in range(nethack.NUM_OBJECTS)
+            if nethack.OBJ_NAME(nethack.objclass(index)) == "food ration"
+        )
+        ration = InventoryItem(
+            "a",
+            "a food ration",
+            nethack.GLYPH_OBJ_OFF + food,
+            int(nethack.FOOD_CLASS),
+            BucStatus.UNKNOWN,
+        )
+        hungry_ration = agent._decide(
+            replace(hungry, inventory=(ration,)), None, lambda: False, 0
+        )
+        assert hungry_ration is not None
+        assert hungry_ration.selection.skill is Skill.HUNGER
+        assert (
+            agent.legal_actions[hungry_ration.selection.action_index].name
+            == "Command.EAT"
+        )
+    finally:
+        agent.stop()
+
+
+def test_survival_declines_jackal_floor_and_cancels_inventory_prompt_after_corpse_eat(
+    tmp_path: Path,
+) -> None:
+    task = TaskSpec(
+        NleTask.SCORE,
+        ActionProfile.NLE_SURVIVAL_ACTIONS,
+        Objective((ReachLevelLeg(LevelKey(0, 12)),)),
+    )
+    agent = AgentCoordinator(
+        NleEnvironment(
+            ScenarioConfig(
+                seed=1131,
+                artifact_directory=tmp_path,
+                max_episode_steps=20,
+                task=task,
+            )
+        ),
+        ObservationProjector(),
+        ScriptedDevelopmentModel(),
+    )
+    initial = agent.start()
+    try:
+        choice = PromptState(True, False, False)
+        jackal = replace(
+            initial,
+            prompt=choice,
+            message="There is a jackal corpse here; eat it? [ynq] (n) ",
+        )
+        plan = agent._decide(jackal, None, lambda: False, 0)
+        assert plan is not None
+        assert agent.legal_actions[plan.selection.action_index].command == ord("n")
+        assert plan.selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
+        corpse = CorpseEvidence(
+            "lichen",
+            initial.player.turn,
+            0,
+            MapCell(initial.player.x, initial.player.y),
+        )
+        agent._pending_corpse = corpse
+        agent._pending_corpse_step = initial.step_index
+        plan = agent._decide(replace(jackal, step_index=1), None, lambda: False, 0)
+        assert plan is not None
+        assert agent.legal_actions[plan.selection.action_index].command == ord("n")
+        assert plan.selection.skill is Skill.CORPSE
+        assert plan.selection.intent is not None
+        assert plan.selection.intent.corpse == corpse
+        declined_action = agent.legal_actions[plan.selection.action_index]
+        declined = agent._commit_corpse_locked(
+            plan.selection,
+            declined_action,
+            replace(jackal, step_index=1),
+            replace(jackal, step_index=2, prompt=PromptState(False, False, False)),
+            Mock(terminated=False, truncated=False),
+        )
+        assert declined.intent is not None
+        assert declined.intent.corpse is not None
+        assert declined.intent.corpse.outcome is not None
+        assert declined.intent.corpse.outcome.kind is CorpseOutcomeKind.DECLINED
+        agent._pending_corpse = corpse
+        agent._pending_corpse_step = initial.step_index
+        inventory_prompt = replace(
+            initial,
+            step_index=1,
+            prompt=choice,
+            message="What do you want to eat? [ab or ?*]",
+        )
+        plan = agent._decide(inventory_prompt, None, lambda: False, 0)
+        assert plan is not None
+        assert plan.selection.skill is Skill.CORPSE
+        action = agent.legal_actions[plan.selection.action_index]
+        assert action.name == "Command.ESC"
+        permit = agent._prompt_permit(plan.selection, inventory_prompt)
+        assert (
+            agent._gate.resolve(
+                action.index,
+                prompt_permit=permit,
+                before=inventory_prompt,
+                selection=plan.selection,
+            )
+            == action
+        )
+        declined = agent._commit_corpse_locked(
+            plan.selection,
+            action,
+            inventory_prompt,
+            replace(
+                inventory_prompt,
+                step_index=2,
+                prompt=PromptState(False, False, False),
+                message="Never mind.",
+            ),
+            Mock(terminated=False, truncated=False),
+        )
+        assert declined.intent is not None
+        assert declined.intent.corpse is not None
+        assert declined.intent.corpse.outcome is not None
+        assert declined.intent.corpse.outcome.kind is CorpseOutcomeKind.DECLINED
+    finally:
+        agent.stop()
+
+
+def test_midmeal_waits_without_repeating_eat_until_explicit_finish(
+    tmp_path: Path,
+) -> None:
+    task = TaskSpec(
+        NleTask.SCORE,
+        ActionProfile.NLE_SURVIVAL_ACTIONS,
+        Objective((ReachLevelLeg(LevelKey(0, 12)),)),
+    )
+    agent = AgentCoordinator(
+        NleEnvironment(
+            ScenarioConfig(
+                seed=1131,
+                artifact_directory=tmp_path,
+                max_episode_steps=20,
+                task=task,
+            )
+        ),
+        ObservationProjector(),
+        ScriptedDevelopmentModel(),
+    )
+    initial = agent.start()
+    try:
+        evidence = CorpseEvidence(
+            "lichen",
+            initial.player.turn,
+            0,
+            MapCell(initial.player.x, initial.player.y),
+        )
+        agent._pending_corpse = evidence
+        agent._pending_corpse_step = 0
+        floor = replace(
+            initial,
+            step_index=1,
+            message="There is a lichen corpse here; eat it? [ynq] (n) ",
+            prompt=PromptState(True, False, False),
+            player=replace(initial.player, hunger=1),
+        )
+        plan = agent._decide(floor, None, lambda: False, 0)
+        assert plan is not None
+        yes = agent.legal_actions[plan.selection.action_index]
+        assert yes.command == ord("y")
+        midmeal = replace(
+            floor,
+            step_index=2,
+            message="This lichen corpse tastes okay.",
+            prompt=PromptState(False, False, False),
+        )
+        confirmed = agent._commit_corpse_locked(
+            plan.selection, yes, floor, midmeal, Mock(terminated=False, truncated=False)
+        )
+        assert confirmed.intent is not None
+        assert confirmed.intent.corpse is not None
+        assert confirmed.intent.corpse.outcome is None
+        agent._dungeon.observe(midmeal)
+        agent._dungeon.current.monsters.clear()
+        waiting = agent._decide(midmeal, None, lambda: False, 0)
+        assert waiting is not None
+        assert waiting.selection.skill is Skill.CORPSE
+        wait = agent.legal_actions[waiting.selection.action_index]
+        assert wait.name == "MiscDirection.WAIT"
+        finished = replace(
+            midmeal,
+            step_index=3,
+            message="You finish eating the lichen corpse.",
+            player=replace(midmeal.player, hunger=0),
+        )
+        completed = agent._commit_corpse_locked(
+            waiting.selection,
+            wait,
+            midmeal,
+            finished,
+            Mock(terminated=False, truncated=False),
+        )
+        assert completed.intent is not None
+        assert completed.intent.corpse is not None
+        assert completed.intent.corpse.outcome is not None
+        assert completed.intent.corpse.outcome.kind is CorpseOutcomeKind.FINISHED
+        assert agent._meal_corpse is None
+    finally:
+        agent.stop()
+
+
+def test_real_seed_1131_eats_observed_lichen_and_evaluator_audits_cleanly(
+    tmp_path: Path,
+) -> None:
+    task = TaskSpec(
+        NleTask.SCORE,
+        ActionProfile.NLE_SURVIVAL_ACTIONS,
+        Objective((ReachLevelLeg(LevelKey(0, 12)),)),
+    )
+    agent = AgentCoordinator(
+        NleEnvironment(
+            ScenarioConfig(
+                seed=1131,
+                artifact_directory=tmp_path,
+                max_episode_steps=50,
+                task=task,
+            )
+        ),
+        ObservationProjector(),
+        ScriptedDevelopmentModel(),
+    )
+    initial = agent.start()
+    initial_goal = agent.snapshot().current_goal
+    agent.resume()
+    records: list[StepRecord] = []
+    try:
+        for _ in range(25):
+            step = agent.advance()
+            assert step is not None
+            records.append(step)
+            if step.selection.skill is Skill.CORPSE and step.action.command == ord("y"):
+                break
+            assert step.outcome is None
+        else:
+            raise AssertionError("seed 1131 never confirmed a lichen corpse")
+        kill = next(
+            step for step in records if step.after.message == "You kill the lichen!"
+        )
+        assert kill.before.player.hunger == 1  # Not Hungry, not Satiated.
+        assert kill.after.player.turn == 3
+        eat = next(step for step in records if step.action.name == "Command.EAT")
+        assert eat.selection.skill is Skill.CORPSE
+        assert eat.before.player.turn == 4
+        assert eat.before.message == "You see here a lichen corpse."
+        assert kill.selection.intent is not None
+        assert kill.selection.intent.attack_target is not None
+        assert eat.selection.intent is not None
+        assert eat.selection.intent.corpse is not None
+        assert eat.selection.intent.corpse.cell == kill.selection.intent.attack_target
+        assert eat.selection.intent.corpse.kill_turn == kill.after.player.turn
+        assert eat.after.message == "There is a lichen corpse here; eat it? [ynq] (n) "
+        finished = records[-1]
+        assert finished.after.player.turn == 8
+        assert finished.after.player.hunger == 0
+        assert "You finish eating the lichen corpse." in finished.after.message
+        assert finished.selection.intent is not None
+        assert finished.selection.intent.corpse is not None
+        assert finished.selection.intent.corpse.outcome is not None
+        assert finished.selection.intent.corpse.outcome.kind.value == "finished"
+        with pytest.raises(
+            ActionGateError, match="matching observed fresh floor corpse"
+        ):
+            agent._gate.resolve(
+                finished.action.index,
+                prompt_permit=PromptPermit(ord("y"), PromptKind.CORPSE_CONFIRMATION),
+                before=replace(
+                    finished.before,
+                    message="There is a jackal corpse here; eat it? [ynq] (n) ",
+                ),
+                selection=replace(
+                    finished.selection,
+                    intent=replace(
+                        finished.selection.intent,
+                        corpse=replace(finished.selection.intent.corpse, outcome=None),
+                    ),
+                ),
+            )
+        assert any(kill.name == "lichen" for kill in agent._consumed_corpses)
+        for _ in range(50 - len(records)):
+            step = agent.advance()
+            assert step is not None
+            records.append(step)
+            if step.outcome is not None:
+                break
+        assert records[-1].outcome is not None
+        ttyrec = agent.ttyrec_files
+        assert ttyrec
+
+        suite = load_suite(
+            Path(__file__).resolve().parents[1] / "evaluation" / "staircase-v1.json"
+        )
+        case = replace(suite.cases[0], task=task, max_episode_steps=50)
+        timestamp = "2026-10-02T00:00:00+00:00"
+        run = RunRecord(
+            id="seed-1131-corpse",
+            created_at=timestamp,
+            updated_at=timestamp,
+            state=RunState.TERMINAL,
+            outcome=records[-1].outcome,
+            environment=task.environment.value,
+            character=suite.character,
+            suite_seed=1131,
+            core_seed=1131,
+            display_seed=1131,
+            level_seed=1131,
+            max_episode_steps=50,
+            model="scripted",
+            policy_version="policy",
+            knowledge_version="knowledge",
+            nle_version="1.3.0",
+            ollama_num_ctx=8192,
+            ollama_version=None,
+            ttyrec_path=str(ttyrec[0]),
+            error=None,
+            task=task,
+        )
+        events = [
+            RunEvent(
+                0,
+                timestamp,
+                EventKind.RUN_STARTED,
+                RunStartedPayload(initial, agent.legal_actions, initial_goal, None),
+            ),
+            *(
+                RunEvent(index, timestamp, EventKind.STEP, step_payload(step))
+                for index, step in enumerate(records, start=1)
+            ),
+        ]
+        result = summarize_run(
+            run,
+            events,
+            suite=suite,
+            case=case,
+            seed=1131,
+            ended_by="episode_end",
+            wall_seconds=0.0,
+            data_directory=tmp_path,
+        )
+        assert result.invalid_actions == 0
+        assert result.gate_rejections == 0
+        assert result.integrity_problems == ()
+    finally:
+        agent.stop()

@@ -13,13 +13,24 @@ from nle import nethack
 
 from nethack_agent import evaluation, run_manager
 from nethack_agent.contracts import ContractError
+from nethack_agent.corpse import (
+    CorpseKill,
+    eligible_corpse,
+    observed_corpse_kill,
+)
 from nethack_agent.decision import (
     ActionCandidate,
     ActionDecision,
     ActionIntent,
     ActionSelection,
     ActionSelectionSource,
+    CorpseEvidence,
+    CorpseOutcome,
+    CorpseOutcomeKind,
     DecisionMetrics,
+    DestinationKind,
+    IntentDestination,
+    MapCell,
     PrayerEvidence,
     PrayerOutcome,
     PrayerOutcomeKind,
@@ -27,6 +38,7 @@ from nethack_agent.decision import (
     RunState,
     Skill,
     SkillSelectionSource,
+    classify_corpse_outcome,
 )
 from nethack_agent.environment import LegalAction
 from nethack_agent.evaluation import (
@@ -1077,6 +1089,581 @@ def synthetic_step(
     )
 
 
+def test_corpse_replay_requires_observed_target_identity_and_fresh_look_here() -> None:
+    level = LevelKey(0, 1)
+    before = synthetic_observation(0, level, 1, hunger=1)
+    lichen_index = next(
+        index
+        for index in range(nethack.NUMMONS)
+        if nethack.permonst(index).mname == "lichen"
+    )
+    glyphs = list(before.map.glyph_rows[0])
+    glyphs[1] = nethack.GLYPH_MON_OFF + lichen_index
+    before = replace(
+        before,
+        map=replace(
+            before.map,
+            glyph_rows=(tuple(glyphs), before.map.glyph_rows[1]),
+            pet_rows=(bytes(5), bytes(5)),
+        ),
+    )
+    killed = replace(
+        synthetic_observation(1, level, 1, hunger=1),
+        message="You kill the lichen!",
+        player=replace(before.player, turn=2),
+    )
+    kill = observed_corpse_kill(before, _EAST, killed)
+    assert kill == CorpseKill("lichen", 2, level, MapCell(1, 0))
+    assert (
+        observed_corpse_kill(
+            before, _EAST, replace(killed, message="You kill the gecko!")
+        )
+        is None
+    )
+    assert (
+        observed_corpse_kill(
+            replace(before, map=replace(before.map, pet_rows=None)), _EAST, killed
+        )
+        is None
+    )
+    body = list(killed.map.glyph_rows[0])
+    body[1] = nethack.GLYPH_BODY_OFF + lichen_index
+    floor = replace(
+        killed,
+        map=replace(killed.map, glyph_rows=(tuple(body), killed.map.glyph_rows[1])),
+    )
+    evidence = eligible_corpse(kill, floor)
+    assert evidence == CorpseEvidence("lichen", 2, 0, MapCell(1, 0))
+    here = replace(
+        floor,
+        player=replace(floor.player, x=1, turn=3),
+        message="You see here a lichen corpse.",
+    )
+    assert eligible_corpse(kill, here) == replace(evidence, age=1)
+    assert (
+        eligible_corpse(kill, replace(here, message="You see here a gecko corpse."))
+        is None
+    )
+    assert (
+        eligible_corpse(kill, replace(floor, player=replace(floor.player, turn=22)))
+        is None
+    )
+    assert (
+        eligible_corpse(kill, replace(floor, player=replace(floor.player, hunger=0)))
+        is None
+    )
+    assert (
+        eligible_corpse(
+            kill, replace(floor, player=replace(floor.player, dungeon_level=2))
+        )
+        is None
+    )
+
+
+def test_corpse_route_audit_requires_visible_reachable_kill_cell() -> None:
+    level = LevelKey(0, 1)
+    before = synthetic_observation(2, level, 1, hunger=1)
+    body = list(before.map.glyph_rows[0])
+    body[1] = nethack.GLYPH_BODY_OFF
+    before = replace(
+        before,
+        map=replace(
+            before.map,
+            rows=(" %   ", "     "),
+            glyph_rows=(tuple(body), before.map.glyph_rows[1]),
+        ),
+    )
+    evidence = CorpseEvidence("lichen", 2, 1, MapCell(1, 0))
+    kill = CorpseKill("lichen", 2, level, evidence.cell)
+    history = {(level, 1, 0): kill}
+    after = replace(
+        synthetic_observation(3, level, 1, hunger=1),
+        player=replace(before.player, x=1, turn=4),
+        message="You see here a lichen corpse.",
+    )
+    base = synthetic_step(after)
+    step = replace(
+        base,
+        selection=replace(
+            base.selection,
+            skill=Skill.CORPSE,
+            intent=ActionIntent(
+                IntentDestination(DestinationKind.CORPSE, 1, 0),
+                None,
+                (MapCell(1, 0),),
+                level,
+                corpse=evidence,
+            ),
+        ),
+    )
+    memory = evaluation.DungeonMemory()
+    memory.observe(before)
+    profile = ActionProfile.NLE_SURVIVAL_ACTIONS
+    assert evaluation._action_is_valid(
+        step,
+        (_EAST,),
+        before,
+        True,
+        profile,
+        corpse_kills=history,
+        consumed_corpses=set(),
+        dungeon_memory=memory,
+    )
+    for covered in (
+        replace(before, map=replace(before.map, rows=("     ", "     "))),
+        replace(
+            before,
+            map=replace(
+                before.map,
+                glyph_rows=synthetic_observation(2, level, 1, 1).map.glyph_rows,
+            ),
+        ),
+    ):
+        assert not evaluation._action_is_valid(
+            step,
+            (_EAST,),
+            covered,
+            True,
+            profile,
+            corpse_kills=history,
+            consumed_corpses=set(),
+        )
+    assert not evaluation._action_is_valid(
+        step,
+        (_EAST,),
+        before,
+        True,
+        profile,
+        corpse_kills={},
+        consumed_corpses=set(),
+    )
+
+
+def test_corpse_eat_and_yes_audit_requires_original_observed_kill() -> None:
+    level = LevelKey(0, 1)
+    after = synthetic_observation(2, level, 1, hunger=1)
+    before = replace(
+        after,
+        player=replace(after.player, x=1, turn=3),
+        message="You see here a lichen corpse.",
+    )
+    evidence = CorpseEvidence("lichen", 2, 1, MapCell(1, 0))
+    kill = CorpseKill("lichen", 2, level, evidence.cell)
+    history = {(level, 1, 0): kill}
+    floor_prompt = replace(
+        after,
+        player=before.player,
+        message="There is a lichen corpse here; eat it? [ynq] (n) ",
+        prompt=PromptState(True, False, False),
+    )
+    eat = LegalAction(0, ord("e"), "Command.EAT")
+    step = synthetic_step(floor_prompt)
+    selection = replace(
+        step.selection,
+        skill=Skill.CORPSE,
+        intent=ActionIntent(None, None, None, corpse=evidence),
+    )
+    eat_step = replace(step, action=eat, selection=selection)
+    profile = ActionProfile.NLE_SURVIVAL_ACTIONS
+    assert evaluation._action_is_valid(
+        eat_step,
+        (eat,),
+        before,
+        True,
+        profile,
+        corpse_kills=history,
+        consumed_corpses=set(),
+    )
+    for forged in (
+        replace(before, message="You see here a gecko corpse."),
+        replace(before, player=replace(before.player, turn=22)),
+        replace(before, player=replace(before.player, hunger=0)),
+        replace(before, player=replace(before.player, x=0)),
+    ):
+        assert not evaluation._action_is_valid(
+            eat_step,
+            (eat,),
+            forged,
+            True,
+            profile,
+            corpse_kills=history,
+            consumed_corpses=set(),
+        )
+    assert not evaluation._action_is_valid(
+        eat_step,
+        (eat,),
+        before,
+        True,
+        profile,
+        corpse_kills={},
+        consumed_corpses=set(),
+    )
+    assert not evaluation._action_is_valid(
+        eat_step,
+        (eat,),
+        before,
+        True,
+        profile,
+        corpse_kills=history,
+        consumed_corpses={(level, 1, 0, 2)},
+    )
+    assert not evaluation._action_is_valid(
+        eat_step,
+        (eat,),
+        before,
+        True,
+        profile,
+        corpse_kills={(level, 1, 0): CorpseKill("gecko", 2, level, evidence.cell)},
+        consumed_corpses=set(),
+    )
+    yes = LegalAction(0, ord("y"), "CompassDirection.NW")
+    finished = replace(
+        after,
+        player=replace(before.player, turn=7, hunger=0),
+        message="This lichen corpse tastes okay.  You finish eating the lichen corpse.",
+    )
+    answered = replace(
+        synthetic_step(finished),
+        action=yes,
+        selection=replace(
+            selection,
+            source=ActionSelectionSource.DETERMINISTIC_PROMPT,
+            intent=ActionIntent(
+                None,
+                None,
+                None,
+                corpse=replace(
+                    evidence,
+                    outcome=CorpseOutcome(
+                        CorpseOutcomeKind.FINISHED,
+                        7,
+                        0,
+                        finished.message,
+                    ),
+                ),
+            ),
+        ),
+    )
+    assert evaluation._action_is_valid(
+        answered,
+        (yes,),
+        floor_prompt,
+        True,
+        profile,
+        corpse_kills=history,
+        consumed_corpses=set(),
+        pending_corpse=evidence,
+    )
+    assert not evaluation._action_is_valid(
+        answered,
+        (yes,),
+        floor_prompt,
+        True,
+        profile,
+        corpse_kills=history,
+        consumed_corpses=set(),
+    )
+    assert not evaluation._action_is_valid(
+        answered,
+        (yes,),
+        replace(floor_prompt, message=floor_prompt.message.replace("lichen", "gecko")),
+        True,
+        profile,
+        corpse_kills=history,
+        consumed_corpses=set(),
+        pending_corpse=evidence,
+    )
+    assert not evaluation._action_is_valid(
+        answered,
+        (yes,),
+        floor_prompt,
+        True,
+        profile,
+        corpse_kills={(level, 1, 0): CorpseKill("gecko", 3, level, evidence.cell)},
+        consumed_corpses=set(),
+        pending_corpse=evidence,
+    )
+    # Unexpected floor identity does not retroactively invalidate the EAT
+    # decision; the only valid response to that new prompt is decline.
+    mismatched = replace(
+        floor_prompt,
+        message=floor_prompt.message.replace("lichen", "gecko"),
+    )
+    assert evaluation._action_is_valid(
+        replace(eat_step, observation=mismatched),
+        (eat,),
+        before,
+        True,
+        profile,
+        corpse_kills=history,
+        consumed_corpses=set(),
+    )
+    no = LegalAction(0, ord("n"), "CompassDirection.SE")
+    declined = replace(
+        after,
+        player=before.player,
+        message="Never mind.",
+    )
+    no_step = replace(
+        synthetic_step(declined),
+        action=no,
+        selection=replace(
+            selection,
+            source=ActionSelectionSource.DETERMINISTIC_PROMPT,
+            intent=ActionIntent(
+                None,
+                None,
+                None,
+                corpse=replace(
+                    evidence,
+                    outcome=CorpseOutcome(
+                        CorpseOutcomeKind.DECLINED,
+                        3,
+                        1,
+                        declined.message,
+                    ),
+                ),
+            ),
+        ),
+    )
+    assert evaluation._action_is_valid(
+        no_step,
+        (no,),
+        mismatched,
+        True,
+        profile,
+        corpse_kills=history,
+        consumed_corpses=set(),
+        pending_corpse=evidence,
+    )
+    assert not evaluation._action_is_valid(
+        no_step,
+        (no,),
+        mismatched,
+        True,
+        profile,
+        corpse_kills=history,
+        consumed_corpses=set(),
+    )
+    esc = LegalAction(0, 27, "Command.ESC")
+    inventory_prompt = replace(
+        floor_prompt,
+        message="What do you want to eat? [a or ?*]",
+    )
+    esc_step = replace(no_step, action=esc)
+    assert evaluation._action_is_valid(
+        esc_step,
+        (esc,),
+        inventory_prompt,
+        True,
+        profile,
+        corpse_kills=history,
+        consumed_corpses=set(),
+        pending_corpse=evidence,
+    )
+    assert not evaluation._action_is_valid(
+        esc_step,
+        (esc,),
+        mismatched,
+        True,
+        profile,
+        corpse_kills=history,
+        consumed_corpses=set(),
+        pending_corpse=evidence,
+    )
+    midmeal = replace(
+        finished,
+        player=replace(before.player, turn=4),
+        message="You start eating the lichen corpse.",
+    )
+    assert classify_corpse_outcome("lichen", midmeal.message) is None
+    midmeal_yes = replace(
+        answered,
+        observation=midmeal,
+        selection=replace(
+            answered.selection,
+            intent=ActionIntent(
+                None,
+                None,
+                None,
+                corpse=evidence,
+            ),
+        ),
+    )
+    assert evaluation._action_is_valid(
+        midmeal_yes,
+        (yes,),
+        floor_prompt,
+        True,
+        profile,
+        corpse_kills=history,
+        consumed_corpses=set(),
+        pending_corpse=evidence,
+    )
+    assert not evaluation._action_is_valid(
+        eat_step,
+        (eat,),
+        before,
+        True,
+        profile,
+        corpse_kills=history,
+        consumed_corpses=set(),
+        pending_meal=evidence,
+    )
+    wait = LegalAction(0, ord("."), "MiscDirection.WAIT")
+    waiting = replace(
+        synthetic_step(finished),
+        action=wait,
+        selection=replace(
+            selection,
+            intent=ActionIntent(
+                None,
+                None,
+                None,
+                corpse=replace(
+                    evidence,
+                    outcome=CorpseOutcome(
+                        CorpseOutcomeKind.FINISHED,
+                        7,
+                        0,
+                        finished.message,
+                    ),
+                ),
+            ),
+        ),
+    )
+    assert evaluation._action_is_valid(
+        waiting,
+        (wait,),
+        midmeal,
+        True,
+        profile,
+        pending_meal=evidence,
+    )
+    assert not evaluation._action_is_valid(
+        waiting,
+        (wait,),
+        midmeal,
+        True,
+        profile,
+    )
+    # Completion evidence is mandatory on live completion observations, but
+    # terminal/truncated observations must not manufacture a meal outcome.
+    for completed, decided_on, action, pending in (
+        (answered, floor_prompt, yes, {"pending_corpse": evidence}),
+        (waiting, midmeal, wait, {"pending_meal": evidence}),
+    ):
+        missing = replace(
+            completed.selection,
+            intent=ActionIntent(None, None, None, corpse=evidence),
+        )
+        with pytest.raises(ContractError, match="observed outcome"):
+            replace(completed, selection=missing)
+        for terminated, truncated, outcome in (
+            (True, False, RunOutcome.DEATH),
+            (False, True, RunOutcome.TRUNCATED),
+        ):
+            terminal = replace(
+                completed,
+                terminated=terminated,
+                truncated=truncated,
+                outcome=outcome,
+                selection=missing,
+                observation=synthetic_observation(3, None, 1, hunger=0),
+            )
+            assert evaluation._action_is_valid(
+                terminal,
+                (action,),
+                decided_on,
+                True,
+                profile,
+                corpse_kills=history,
+                consumed_corpses=set(),
+                **pending,
+            )
+            with pytest.raises(ContractError, match="observed outcome"):
+                replace(terminal, selection=completed.selection)
+
+
+def test_corpse_forgery_is_counted_as_invalid_action_in_event_replay(
+    tmp_path: Path,
+) -> None:
+    suite = load_suite(SUITE_PATH)
+    task = replace(STAIRCASE_TASK, action_profile=ActionProfile.NLE_SURVIVAL_ACTIONS)
+    case = replace(suite.cases[0], task=task)
+    initial = synthetic_observation(0, LevelKey(0, 1), 1, hunger=1)
+    initial = replace(
+        initial,
+        player=replace(initial.player, x=1, turn=3),
+        message="You see here a lichen corpse.",
+    )
+    evidence = CorpseEvidence("lichen", 2, 1, MapCell(1, 0))
+    eat = LegalAction(0, ord("e"), "Command.EAT")
+    prompt = replace(
+        synthetic_observation(1, LevelKey(0, 1), 1, hunger=1),
+        player=initial.player,
+        message="There is a lichen corpse here; eat it? [ynq] (n) ",
+        prompt=PromptState(True, False, False),
+    )
+    step = replace(
+        synthetic_step(prompt, RunOutcome.DEATH),
+        action=eat,
+        selection=replace(
+            synthetic_step(prompt).selection,
+            skill=Skill.CORPSE,
+            intent=ActionIntent(None, None, None, corpse=evidence),
+        ),
+    )
+    record = RunRecord(
+        id="corpse-forgery",
+        created_at="2026-09-28T00:00:00+00:00",
+        updated_at="2026-09-28T00:00:00+00:00",
+        state=RunState.TERMINAL,
+        outcome=RunOutcome.DEATH,
+        environment=task.environment.value,
+        character=suite.character,
+        suite_seed=1,
+        core_seed=1,
+        display_seed=1,
+        level_seed=1,
+        max_episode_steps=case.max_episode_steps,
+        model="scripted",
+        policy_version="policy",
+        knowledge_version="knowledge",
+        nle_version="1.3.0",
+        ollama_num_ctx=8192,
+        ollama_version=None,
+        ttyrec_path=None,
+        error=None,
+        task=task,
+    )
+    events = (
+        RunEvent(
+            0,
+            record.created_at,
+            EventKind.RUN_STARTED,
+            RunStartedPayload(
+                initial,
+                (eat,),
+                STAND_ON_DOWNSTAIRS,
+                None,
+            ),
+        ),
+        RunEvent(1, record.created_at, EventKind.STEP, step),
+    )
+    result = summarize_run(
+        record,
+        events,
+        suite=suite,
+        case=case,
+        seed=1,
+        ended_by="episode_end",
+        wall_seconds=0.0,
+        data_directory=tmp_path,
+    )
+    assert result.invalid_actions == 1
+
+
 def test_survival_audit_rechecks_prayer_yes_and_ration_evidence() -> None:
     before = synthetic_observation(0, LevelKey(0, 1), 1, hunger=2)
     after = synthetic_observation(1, LevelKey(0, 1), 1, hunger=2)
@@ -1091,7 +1678,7 @@ def test_survival_audit_rechecks_prayer_yes_and_ration_evidence() -> None:
         replace(step, action=pray)
 
     yes = LegalAction(0, ord("y"), "CompassDirection.NW")
-    with pytest.raises(ContractError, match="deterministic prayer or hunger prompt"):
+    with pytest.raises(ContractError):
         replace(
             step,
             action=yes,
@@ -1115,6 +1702,20 @@ def test_survival_audit_rechecks_prayer_yes_and_ration_evidence() -> None:
     assert not evaluation._action_is_valid(
         yes_step, (yes,), corpse_choice, True, profile
     )
+    no = LegalAction(0, ord("n"), "CompassDirection.SE")
+    no_step = replace(step, action=no, selection=corpse_answer)
+    non_allowed = replace(
+        corpse_choice,
+        message="There is a jackal corpse here; eat it? [ynq] (n) ",
+    )
+    assert evaluation._action_is_valid(
+        no_step,
+        (no,),
+        non_allowed,
+        True,
+        profile,
+    )
+    assert not evaluation._action_is_valid(no_step, (no,), before, True, profile)
     item_choice = replace(
         corpse_choice,
         message="What do you want to eat? [y or ?*]",

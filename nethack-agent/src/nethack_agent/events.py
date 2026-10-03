@@ -16,12 +16,16 @@ from nethack_agent.contracts import (
     string_value,
 )
 from nethack_agent.decision import (
+    EAT_ACTION_NAME,
+    ESC_COMMAND,
     LEVEL_CHANGE_ACTIONS,
     PRAY_ACTION_NAME,
     YES_COMMAND,
     ActionDecision,
     ActionSelection,
     ActionSelectionSource,
+    CorpseOutcome,
+    CorpseOutcomeKind,
     DecisionMetrics,
     PrayerOutcome,
     PromptKind,
@@ -31,6 +35,7 @@ from nethack_agent.decision import (
     Skill,
     SkillDecision,
     SkillSelectionSource,
+    classify_corpse_outcome,
     classify_prayer_outcome,
     confirmation_answer_error,
     confirmation_prompt_kind,
@@ -302,7 +307,107 @@ class StepPayload:
                         survival_error = (
                             "prayer yes requires the matching observed outcome"
                         )
-        elif prayer is not None:
+        elif (
+            self.action.command == YES_COMMAND
+            and self.selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
+            and self.selection.skill is Skill.CORPSE
+        ):
+            corpse = None if intent is None else intent.corpse
+            if survival_error is None:
+                survival_error = confirmation_answer_error(
+                    self.action.command,
+                    self.selection,
+                    prompt_active=True,
+                    prompt_kind=PromptKind.CORPSE_CONFIRMATION,
+                    permit=PromptPermit(YES_COMMAND, PromptKind.CORPSE_CONFIRMATION),
+                )
+            if survival_error is None:
+                if self.terminated or self.truncated:
+                    if corpse is None or corpse.outcome is not None:
+                        survival_error = (
+                            "terminal corpse yes cannot claim an observed outcome"
+                        )
+                else:
+                    kind = classify_corpse_outcome(
+                        corpse.name, self.observation.message
+                    )
+                    if self.observation.player.dungeon_level < 1 or corpse.outcome != (
+                        None
+                        if kind is None
+                        else CorpseOutcome(
+                            kind,
+                            self.observation.player.turn,
+                            self.observation.player.hunger,
+                            self.observation.message,
+                        )
+                    ):
+                        survival_error = (
+                            "corpse yes requires the matching observed outcome"
+                        )
+        elif (
+            intent is not None
+            and intent.corpse is not None
+            and self.selection.skill is Skill.CORPSE
+            and self.action.name != EAT_ACTION_NAME
+        ):
+            corpse = intent.corpse
+            if self.action.name == "MiscDirection.WAIT":
+                kind = (
+                    None
+                    if self.terminated or self.truncated
+                    else classify_corpse_outcome(corpse.name, self.observation.message)
+                )
+                if (
+                    self.selection.source
+                    is not ActionSelectionSource.DETERMINISTIC_SKILL
+                    or corpse.outcome
+                    != (
+                        None
+                        if kind is None
+                        else CorpseOutcome(
+                            kind,
+                            self.observation.player.turn,
+                            self.observation.player.hunger,
+                            self.observation.message,
+                        )
+                    )
+                ):
+                    survival_error = "meal continuation requires its observed outcome"
+            elif self.action.command in (ord("n"), ESC_COMMAND):
+                expected = (
+                    None
+                    if self.terminated or self.truncated
+                    else CorpseOutcome(
+                        CorpseOutcomeKind.DECLINED,
+                        self.observation.player.turn,
+                        self.observation.player.hunger,
+                        self.observation.message,
+                    )
+                )
+                if (
+                    self.selection.source
+                    is not ActionSelectionSource.DETERMINISTIC_PROMPT
+                    or corpse.outcome != expected
+                ):
+                    survival_error = (
+                        "corpse decline requires the matching observed outcome"
+                    )
+            elif (
+                self.selection.source is not ActionSelectionSource.DETERMINISTIC_SKILL
+                or corpse.outcome is not None
+            ):
+                survival_error = (
+                    "corpse outcome requires its confirmation or meal continuation"
+                )
+        if (
+            prayer is not None
+            and self.action.name != PRAY_ACTION_NAME
+            and not (
+                self.action.command == YES_COMMAND
+                and self.selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
+                and self.selection.skill is Skill.PRAYER
+            )
+        ):
             survival_error = "prayer evidence requires PRAY or its confirmation answer"
         if survival_error is not None:
             raise ContractError(f"step survival action is invalid: {survival_error}")

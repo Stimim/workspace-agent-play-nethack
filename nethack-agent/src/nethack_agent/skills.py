@@ -6,11 +6,13 @@ from typing import Final
 
 from nle import nethack
 
+from nethack_agent.corpse import CorpseKill, eligible_corpse, parse_floor_corpse_prompt
 from nethack_agent.decision import (
     PRAYER_FIRST_SAFE_TURN,
     PRAYER_REPEAT_WAIT_TURNS,
     STAIR_DESTINATIONS,
     ActionIntent,
+    CorpseEvidence,
     DestinationKind,
     IntentDestination,
     MapCell,
@@ -540,6 +542,141 @@ class HungerSkill:
         )
 
 
+class CorpseSkill:
+    """Visit a recent observed kill, identify it underfoot, then eat it."""
+
+    @staticmethod
+    def select_action(
+        observation: ProjectedObservation,
+        memory: LevelMemory,
+        actions_by_name: dict[str, LegalAction],
+        kills: dict[tuple[LevelKey, MapCell], CorpseKill],
+        consumed: set[CorpseKill],
+    ) -> SkillAction | None:
+        if observation.prompt.active or observation.player.hunger < 1 or not kills:
+            return None
+        origin = memory.position
+        visible: list[CorpseEvidence] = []
+        for kill in kills.values():
+            if kill in consumed:
+                continue
+            evidence = eligible_corpse(kill, observation)
+            if evidence is None:
+                continue
+            point = (evidence.cell.x, evidence.cell.y)
+            if (
+                point == origin
+                and observation.message != f"You see here a {evidence.name} corpse."
+            ):
+                continue
+            visible.append(evidence)
+        if not visible:
+            return None
+        tree = route_tree(memory)
+        candidates: list[tuple[int, int, int, CorpseEvidence]] = []
+        for evidence in visible:
+            point = (evidence.cell.x, evidence.cell.y)
+            distance = tree.distances.get(point)
+            if distance is not None and distance <= 5:
+                candidates.append((distance, point[1], point[0], evidence))
+        if not candidates:
+            return None
+        _, _, _, evidence = min(candidates)
+        target = (evidence.cell.x, evidence.cell.y)
+        destination = IntentDestination(DestinationKind.CORPSE, *target)
+        if target == origin:
+            eat = actions_by_name.get("Command.EAT")
+            if eat is None:
+                return None
+            return SkillAction(
+                eat.index,
+                f"Eat the identified fresh {evidence.name} corpse underfoot.",
+                ActionRecord(ActionKind.OTHER, origin),
+                ActionIntent(None, None, None, corpse=evidence),
+            )
+        # The object glyph is generic: the kill record supplies the identity.
+        # The kill cell must remain displayed as a corpse before routing.
+        route = tree.route(target)
+        if route is None or len(route) > 5:
+            return None
+        return _route_step(
+            memory,
+            route,
+            actions_by_name,
+            f"Approach the visible corpse on the observed {evidence.name} kill cell.",
+            destination,
+            corpse=evidence,
+        )
+
+    @staticmethod
+    def confirm(
+        observation: ProjectedObservation,
+        actions_by_command: dict[int, LegalAction],
+        evidence: CorpseEvidence,
+    ) -> SkillAction | None:
+        if not observation.prompt.single_character_choice:
+            return None
+        if parse_floor_corpse_prompt(observation.message) != evidence.name:
+            return None
+        yes = actions_by_command.get(ord("y"))
+        if yes is None:
+            return None
+        return SkillAction(
+            yes.index,
+            f"Confirm the exact {evidence.name} corpse floor prompt.",
+            ActionRecord(
+                ActionKind.OTHER, (observation.player.x, observation.player.y)
+            ),
+            ActionIntent(None, None, None, corpse=evidence),
+        )
+
+    @staticmethod
+    def decline(
+        observation: ProjectedObservation,
+        actions_by_command: dict[int, LegalAction],
+        evidence: CorpseEvidence,
+    ) -> SkillAction | None:
+        if not observation.prompt.single_character_choice:
+            return None
+        species = parse_floor_corpse_prompt(observation.message)
+        if species is not None and species != evidence.name:
+            action = actions_by_command.get(ord("n"))
+            reason = f"Decline the different {species} corpse floor prompt."
+        elif item_selection_commands(observation) is not None:
+            action = actions_by_command.get(27)
+            reason = "Cancel inventory selection after a floor-corpse EAT."
+        else:
+            return None
+        if action is None:
+            return None
+        return SkillAction(
+            action.index,
+            reason,
+            ActionRecord(
+                ActionKind.OTHER, (observation.player.x, observation.player.y)
+            ),
+            ActionIntent(None, None, None, corpse=evidence),
+        )
+
+    @staticmethod
+    def continue_meal(
+        observation: ProjectedObservation,
+        actions_by_name: dict[str, LegalAction],
+        evidence: CorpseEvidence,
+    ) -> SkillAction | None:
+        if observation.prompt.active:
+            return None
+        wait = actions_by_name.get("MiscDirection.WAIT")
+        if wait is None:
+            return None
+        return SkillAction(
+            wait.index,
+            f"Let the ongoing {evidence.name} corpse meal finish.",
+            ActionRecord(ActionKind.WAIT, (observation.player.x, observation.player.y)),
+            ActionIntent(None, None, None, corpse=evidence),
+        )
+
+
 class SafePromptHandler:
     """Answer only prompts with a conservative context-independent response."""
 
@@ -607,6 +744,7 @@ def _route_step(
     *,
     attack_target: MapCell | None = None,
     search_spot: Point | None = None,
+    corpse: CorpseEvidence | None = None,
 ) -> SkillAction | None:
     """Take the first step of `route`, whose last cell is the route goal."""
     if route is None:
@@ -620,7 +758,10 @@ def _route_step(
     if action is None:
         return None
     intent = ActionIntent(
-        destination, attack_target, tuple(MapCell(*point) for point in route)
+        destination,
+        attack_target,
+        tuple(MapCell(*point) for point in route),
+        corpse=corpse,
     )
     monster = memory.monsters.get(step)
     if memory.kind(step) is CellKind.CLOSED_DOOR:

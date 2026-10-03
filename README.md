@@ -47,20 +47,23 @@ typed task spec (NLE task, action profile, and objective legs). An objective
 planner turns the legs into typed goals: stand on, or traverse, a staircase of
 a direction with a main or branch identity
 ([ADR 0004](docs/decisions/0004-traversal-goals-and-task-progression.md)).
-Three deterministic skills serve the goals over dungeon memory that keeps each
-visited level. `staircase_navigation` routes to a remembered reachable
-staircase matching the goal and waits on it or uses it, but first fights an
-adjacent safe-to-melee hostile. `explore_level` walks to unexplored space,
-opens or kicks doors, fights adjacent hostiles, and searches for hidden
-passages. On runs using the bounded `nle-hunger-actions` profile, the hunger
-skill eats only an exactly recognized inventory food ration at Hungry or worse
-and supplies its currently offered inventory letter. Prompt-only keys and
-`EAT` are permit-gated away from model fallbacks. A deterministic arbiter
-switches between traversal skills; the local model is consulted at the start,
-when exploration is stuck, and for unhandled prompts. The staircase task never
-changes level. Runs expose the current goal and skill, stream typed events
-through the loopback service and CLI, and keep bounded scenarios and network
-verification reproducible.
+Deterministic staircase-navigation and exploration skills serve the goals over
+dungeon memory that keeps each visited level. `staircase_navigation` routes to
+a remembered reachable staircase matching the goal and waits on it or uses
+it, first fighting a safe adjacent hostile. `explore_level` walks to
+unexplored space, opens or kicks doors, fights adjacent hostiles, and searches
+for hidden passages. On bounded `nle-hunger-actions` runs, the hunger skill
+eats an exactly recognized inventory ration only at Hungry or worse. On
+`nle-survival-actions`, deterministic prayer handles eligible Weak hunger
+after a conservative timeout, and a separate skill routes at most five
+steps to a verified fresh allow-listed corpse at Not Hungry or worse.
+`EAT`, `PRAY`, prompt-only keys, and their exact confirmation answers are
+permit-gated away from model fallbacks. A deterministic arbiter switches
+between traversal and survival skills; the local model is consulted at the
+start, when exploration is stuck, and for unhandled prompts. The staircase
+task never changes level. Runs expose the current goal and skill, stream
+typed events through the loopback service and CLI, and keep bounded scenarios
+and network verification reproducible.
 
 The first product milestone requires this hierarchy to succeed on at least 6
 of 10 fixed `NetHackStaircase-v0` seeds, including seed 6, while recording
@@ -111,7 +114,11 @@ single real-model runs:
 no completed objective, because exhaustive search outlasts the hunger horizon
 ([note 0017](docs/notes/0017-scout-and-eat-task-suites.md)).
 
-The next milestone ([`TODO_LIST.md`](TODO_LIST.md), [ADR 0005](docs/decisions/0005-early-survival-and-seed-evaluation.md), proposed) targets reaching Dungeons of Doom level 5 without hunger deaths: prayer, safe corpse eating, and bounded hidden-passage search, evaluated on a reviewed catalog of representative seeds plus 20 freshly drawn seeds per run.
+The next milestone ([`TODO_LIST.md`](TODO_LIST.md),
+[ADR 0005](docs/decisions/0005-early-survival-and-seed-evaluation.md), proposed)
+targets reaching Dungeons of Doom level 5 without hunger deaths: prayer and
+fresh-corpse handling are implemented, while bounded hidden-passage search and
+the representative-plus-20-fresh-seed evaluation remain.
 
 ## Documentation
 
