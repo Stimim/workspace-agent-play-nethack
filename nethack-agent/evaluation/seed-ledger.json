@@ -239,7 +239,7 @@
           90
         ]
       ],
-      "note": "Note 0041 fresh 30-seed HEAD-versus-candidate comparison for the rejected staircase-retreat/RecoverySkill candidate (survival-reviewed-v2 vs survival-reviewed-v3). HEAD run completed 30/30; candidate run completed 19/30 before an unrelated tooling execution cap. Both partial and complete results are real episodes against the live engine; the seeds are consumed regardless of completion count."
+      "note": "Rejected RecoverySkill sample (note 0041). HEAD completed 30 episodes; candidate completed 19 before tooling timeout. All reserved seeds consumed regardless of completion."
     },
     {
       "source": "note-0042-fresh-91-120-spoiled-attempt",
@@ -250,7 +250,7 @@
           120
         ]
       ],
-      "note": "First note-0042 fresh-sample attempt for the fixed recovery candidate. Both HEAD and candidate runs were cut short mid-suite by an unrelated tooling 300-second background execution cap (no explicit --timeout passed); results are spoiled and were not used for the note-0042 decision. Real episodes ran against the live engine, so the seeds are consumed; the requalification used a new range (121-150) instead of resuming or reusing this one."
+      "note": "Spoiled note-0042 attempt: both arms cut short by default 300-second tooling timeout. Not resumed or counted; seeds consumed. Full accounting in corrected note 0042."
     },
     {
       "source": "note-0042-fresh-121-150-intermediate-candidate",
@@ -261,7 +261,7 @@
           150
         ]
       ],
-      "note": "Second note-0042 fresh-sample run (completed, not cut short) against an intermediate candidate that fixed only the hostile-adjacency scoping defect. It revealed a second, previously latent defect from the same health_action_error check: a gas-spore blast-radius rejection of ExploreLevelSkill's in-flight search (4 new fresh gate rejections at seeds 127, 132, 144, 146; the dev set still showed its original 5). That intermediate candidate was fixed again (ExploreLevelSkill's search-spot selection now proactively avoids gas-spore blast radius) and an entirely new candidate/sample was frozen per the note-0040 protocol; these seeds are consumed and not reused."
+      "note": "Completed superseded note-0042 candidate with hostile-adjacency fix only. Gas-spore search-spot rejections required a changed candidate/new sample. Consumed, never reused; see note 0042."
     },
     {
       "source": "note-0042-fresh-151-180-intermediate-candidate",
@@ -272,7 +272,7 @@
           180
         ]
       ],
-      "note": "Third note-0042 fresh-sample run (completed, not cut short) against an intermediate candidate that fixed the ExploreLevelSkill gas-spore search-spot defect but not a third, previously latent defect: the model-fallback path (ScriptedDevelopmentModel/Ollama with no public-state awareness) could still choose a gas-spore-adjacent WAIT/SEARCH and get gate-rejected, stopping the episode (dev seed 703 and fresh seed 153; the dev set's other 4 seeds, 1370/1376/1377/1379, hit the identical fallback cause). Fixed by having the coordinator substitute the first otherwise-allowed action the same safety gate accepts whenever a MODEL_FALLBACK choice would be rejected, instead of stopping the episode. All nine previously affected seeds (703, 1370, 1376, 1377, 1379, 127, 132, 144, 146, 153) were individually re-verified gate-clean before freezing a new candidate/sample; these seeds are consumed and not reused."
+      "note": "Completed superseded note-0042 candidate adding search-spot avoidance. Unsafe model fallback (including seed 153) required another changed candidate/new sample. Consumed, never reused; see note 0042."
     },
     {
       "source": "note-0042-fresh-181-210-final-rejected-candidate",
@@ -283,13 +283,19 @@
           210
         ]
       ],
-      "note": "Final note-0042 fresh-sample run (completed, not cut short) against the fourth candidate, which fixed the hostile-adjacency, search-spot gas-spore, and model-fallback gas-spore defects found by the prior three rounds. Still rejected: dev-set objectives 50/67 versus HEAD's qualified 52/67, fresh objectives 18/30 versus HEAD's 23/30, and two remaining fresh gate rejections (seeds 190, 210) from a fourth, unfixed defect class (ordinary route-planned movement and non-fallback WAIT/SEARCH selections have no gas-spore awareness). See note 0042. Next unused range is 211-240."
-    }
-    ,{
+      "note": "Completed final rejected note-0042 candidate: dev 50/67 vs 52/67; fresh 18/30 vs 23/30; two gate rejections (190/210), sources untraced. Consumed; corrected evidence and full accounting in note 0042."
+    },
+    {
       "source": "single-rule-3a-low-hp-prayer",
       "seeds": [],
       "ranges": [[211, 240]],
-      "note": "Reserved before either arm for single-rule low-HP prayer qualification under note 0040; never reused or selectively replaced."
+      "note": "Completed superseded low-HP prayer candidate: dev 52->54, fresh 24->24. Pre-prayer defense bypassed low-HP prayer beside attackers; priority corrected and new sample reserved. Consumed; see note 0043."
+    },
+    {
+      "source": "single-rule-3a-low-hp-prayer-priority-corrected",
+      "seeds": [],
+      "ranges": [[241, 270]],
+      "note": "Reserved before either arm for corrected low-HP prayer priority candidate, note 0043. No retreat/rest/disengagement or hazard changes. Never reused or selectively replaced."
     }
   ]
 }
