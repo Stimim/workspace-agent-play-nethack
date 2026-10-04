@@ -313,7 +313,13 @@
       "source": "note-0045-rule1-burden-surplus-food-corrected",
       "seeds": [],
       "ranges": [[331, 360]],
-      "note": "Frozen before either arm: HEAD 2b7740e versus corrected burden candidate (coordinator.py hunger-permit fix only). Same Score/survival/reachD5/cap3000/survival-reviewed-v2 protocol and note0040 gates. All reserved seeds consumed regardless of completion. See note0045."
+      "note": "Spoiled: full development arm found a real priority defect (burden preempted combat defense, see note0045), a changed-rule death increase. Candidate fixed and refrozen; this sample consumed, never reused."
+    },
+    {
+      "source": "note-0045-rule1-burden-surplus-food-twice-corrected",
+      "seeds": [],
+      "ranges": [[361, 390]],
+      "note": "Frozen before either arm: HEAD 2b7740e versus twice-corrected burden candidate (coordinator.py defense-priority fix). Same Score/survival/reachD5/cap3000/survival-reviewed-v2 protocol and note0040 gates. All reserved seeds consumed regardless of completion. See note0045."
     }
   ]
 }

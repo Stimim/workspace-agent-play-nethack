@@ -859,12 +859,6 @@ class AgentCoordinator:
                     skill_model_decision,
                     source=source,
                 )
-        if self._burden is not None and not before.prompt.active:
-            drop = self._burden.select_action(before, self._gate.actions_by_command)
-            if drop is not None:
-                return self._skill_plan(
-                    drop, goal, Skill.BURDEN, arbiter, None, skill_model_decision
-                )
         if not before.prompt.active and self._corpse is not None:
             defense = _attack_adjacent_hostile(memory, actions, None)
             if defense is not None:
@@ -875,6 +869,12 @@ class AgentCoordinator:
                     arbiter,
                     None,
                     skill_model_decision,
+                )
+        if self._burden is not None and not before.prompt.active:
+            drop = self._burden.select_action(before, self._gate.actions_by_command)
+            if drop is not None:
+                return self._skill_plan(
+                    drop, goal, Skill.BURDEN, arbiter, None, skill_model_decision
                 )
         if (
             not before.prompt.active

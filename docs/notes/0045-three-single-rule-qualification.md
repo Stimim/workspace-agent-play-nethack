@@ -48,4 +48,19 @@ Per this note's own preregistered protocol, a behavior correction mid-qualificat
 
 - coordinator.py: `ad47d75b88f7d222341a8e232cfd4593efb56a77752366e6cb1623fbfa627bf6`
 - test_coordinator.py: `ef6c615c27092198b7d2638c57e19fbeaa578326bf220f8f11e048cb908ec414`
-- all other files: unchanged from the SHA-256 list above.
+
+## Rule 1 second spoiled sample: burden preempted combat defense
+
+Fresh 331-360 matched baseline exactly (22/30 both arms, identical outcomes, zero invalid/gate/integrity). The full 67-seed development arm had exactly one change: seed5 went `truncated`(baseline)->`death`(candidate, "killed by a jackal"), a raw death-count increase (5->6) that fails this note's own preregistered "deaths must not increase" gate.
+
+Traced from stored public events: at step1902 a non-pet werejackal (confirmed via `nethack.permonst`) is displayed directly adjacent to the hero in the exact observation used for the next decision, the same turn the load refusal fires. `_decide()` checked `self._burden`'s drop-opening branch *before* `_attack_adjacent_hostile`, so the coordinator opened a multi-turn NetHack drop-item menu instead of fighting back. NetHack cannot process movement/attack commands while that menu is open, so the hero absorbed free bites for the whole ~10-action drop sequence (HP35->9->7->6->3), survived only via a forced low-HP prayer (HP3->31), then died to the werejackal plus a monster it summoned before escaping (HP31->0 over 4 more turns). This is a genuine changed-rule priority defect, not a pre-existing failure: defense already ran before hunger/food/corpse (all deliberately deferred while burden is active); burden's insertion ahead of defense, instead of behind it, was the mistake.
+
+Fix: swapped the two blocks in `coordinator.py` so `_attack_adjacent_hostile` is checked before opening a new burden-drop sequence (an already-open multi-key answer is unaffected, since NetHack accepts no other input until it is answered). A new permanent regression (`test_adjacent_hostile_defense_preempts_opening_a_new_burden_drop`) places a displayed non-pet werejackal adjacent to the hero under an Overloaded refusal message and asserts `_decide` attacks it instead of opening DROP, then asserts burden proceeds normally once the monster is removed; it fails without the fix and passes with it. Full suite (620 tests) and Ruff passed after the fix.
+
+Per the same preregistered protocol, this is a second behavior correction mid-qualification, so fresh 331-360 is also spoiled and never reused; both reports are kept only as defect evidence. A third fresh range **361-390** is reserved before either corrected arm.
+
+### Twice-corrected frozen SHA-256
+
+- coordinator.py: `19a58fef94a7eaba1529e0c687d222f8248bac1fb4e9a564dc632422d9393942`
+- test_coordinator.py: `f2bc4bf080de4dec76ee28aa819bfc35c681a1babc10155e64caefb0ed4cc564`
+- all other files: unchanged from the SHA-256 lists above.

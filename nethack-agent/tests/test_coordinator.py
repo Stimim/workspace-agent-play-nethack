@@ -1764,6 +1764,46 @@ def test_hunger_permit_defers_a_burden_drop_answer_sharing_the_eat_letter(
         agent.stop()
 
 
+def test_adjacent_hostile_defense_preempts_opening_a_new_burden_drop(
+    tmp_path: Path,
+) -> None:
+    task = TaskSpec(
+        NleTask.SCORE,
+        ActionProfile.NLE_SURVIVAL_ACTIONS,
+        Objective((ReachLevelLeg(LevelKey(0, 5)),)),
+    )
+    agent = AgentCoordinator(
+        NleEnvironment(ScenarioConfig(seed=6, artifact_directory=tmp_path, task=task)),
+        ObservationProjector(),
+        ScriptedDevelopmentModel(),
+    )
+    initial = agent.start()
+    try:
+        hero = (initial.player.x, initial.player.y)
+        memory = agent._dungeon.current
+        memory.monsters.clear()
+        neighbor = next(
+            point for point in memory.neighbors(hero) if point[0] == hero[0] + 1
+        )
+        memory.monsters[neighbor] = Monster(nethack.GLYPH_MON_OFF, "werejackal", False)
+        refused = replace(
+            initial,
+            message="You can't even move a handspan with this load!",
+            player=replace(initial.player, encumbrance=5),
+        )
+        plan = agent._decide(refused, None, lambda: False, 0)
+        assert plan is not None
+        assert plan.selection.skill is Skill.EXPLORE_LEVEL
+        assert plan.selection.intent is not None
+        assert plan.selection.intent.attack_target == MapCell(*neighbor)
+        memory.monsters.clear()
+        undefended = agent._decide(refused, None, lambda: False, 0)
+        assert undefended is not None
+        assert undefended.selection.skill is Skill.BURDEN
+    finally:
+        agent.stop()
+
+
 @pytest.mark.parametrize(
     ("command", "cell", "action_name"),
     [
