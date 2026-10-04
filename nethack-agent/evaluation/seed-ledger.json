@@ -302,6 +302,12 @@
       "seeds": [],
       "ranges": [[271, 300]],
       "note": "Completed rejected hazard-only candidate: dev 54->55, deaths 5->3; fresh 23->21, deaths 5->4; seven gate stops (four dev, three fresh). All losses traced as changed-rule trapped-state defects. Consumed; see note 0044."
+    },
+    {
+      "source": "note-0045-rule1-burden-surplus-food",
+      "seeds": [],
+      "ranges": [[301, 330]],
+      "note": "Frozen before either arm: HEAD 2b7740e versus encumbrance-refusal recovery, dropping surplus food/nonessentials but keeping one ration/main weapon/worn armor. Score/survival/reachD5/cap3000/survival-reviewed-v2, scripted model; note0040 paired aggregate and trace-causal gates. All reserved seeds consumed regardless of completion. See note0045."
     }
   ]
 }
