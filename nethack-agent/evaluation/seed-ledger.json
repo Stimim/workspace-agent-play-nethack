@@ -262,6 +262,17 @@
         ]
       ],
       "note": "Second note-0042 fresh-sample run (completed, not cut short) against an intermediate candidate that fixed only the hostile-adjacency scoping defect. It revealed a second, previously latent defect from the same health_action_error check: a gas-spore blast-radius rejection of ExploreLevelSkill's in-flight search (4 new fresh gate rejections at seeds 127, 132, 144, 146; the dev set still showed its original 5). That intermediate candidate was fixed again (ExploreLevelSkill's search-spot selection now proactively avoids gas-spore blast radius) and an entirely new candidate/sample was frozen per the note-0040 protocol; these seeds are consumed and not reused."
+    },
+    {
+      "source": "note-0042-fresh-151-180-intermediate-candidate",
+      "seeds": [],
+      "ranges": [
+        [
+          151,
+          180
+        ]
+      ],
+      "note": "Third note-0042 fresh-sample run (completed, not cut short) against an intermediate candidate that fixed the ExploreLevelSkill gas-spore search-spot defect but not a third, previously latent defect: the model-fallback path (ScriptedDevelopmentModel/Ollama with no public-state awareness) could still choose a gas-spore-adjacent WAIT/SEARCH and get gate-rejected, stopping the episode (dev seed 703 and fresh seed 153; the dev set's other 4 seeds, 1370/1376/1377/1379, hit the identical fallback cause). Fixed by having the coordinator substitute the first otherwise-allowed action the same safety gate accepts whenever a MODEL_FALLBACK choice would be rejected, instead of stopping the episode. All nine previously affected seeds (703, 1370, 1376, 1377, 1379, 127, 132, 144, 146, 153) were individually re-verified gate-clean before freezing a new candidate/sample; these seeds are consumed and not reused."
     }
   ]
 }
