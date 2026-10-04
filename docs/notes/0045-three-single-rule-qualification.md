@@ -149,3 +149,18 @@ Fresh seeds **421-450** are reserved before either arm in the global ledger. Sam
 - evaluation.py: `de5d28baae572b89b0d25c2a96e13b50b2101622fa6438111b159c21a6b93050`
 - test_skills.py: `d298a0bc6cfca34c09f4dc31d01ebff7b1fbe08b72d69826810efe0aab4cb450`
 - test_coordinator.py: `789ca77a1607697b33967e5654adbd8258ae1cd5c2f4c77127b1c68c5d9c8d9c`
+
+## Rule 3 spoiled sample: a real permit-collision defect, not a trapped-state limitation
+
+Fresh 421-450 matched baseline closely but was not the decisive evidence: the full 67-seed development arm found **8 errors** (seeds 1, 703, 902, 1370, 1376, 1379, 1528054415, 2105401147), and the fresh arm found 4 more (422, 436, 441, 450) — all the identical contract error, `"step survival action is invalid: prompt-key actions require the deterministic hunger or corpse cancel flow"`.
+
+Traced immediately (not guessed): `Command.THROW`'s own name, `"Command.THROW"`, is itself a member of `PROMPT_KEY_ACTION_NAMES` (that frozenset is still built from `_HUNGER_ADDITIONS`, which still includes the THROW command — adding the new `RANGED_THROW` role in `tasks.py` only changed `role()`'s classification, not this separate static name set). `survival_action_selection_error` checks `action_name in PROMPT_KEY_ACTION_NAMES` as an unconditional blanket gate with no throw exemption, called directly and unconditionally by `events.py`'s `StepPayload.__post_init__` on every recorded step — a **third** independent validation surface, entirely separate from `ActionGate.resolve()` and `evaluation.py`'s `_action_is_valid`, both of which already had correct early throw bypasses. The earlier native coordinator smoke tests and the permanent regression never exercised `StepPayload` construction, so they could not have caught this; the full evaluation harness, which stores every step as a `StepPayload`, did.
+
+Fix: added the same early-return block already used for `drop` at the very top of `survival_action_selection_error`, authorizing a throw selection before the generic `PROMPT_KEY_ACTION_NAMES` check is ever reached. Verified directly (not just by rerunning): `"Command.THROW" in PROMPT_KEY_ACTION_NAMES` is confirmed `True`, and `survival_action_selection_error` now returns `None` for the exact previously-failing selection. A second, unrelated bug was caught by the same full-suite run: the rule3 ledger note exceeded the ledger's 300-character limit, breaking five unrelated fresh-draw tests; shortened and reverified. Full suite (635 tests) and Ruff passed again after both fixes.
+
+Per the same preregistered protocol, fresh 421-450 is spoiled and never reused; a new range **451-480** is reserved before either corrected arm.
+
+### Corrected frozen SHA-256
+
+- decision.py: `ae22f1c2bdb556159a0f4f483bf44c0153c5af811a4be9ae0f91cdda163af6c0`
+- all other files: unchanged from the SHA-256 list above.

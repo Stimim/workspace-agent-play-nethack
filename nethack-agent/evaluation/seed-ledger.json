@@ -331,7 +331,13 @@
       "source": "note-0045-rule3-ranged-dagger-gas-spore-clearing",
       "seeds": [],
       "ranges": [[421, 450]],
-      "note": "Frozen before either arm: HEAD 5536c7d versus ranged dagger clearing of an aligned distance>=2 gas spore, purely additive (no new restriction, no reintroduced note0044 adjacency avoidance). Same Score/survival/reachD5/cap3000/survival-reviewed-v2 protocol and note0040 gates. All reserved seeds consumed regardless of completion. See note0045."
+      "note": "Spoiled: candidate-dev found 8 errors from a real wiring defect (PROMPT_KEY_ACTION_NAMES had no throw bypass, see note0045), not a trapped-state limitation. Fixed and refrozen; sample consumed, never reused."
+    },
+    {
+      "source": "note-0045-rule3-ranged-dagger-gas-spore-clearing-corrected",
+      "seeds": [],
+      "ranges": [[451, 480]],
+      "note": "Frozen before either arm: HEAD 5536c7d versus corrected ranged-throw candidate (decision.py permit-collision fix). Score/survival/reachD5/cap3000/survival-reviewed-v2, note0040 gates. All reserved seeds consumed regardless of completion. See note0045."
     }
   ]
 }
