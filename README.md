@@ -112,7 +112,7 @@ Its low-HP prayer rule qualified on development 52→54/67 and fresh
 Hazard-only 3b was rejected: fresh objectives 23→21/30 and seven
 gas-spore trapped-state gate stops; its code was removed and prayer alone
 remained shipped ([note 0044](docs/notes/0044-single-rule-hazard-qualification.md)).
-The current policy, `hierarchical-survival-hp-prayer-burden-v1`, pins
+Policy `hierarchical-survival-hp-prayer-burden-v1` pinned
 `survival-reviewed-v2` and development runner `unified-d5-regression-v3`. It
 adds observed-load-refusal recovery: drop surplus food/items (keeping one
 ration, the wielded weapon, and worn equipment) until Burdened or better,
@@ -122,6 +122,16 @@ key collision, and burden preempting combat defense) are documented, not
 shipped unfixed; the qualified candidate matched baseline on every one of 97
 combined development and fresh episodes with zero invalid actions, gate
 rejections, or integrity failures ([note 0045](docs/notes/0045-three-single-rule-qualification.md)).
+The current policy, `hierarchical-survival-hp-prayer-burden-look-v1`, pins
+`survival-reviewed-v2` and development runner `unified-d5-regression-v4`. It
+adds bounded look-here discovery: when an arrival message is an ambiguous
+"several/many objects" pile, press the native look command once and preserve
+its multi-page screen (previously silently auto-dismissed) to recognize a
+covered staircase, reusing the existing terrain-correction logic unchanged.
+Fresh seeds matched baseline exactly (18/30 both); the one development-set
+change traced to the feature firing is a gain, not a loss (a starvation
+death on seed 5 became a truncation once LOOK kept exploration moving); zero
+invalid actions, gate rejections, or integrity failures on either set.
 The checkout refuses
 older policy-pinned suites before creating an episode; they must not be
 relabeled or rerun as later-policy evidence. The task-progression policy's

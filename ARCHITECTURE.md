@@ -6,14 +6,16 @@ Build a local, autonomous NetHack agent whose long-term success criterion is asc
 
 ## Current status
 
-The deterministic NLE adapter, immutable observation projector, typed traversal planner, per-level dungeon memory, deterministic staircase-navigation, exploration, gold-navigation, bounded hunger, prayer, burden-recovery, and safe-corpse skills, contextual action gate, structured Ollama decision model, reviewed local knowledge, typed SQLite event log, loopback control service and browser UI, scenario orchestrator, network-boundary verifier, exhaustion-marker replay, and policy-pinned evaluation harness with typed metric thresholds are implemented. Milestone 1, traversal-policy, and survival-policy evidence remain accepted or recorded as they were.
+The deterministic NLE adapter, immutable observation projector, typed traversal planner, per-level dungeon memory, deterministic staircase-navigation, exploration, gold-navigation, bounded hunger, prayer, burden-recovery, look-here discovery, and safe-corpse skills, contextual action gate, structured Ollama decision model, reviewed local knowledge, typed SQLite event log, loopback control service and browser UI, scenario orchestrator, network-boundary verifier, exhaustion-marker replay, and policy-pinned evaluation harness with typed metric thresholds are implemented. Milestone 1, traversal-policy, and survival-policy evidence remain accepted or recorded as they were.
 
-The active policy is `hierarchical-survival-hp-prayer-burden-v1`. Low-HP
-prayer qualified under note 0043; observed-load-refusal recovery (drop
-surplus items until Burdened or better, keeping one ration/weapon/worn
-equipment, deferring to combat defense) qualified under note 0045 with zero
-outcome changes on 97 combined episodes; `unified-d5-regression-v3` pins the
-new policy while all old suite definitions and reports stay unchanged.
+The active policy is `hierarchical-survival-hp-prayer-burden-look-v1`. Low-HP
+prayer qualified under note 0043; observed-load-refusal recovery qualified
+under note 0045 rule 1; bounded look-here staircase discovery under an
+ambiguous object pile (preserving the native multi-page screen NLE otherwise
+silently discards) qualified under note 0045 rule 2 with zero fresh changes
+and one traced starvation-to-truncation improvement; `unified-d5-regression-v4`
+pins the new policy while all old suite definitions and reports stay
+unchanged.
 
 ## System context
 ```mermaid

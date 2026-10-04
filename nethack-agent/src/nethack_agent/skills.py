@@ -833,6 +833,40 @@ def _attack_adjacent_hostile(
     return None
 
 
+_AMBIGUOUS_PILE_MESSAGES: Final = (
+    "There are several objects here.",
+    "There are many objects here.",
+)
+
+
+def discover_ambiguous_pile(
+    observation: ProjectedObservation,
+    actions_by_name: dict[str, LegalAction],
+) -> SkillAction | None:
+    """Look here once when an arrival message hides a multi-object pile.
+
+    NetHack's arrival line collapses two or more objects on one cell into
+    "There are several/many objects here.", suppressing a staircase, door,
+    or food identity that would otherwise be named. The explicit look
+    command reports each fact as its own message (MORE-paginated when
+    there is more than one); the existing generic prompt handler already
+    acknowledges every page, and the existing terrain/food parsers already
+    run on whatever each page's message says, so nothing else changes.
+    """
+    if observation.prompt.active or observation.message not in _AMBIGUOUS_PILE_MESSAGES:
+        return None
+    action = actions_by_name.get("Command.LOOK")
+    if action is None:
+        return None
+    origin = (observation.player.x, observation.player.y)
+    return SkillAction(
+        action.index,
+        "Look here to resolve the ambiguous object pile underfoot.",
+        ActionRecord(ActionKind.OTHER, origin),
+        None,
+    )
+
+
 def _past_monster(
     memory: LevelMemory,
     tree: RouteTree,

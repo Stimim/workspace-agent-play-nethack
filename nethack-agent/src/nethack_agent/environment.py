@@ -244,6 +244,8 @@ class NleEnvironment:
         self._state = EnvironmentState.READY
         self._step_index = 0
         self._pickup_menu_open = False
+        self._drop_prompt_open = False
+        self._look_menu_open = False
         self._seed_set = SeedSet.derive(config.seed)
         self._legal_actions = tuple(
             LegalAction(
@@ -296,6 +298,8 @@ class NleEnvironment:
         observation, _ = self._environment.reset(seed=self._config.seed)
         self._step_index = 0
         self._pickup_menu_open = False
+        self._drop_prompt_open = False
+        self._look_menu_open = False
         self._state = EnvironmentState.RUNNING
         return NleObservation.from_nle(observation)
 
@@ -318,10 +322,35 @@ class NleEnvironment:
                 or self._pickup_menu_open
             )
         )
+        drop = (
+            self._config.task.action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
+            and (
+                self._drop_prompt_open
+                or (
+                    self._legal_actions[action_index].command
+                    == int(nethack.Command.DROP)
+                    and not self._pickup_menu_open
+                    and not bytes(
+                        self._raw_environment.last_observation[
+                            self._raw_environment._message_index
+                        ]
+                    ).startswith(b"What do you want to eat?")
+                )
+            )
+        )
+        look = (
+            self._config.task.action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
+            and (
+                self._look_menu_open
+                or self._legal_actions[action_index].command
+                == int(nethack.Command.LOOK)
+            )
+        )
         allow_all_modes = self._raw_environment._allow_all_modes
-        if pickup:
-            # NLE normally auto-dismisses these public menus. Preserve only the
-            # bounded pickup interaction, not unrelated yes/no or text questions.
+        if pickup or drop or look:
+            # Preserve only reviewed pickup/drop/look interactions, not
+            # unrelated yes/no or text questions normally auto-dismissed by
+            # NLE.
             self._raw_environment._allow_all_modes = True
         try:
             observation, reward, terminated, truncated, information = (
@@ -332,6 +361,10 @@ class NleEnvironment:
         self._pickup_menu_open = (
             pickup and pickup_menu_from_tty(observation["tty_chars"]) is not None
         )
+        self._drop_prompt_open = drop and bytes(observation["message"]).startswith(
+            b"What do you want to drop?"
+        )
+        self._look_menu_open = look and bool(observation["misc"][2])
         self._step_index += 1
         if terminated or truncated:
             self._state = EnvironmentState.TERMINAL

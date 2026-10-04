@@ -17,7 +17,7 @@ from nethack_agent.contracts import (
     string_value,
 )
 from nethack_agent.environment import NleObservation
-from nethack_agent.menus import PickupMenu, pickup_menu_from_tty
+from nethack_agent.menus import PickupMenu, pickup_menu_from_tty, stair_here_from_tty
 
 _CONDITION_MASKS: Final = (
     (nethack.BL_MASK_STONE, "petrifying"),
@@ -203,6 +203,7 @@ class ProjectedObservation:
     prompt: PromptState
     inventory: tuple[InventoryItem, ...]
     pickup_menu: PickupMenu | None = None
+    look_stair: str | None = None
 
     def __post_init__(self) -> None:
         integer_value(self.step_index, "observation step_index", minimum=0)
@@ -243,6 +244,10 @@ class ProjectedObservation:
             self.pickup_menu, PickupMenu
         ):
             raise TypeError("pickup_menu must be a PickupMenu or None")
+        if self.look_stair is not None:
+            string_value(
+                self.look_stair, "observation look_stair", minimum=1, maximum=40
+            )
         for cell in self.changed_cells:
             if not 0 <= cell.x < width or not 0 <= cell.y < height:
                 raise ContractError("changed cell coordinates are outside the map")
@@ -280,6 +285,7 @@ class ProjectedObservation:
             "pickup_menu": None
             if self.pickup_menu is None
             else self.pickup_menu.to_json(),
+            "look_stair": self.look_stair,
         }
 
     @classmethod
@@ -296,7 +302,7 @@ class ProjectedObservation:
                 "prompt",
                 "inventory",
             },
-            optional={"pickup_menu"},
+            optional={"pickup_menu", "look_stair"},
         )
         return cls(
             step_index=integer_value(
@@ -322,6 +328,16 @@ class ProjectedObservation:
                 None
                 if payload.get("pickup_menu") is None
                 else PickupMenu.from_json(payload["pickup_menu"])
+            ),
+            look_stair=(
+                None
+                if payload.get("look_stair") is None
+                else string_value(
+                    payload["look_stair"],
+                    "observation look_stair",
+                    minimum=1,
+                    maximum=40,
+                )
             ),
         )
 
@@ -523,6 +539,7 @@ class ObservationProjector:
             ),
             inventory=self._inventory(observation),
             pickup_menu=pickup_menu_from_tty(observation.tty_chars),
+            look_stair=stair_here_from_tty(observation.tty_chars),
         )
 
     def _changed_cells(self, current: MapView) -> tuple[MapCellChange, ...]:

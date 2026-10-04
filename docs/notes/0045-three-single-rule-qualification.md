@@ -111,3 +111,18 @@ Fresh seeds **391-420** are reserved before either arm in the global ledger. Fro
 - test_coordinator.py: `10ac1c3377dab7e72d7d3a36f41fef1a69b4a7a4984e3d5908800bded523fc75`
 
 No qualification result is claimed at preregistration. Run all arms as finite background jobs with explicit 3600-second deadlines. Product and tests remain frozen during qualification.
+
+## Rule 2 completed: QUALIFIED and shipped
+
+Both arms completed without tooling cutoff or replacement episodes, compared against a fresh rule1-HEAD baseline (`90535b1`, the first baseline this project has had to isolate in a git worktree rather than reuse an old report, since the corrected rule1 baseline post-dates every earlier saved report).
+
+| Set | Baseline | Candidate | Changes |
+| --- | --- | --- | --- |
+| Unified development, 67 seeds | 54 objective, 6 death (1 starvation), 7 truncated | 54 objective, 5 death, 8 truncated | seed 5 only |
+| Fresh 391-420, 30 seeds | 18 objective, 8 death (1 starvation, seed 406), 4 truncated | identical | 0 |
+
+Fresh matches baseline on every one of 30 episodes, including the one fresh starvation death (seed 406, unaffected since LOOK never fires there). The single development-set change is a **gain**, traced causally rather than assumed: seed 5's stored events show `Command.LOOK` firing six times starting at step 1976 (confirming the new rule actually activated, not a coincidental unrelated divergence), and the hero's recorded fate changes from `died of starvation` (fainting, step 2122) in the baseline to `truncated` at the step cap, still exploring dungeon level 4, in the candidate. Both arms have zero invalid actions, zero gate rejections, zero integrity failures, and complete records. No new deaths anywhere; fresh hunger deaths are unchanged at 1 (the same seed).
+
+Shipped the exact qualified decision/skill/coordinator/evaluator/environment behavior as policy `hierarchical-survival-hp-prayer-burden-look-v1`, pinning new immutable `unified-d5-regression-v4.json` (copied from v3 with only `suite_id`/`policy_version` changed). Qualification reports retain their original policy label and frozen file hashes. Knowledge remains `survival-reviewed-v2`, unchanged by this rule. `run_manager.py POLICY_VERSION`, `README.md`, and `ARCHITECTURE.md` updated; `docs/development.md` points at v4. Fresh seeds 391-420 are permanently consumed per the ledger.
+
+Proceeding to rule 3 (corrected hazard behavior) next, with its own new frozen thirty-seed sample.

@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
-from typing import Self
+from typing import Final, Self
 
 from nethack_agent.contracts import (
     array_value,
@@ -14,6 +14,8 @@ from nethack_agent.contracts import (
     object_value,
     string_value,
 )
+
+_STAIR_HERE_FRAGMENTS: Final = ("staircase down here", "staircase up here")
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,4 +97,22 @@ def pickup_menu_from_tty(rows: Iterable[Iterable[int]]) -> PickupMenu | None:
         entry = re.fullmatch(r"([A-Za-z]) ([-+]) (.+)", text)
         if entry is not None:
             choices.append(PickupChoice(entry[1], entry[3], entry[2] == "+"))
+    return None
+
+
+def stair_here_from_tty(rows: Iterable[Iterable[int]]) -> str | None:
+    """The staircase-here fragment from a preserved look-here screen, if any.
+
+    NetHack's explicit look command (':') for a cell with two or more
+    objects renders a full-screen "Things that are here:" overlay instead
+    of the single-line arrival message; a leading terrain fact such as a
+    covered staircase is rendered as its own row above that list. The
+    returned fragment matches the public look-here substrings navigation
+    already recognizes from the single-object arrival message.
+    """
+    for raw_row in rows:
+        text = bytes(raw_row).decode("latin1")
+        for fragment in _STAIR_HERE_FRAGMENTS:
+            if fragment in text:
+                return fragment
     return None

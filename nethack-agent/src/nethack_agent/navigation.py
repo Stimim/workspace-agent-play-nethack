@@ -349,7 +349,10 @@ class LevelMemory:
             self._learn(record, observation)
         self.visited.add(self.position)
         x, y = self.position
-        self._correct_terrain_here(observation.message.lower())
+        self._correct_terrain_here(
+            observation.message.lower()
+            + (" " + observation.look_stair if observation.look_stair else "")
+        )
         message = observation.message.lower()
         if "closed for inventory" in message:
             self.inventory_closed_doors.update(

@@ -129,6 +129,7 @@ _SURVIVAL_ACTIONS: Final = (
     *_HUNGER_ACTIONS,
     nethack.Command.PRAY,
     nethack.Command.PICKUP,
+    nethack.Command.LOOK,
     *_BURDEN_KEYS,
 )
 

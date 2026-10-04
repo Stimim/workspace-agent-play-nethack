@@ -51,6 +51,27 @@ def test_projection_copies_compact_public_state(tmp_path: Path) -> None:
         ]
 
 
+def test_projected_observation_look_stair_round_trips_and_validates(
+    tmp_path: Path,
+) -> None:
+    projector = ObservationProjector()
+    with NleEnvironment(
+        ScenarioConfig(seed=6, artifact_directory=tmp_path, max_episode_steps=20)
+    ) as environment:
+        raw = environment.reset()
+        projected = projector.project(raw, step_index=environment.step_index)
+        assert projected.look_stair is None
+        with_stair = replace(projected, look_stair="staircase down here")
+        serialized = with_stair.to_json()
+        assert serialized["look_stair"] == "staircase down here"
+        assert ProjectedObservation.from_json(serialized) == with_stair
+        # Old stored events predate this field and omit it entirely.
+        del serialized["look_stair"]
+        assert ProjectedObservation.from_json(serialized).look_stair is None
+        with pytest.raises(ContractError, match="look_stair"):
+            ProjectedObservation.from_json({**with_stair.to_json(), "look_stair": ""})
+
+
 @pytest.mark.parametrize(
     ("description", "expected"),
     [

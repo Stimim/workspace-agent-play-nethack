@@ -1888,3 +1888,65 @@ def test_corpse_route_command_is_not_a_floor_answer(
                 )
     finally:
         agent.stop()
+
+
+def test_look_discovers_a_covered_staircase_under_a_real_native_pile(
+    tmp_path: Path,
+) -> None:
+    """Real NLE I/O, not a synthetic fixture: drop two items on the native
+    starting upstairs, force the next decision to see the resulting
+    ambiguous arrival message, and confirm the look skill presses a real
+    ':' whose preserved multi-page native screen corrects the remembered
+    terrain to the covered upstairs."""
+    task = TaskSpec(
+        NleTask.SCORE,
+        ActionProfile.NLE_SURVIVAL_ACTIONS,
+        Objective((ReachLevelLeg(LevelKey(0, 5)),)),
+    )
+    agent = AgentCoordinator(
+        NleEnvironment(ScenarioConfig(seed=6, artifact_directory=tmp_path, task=task)),
+        ObservationProjector(),
+        ScriptedDevelopmentModel(),
+    )
+    before = agent.start()
+    env = agent._environment
+    by_name = {a.name: a for a in env.legal_actions}
+    by_command = {a.command: a for a in env.legal_actions}
+
+    def raw(index: int):
+        transition = env.step(index)
+        return agent._projector.project(
+            transition.observation, step_index=env.step_index
+        )
+
+    try:
+        position = (before.player.x, before.player.y)
+        # The initial spawn never produced an arrival message, so the
+        # covered upstairs is not yet remembered.
+        assert agent._dungeon.current.cmap(position) == -1
+        letters = [item.letter for item in before.inventory[:2]]
+        drop = by_name["Command.DROP"]
+        for letter in letters:
+            before = raw(drop.index)
+            before = raw(by_command[ord(letter)].index)
+        # Clear the remembered upstairs so only a correct LOOK can restore it.
+        agent._dungeon.current._cmap[position[1]][position[0]] = -1
+        assert agent._dungeon.current.cmap(position) == -1
+        forced = replace(before, message="There are several objects here.")
+        agent._observation = forced
+        agent._dungeon.observe(forced)
+        agent._state = RunState.RUNNING
+
+        look_record = agent.advance()
+        assert look_record is not None
+        assert look_record.action.name == "Command.LOOK"
+        assert look_record.after.prompt.active
+        assert agent._dungeon.current.cmap(position) == 23
+
+        more_record = agent.advance()
+        assert more_record is not None
+        assert more_record.action.name == "MiscAction.MORE"
+        assert not more_record.after.prompt.active
+        assert agent._dungeon.current.cmap(position) == 23
+    finally:
+        agent.stop()

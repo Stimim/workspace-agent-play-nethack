@@ -2299,6 +2299,45 @@ def test_dropped_surplus_is_not_picked_up_into_another_drop_loop(
 
 
 @pytest.mark.parametrize(
+    ("message", "prompt_active", "triggers"),
+    (
+        ("There are several objects here.", False, True),
+        ("There are many objects here.", False, True),
+        ("There are several objects here.", True, False),
+        ("You see here a food ration.", False, False),
+        ("", False, False),
+    ),
+)
+def test_discover_ambiguous_pile_only_looks_at_an_unresolved_arrival_message(
+    template: ProjectedObservation,
+    message: str,
+    prompt_active: bool,
+    triggers: bool,
+) -> None:
+    from nethack_agent.skills import discover_ambiguous_pile
+    from nethack_agent.tasks import ActionProfile
+
+    by_name = {
+        f"{type(a).__name__}.{a.name}": LegalAction(
+            i, int(a), f"{type(a).__name__}.{a.name}"
+        )
+        for i, a in enumerate(ActionProfile.NLE_SURVIVAL_ACTIONS.actions)
+    }
+    observation = replace(
+        template,
+        message=message,
+        prompt=PromptState(prompt_active, False, False),
+    )
+    result = discover_ambiguous_pile(observation, by_name)
+    if triggers:
+        assert result is not None
+        assert result.action_index == by_name["Command.LOOK"].index
+        assert result.intent is None
+    else:
+        assert result is None
+
+
+@pytest.mark.parametrize(
     ("command", "quantity", "offer", "allowed"),
     (
         (ord("4"), 4, "d", True),

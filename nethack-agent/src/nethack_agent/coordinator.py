@@ -81,6 +81,7 @@ from nethack_agent.skills import (
     SkillAction,
     StaircaseNavigationSkill,
     _attack_adjacent_hostile,
+    discover_ambiguous_pile,
     item_selection_commands,
 )
 from nethack_agent.tasks import ActionProfile, ActionRole, NleTask
@@ -930,6 +931,11 @@ class AgentCoordinator:
                 return self._skill_plan(
                     corpse, goal, Skill.CORPSE, arbiter, None, skill_model_decision
                 )
+        pile = discover_ambiguous_pile(before, actions)
+        if pile is not None:
+            return self._skill_plan(
+                pile, goal, Skill.EXPLORE_LEVEL, arbiter, None, skill_model_decision
+            )
 
         kick = self._exploration.continue_kick(before, memory, actions)
         if kick is not None:
