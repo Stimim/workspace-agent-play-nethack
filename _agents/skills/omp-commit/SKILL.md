@@ -16,6 +16,8 @@ Use this skill whenever a coding agent creates a Git commit in this repository. 
 4. Before invoking `git commit`, the script runs `uv run ruff check .` and `uv run ruff format --check .` in `nethack-agent/`. A failed check leaves Git history unchanged.
 5. The script removes any existing `OMP-Conversation` lines from the supplied message copy and writes exactly one final `OMP-Conversation: <active-uuid>` trailer. It never changes the caller's message file and passes Git arguments as an argv array without shell evaluation.
 
+Before checks and before `git commit`, staged changes under `nethack-agent/src/` require either (a) a staged added or modified file under `docs/notes/` whose staged blob contains a level-two or level-three heading matching `Decision`, `decision`, `QUALIFIED`, `Qualified`, `REJECT`, `Rejected`, or `disposition`; or (b) exactly one message trailer `Qualification-Exempt: <non-empty reason>`. Use the exemption only for refactors, tooling-only, or docs-only product touches; it remains in the final commit message. Pure reverts are not exempt. A refused commit reports the staged source paths and leaves history unchanged.
+
 Use `resolve` to inspect the validated UUID without committing and `checks` to run only the fixed checks:
 
 ```bash

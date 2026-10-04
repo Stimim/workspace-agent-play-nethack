@@ -348,6 +348,8 @@ historical/probe seeds as `reach_level(0,5)` with a 3,000-step cap. Its
 and reports remain immutable. Run all cases with the scripted model using
 `uv run nethack-agent eval run --suite evaluation/unified-d5-regression-v4.json --data-dir /tmp/unified-d5-scripted --report-dir /tmp/unified-d5-scripted/reports --development-scripted-model`; omit `--development-scripted-model` and choose separate data/report directories to run with the configured real model. Version 4 pins the qualified look-here staircase-discovery policy; v3, v2, and v1 stay immutable. The next milestone's fresh-draw suite must declare its objective-success rate and explicit zero-starvation/zero-Weak-or-worse hunger-death gates before execution.
 
+Coding-agent workflow: use the [_agents/skills/omp-commit/SKILL.md](../_agents/skills/omp-commit/SKILL.md) commit guard for product changes, and launch every evaluation through the [_agents/skills/detached-eval/SKILL.md](../_agents/skills/detached-eval/SKILL.md) detached runner; wait with no tool deadline or poll status so suites cannot be cut short.
+
 Those committed suites continue to pin `staircase-reviewed-v3`; their
 historical reports and rendered bytes are unchanged. Other runs through
 `serve`/UI and the client-side `run` commands retain the default bundle and

@@ -370,3 +370,132 @@ def test_dry_run_prints_trailer_without_creating_commit(tmp_path: Path) -> None:
         ).returncode
         != 0
     )
+
+
+def _stage(repository: Path, relative: str, content: str) -> None:
+    path = repository / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    subprocess.run(["git", "-C", str(repository), "add", "--", relative], check=True)
+
+
+def _guard_commit(
+    tmp_path: Path, message_text: str, *, include_note: str | None = None
+) -> tuple[subprocess.CompletedProcess[str], Path]:
+    repository, _, environment = _scratch_repository(tmp_path)
+    _stage(repository, "nethack-agent/src/change.py", "change = True\n")
+    if include_note is not None:
+        _stage(repository, "docs/notes/0099-qualification.md", include_note)
+    omp_root = tmp_path / "omp"
+    proc_root = tmp_path / "proc"
+    _add_client(
+        omp_root,
+        proc_root,
+        repository,
+        pid=601,
+        conversation=CONVERSATION,
+    )
+    message = tmp_path / "message.txt"
+    message.write_text(message_text, encoding="utf-8")
+    completed = _skill(
+        repository,
+        omp_root,
+        proc_root,
+        "commit",
+        "--message-file",
+        str(message),
+        env=environment,
+    )
+    return completed, repository
+
+
+def test_refuses_src_only_commit_without_changing_history(tmp_path: Path) -> None:
+    completed, repository = _guard_commit(tmp_path, "Product change\n")
+
+    assert completed.returncode != 0
+    assert "nethack-agent/src/change.py" in completed.stderr
+    assert "docs/notes/" in completed.stderr
+    assert "Qualification-Exempt:" in completed.stderr
+    assert (
+        subprocess.run(
+            ["git", "-C", str(repository), "rev-parse", "--verify", "HEAD"],
+            check=False,
+            capture_output=True,
+        ).returncode
+        != 0
+    )
+
+
+def test_allows_staged_qualification_decision_note(tmp_path: Path) -> None:
+    completed, repository = _guard_commit(
+        tmp_path,
+        "Product change\n",
+        include_note="# Investigation\n## Decision: qualified\n",
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    committed = subprocess.run(
+        ["git", "-C", str(repository), "show", "--format=", "--name-only", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+    assert "docs/notes/0099-qualification.md" in committed
+
+
+def test_allows_single_exemption_trailer_and_preserves_it(tmp_path: Path) -> None:
+    completed, repository = _guard_commit(
+        tmp_path, "Refactor\n\nQualification-Exempt: tooling-only change\n"
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    commit_message = subprocess.run(
+        ["git", "-C", str(repository), "log", "-1", "--format=%B"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert commit_message.count("Qualification-Exempt:") == 1
+    assert "Qualification-Exempt: tooling-only change" in commit_message
+    assert commit_message.count("OMP-Conversation:") == 1
+
+
+def test_non_src_commit_is_unaffected(tmp_path: Path) -> None:
+    repository, _, environment = _scratch_repository(tmp_path)
+    _stage(repository, "docs/development.md", "workflow\n")
+    omp_root = tmp_path / "omp"
+    proc_root = tmp_path / "proc"
+    _add_client(
+        omp_root,
+        proc_root,
+        repository,
+        pid=701,
+        conversation=CONVERSATION,
+    )
+    message = tmp_path / "message.txt"
+    message.write_text("Docs update\n", encoding="utf-8")
+
+    completed = _skill(
+        repository,
+        omp_root,
+        proc_root,
+        "commit",
+        "--message-file",
+        str(message),
+        env=environment,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+
+
+def test_staged_note_without_decision_heading_does_not_qualify(
+    tmp_path: Path,
+) -> None:
+    completed, _ = _guard_commit(
+        tmp_path,
+        "Product change\n",
+        include_note="# Investigation\n## Evidence and methods\n",
+    )
+
+    assert completed.returncode != 0
+    assert "nethack-agent/src/change.py" in completed.stderr

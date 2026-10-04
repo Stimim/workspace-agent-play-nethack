@@ -118,12 +118,13 @@ run with `timeout: 0` or detached; native-memory ground truth is
 diagnosis-only, never a policy input.
 
 Phase 0 — tooling
-- [ ] Commit guard in `omp_commit.py`: refuse staged `nethack-agent/src`
-  changes unless a staged note records a qualification decision for them.
+- [x] Commit guard in `omp_commit.py`: refuse staged `nethack-agent/src`
+  changes unless a staged note records a qualification decision or a commit
+  message carries the documented exemption trailer.
 - [ ] Commit the native ground-truth reader (true map, stairs, traps,
   secret cells, special-level name) as a coding-agent skill under
   `_agents/skills/`, with the notes 0031/0045 validation checks.
-- [ ] Long-run harness: detached suite runs with a completion marker, so no
+- [x] Long-run harness: detached suite runs with a completion marker, so no
   run is cut short by a tool deadline.
 
 Phase 1 — objectives and measurement

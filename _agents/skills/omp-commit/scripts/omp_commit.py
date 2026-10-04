@@ -18,6 +18,11 @@ _UUID = re.compile(
     re.IGNORECASE,
 )
 _TRAILER = re.compile(r"^OMP-Conversation\s*:", re.IGNORECASE)
+_EXEMPT_TRAILER = re.compile(r"^Qualification-Exempt:\s*(\S.*)$")
+_DECISION_HEADING = re.compile(
+    r"^#{2,3} .*(Decision|decision|QUALIFIED|Qualified|REJECT|Rejected|disposition)"
+)
+_SRC_PREFIX = "nethack-agent/src/"
 _MESSAGE_OPTIONS = (
     "-m",
     "--message",
@@ -235,6 +240,79 @@ def _run_checks(repository: Path) -> None:
             )
 
 
+def _staged_paths(repository: Path) -> list[str]:
+    completed = subprocess.run(
+        ["git", "-C", str(repository), "diff", "--cached", "--name-only", "-z"],
+        check=True,
+        capture_output=True,
+    )
+    return [
+        path.decode("utf-8", errors="surrogateescape")
+        for path in completed.stdout.split(b"\0")
+        if path
+    ]
+
+
+def _qualification_guard(repository: Path, message: str) -> None:
+    staged = _staged_paths(repository)
+    src_paths = sorted(path for path in staged if path.startswith(_SRC_PREFIX))
+    if not src_paths:
+        return
+
+    exemption_lines = [
+        line
+        for line in message.splitlines()
+        if line.startswith("Qualification-Exempt:")
+    ]
+    exemptions = [
+        match
+        for line in exemption_lines
+        if (match := _EXEMPT_TRAILER.fullmatch(line))
+    ]
+    if len(exemption_lines) == 1 and len(exemptions) == 1:
+        return
+
+    modified = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repository),
+            "diff",
+            "--cached",
+            "--diff-filter=AM",
+            "--name-only",
+            "-z",
+        ],
+        check=True,
+        capture_output=True,
+    )
+    notes = [
+        path.decode("utf-8", errors="surrogateescape")
+        for path in modified.stdout.split(b"\0")
+        if path.startswith(b"docs/notes/")
+    ]
+    # Only staged added/modified note blobs can record the decision.
+    for path in notes:
+        blob = subprocess.run(
+            ["git", "-C", str(repository), "show", f":{path}"],
+            check=False,
+            capture_output=True,
+        )
+        if blob.returncode == 0 and any(
+            _DECISION_HEADING.match(line)
+            for line in blob.stdout.decode("utf-8", errors="replace").splitlines()
+        ):
+            return
+
+    paths = ", ".join(src_paths)
+    raise CommitSkillError(
+        "refusing commit: staged product source paths "
+        f"({paths}) require either a staged docs/notes/ file containing a "
+        "qualification decision heading, or exactly one "
+        "Qualification-Exempt: <non-empty reason> trailer in the message"
+    )
+
+
 def _message_with_trailer(message: str, conversation: str) -> str:
     kept = [line for line in message.splitlines() if not _TRAILER.match(line)]
     body = "\n".join(kept).rstrip()
@@ -294,6 +372,7 @@ def main(argv: list[str] | None = None) -> int:
 
         message = arguments.message_file.read_text(encoding="utf-8")
         normalized = _message_with_trailer(message, conversation)
+        _qualification_guard(repository, message)
         commit_arguments = _validate_commit_args(arguments.git_arguments)
         _run_checks(repository)
         if arguments.dry_run:
