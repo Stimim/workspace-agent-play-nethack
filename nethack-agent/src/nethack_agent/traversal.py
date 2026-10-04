@@ -337,6 +337,8 @@ class GoalKind(Enum):
     EXPLORE_LEVEL = "explore_level"
     # Walk next to the Oracle seen on this level without ever attacking her.
     APPROACH_ORACLE = "approach_oracle"
+    ENTER_TEMPLE = "enter_temple"
+    OCCUPY_ALTAR = "occupy_altar"
 
 
 @dataclass(frozen=True, slots=True)
@@ -424,12 +426,47 @@ class ApproachOracleGoal:
         return {"kind": self.kind.value, "level": self.level.to_json()}
 
 
+@dataclass(frozen=True, slots=True)
+class EnterTempleGoal:
+    level: LevelKey
+    kind: ClassVar[GoalKind] = GoalKind.ENTER_TEMPLE
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.level, LevelKey):
+            raise TypeError("goal level must be a LevelKey")
+
+    @property
+    def token(self) -> str:
+        return (
+            f"{self.kind.value}:{self.level.dungeon_number}:{self.level.dungeon_level}"
+        )
+
+    def to_json(self) -> dict[str, object]:
+        return {"kind": self.kind.value, "level": self.level.to_json()}
+
+
+@dataclass(frozen=True, slots=True)
+class OccupyAltarGoal(EnterTempleGoal):
+    kind: ClassVar[GoalKind] = GoalKind.OCCUPY_ALTAR
+
+
 type StairGoal = StandOnStairsGoal | TraverseStairsGoal
 type Goal = (
-    StandOnStairsGoal | TraverseStairsGoal | ExploreLevelGoal | ApproachOracleGoal
+    StandOnStairsGoal
+    | TraverseStairsGoal
+    | ExploreLevelGoal
+    | ApproachOracleGoal
+    | EnterTempleGoal
+    | OccupyAltarGoal
 )
 STAIR_GOAL_TYPES: Final = (StandOnStairsGoal, TraverseStairsGoal)
-GOAL_TYPES: Final = (*STAIR_GOAL_TYPES, ExploreLevelGoal, ApproachOracleGoal)
+GOAL_TYPES: Final = (
+    *STAIR_GOAL_TYPES,
+    ExploreLevelGoal,
+    ApproachOracleGoal,
+    EnterTempleGoal,
+    OccupyAltarGoal,
+)
 
 # Milestone 1's goal: stand on any `>` without descending.
 STAND_ON_DOWNSTAIRS: Final = StandOnStairsGoal(
@@ -444,11 +481,20 @@ def goal_from_json(value: object, name: str = "goal") -> Goal:
     if not isinstance(value, dict):
         raise ContractError(f"{name} must be an object")
     kind = enum_value(value.get("kind"), f"{name} kind", GoalKind)
-    if kind is GoalKind.EXPLORE_LEVEL or kind is GoalKind.APPROACH_ORACLE:
+    if kind in (
+        GoalKind.EXPLORE_LEVEL,
+        GoalKind.APPROACH_ORACLE,
+        GoalKind.ENTER_TEMPLE,
+        GoalKind.OCCUPY_ALTAR,
+    ):
         payload = object_value(value, name, {"kind", "level"})
         level = LevelKey.from_json(payload["level"], f"{name} level")
         if kind is GoalKind.EXPLORE_LEVEL:
             return ExploreLevelGoal(level)
+        if kind is GoalKind.ENTER_TEMPLE:
+            return EnterTempleGoal(level)
+        if kind is GoalKind.OCCUPY_ALTAR:
+            return OccupyAltarGoal(level)
         return ApproachOracleGoal(level)
     payload = object_value(value, name, {"kind", "target"})
     target = StairTarget.from_json(payload["target"], f"{name} target")
@@ -463,6 +509,7 @@ class ObjectiveLegKind(Enum):
     ENTER_DUNGEON = "enter_dungeon"
     EXPLORE_DUNGEON = "explore_dungeon"
     FIND_ORACLE = "find_oracle"
+    ENTER_MINETOWN_TEMPLE = "enter_minetown_temple"
 
 
 @dataclass(frozen=True, slots=True)
@@ -551,12 +598,17 @@ class ExploreDungeonLeg:
 
 @dataclass(frozen=True, slots=True)
 class FindOracleLeg:
-    """Complete when the Oracle's exact glyph is next to the hero.
-
-    That is NLE's Oracle success condition, which also ends the episode.
-    """
+    """Adjacent to the currently publicly peaceful Oracle, without attacks."""
 
     kind: ClassVar[ObjectiveLegKind] = ObjectiveLegKind.FIND_ORACLE
+
+    def to_json(self) -> dict[str, object]:
+        return {"kind": self.kind.value}
+
+
+@dataclass(frozen=True, slots=True)
+class EnterMinetownTempleLeg:
+    kind: ClassVar[ObjectiveLegKind] = ObjectiveLegKind.ENTER_MINETOWN_TEMPLE
 
     def to_json(self) -> dict[str, object]:
         return {"kind": self.kind.value}
@@ -568,6 +620,7 @@ type ObjectiveLeg = (
     | EnterDungeonLeg
     | ExploreDungeonLeg
     | FindOracleLeg
+    | EnterMinetownTempleLeg
 )
 OBJECTIVE_LEG_TYPES: Final = (
     StandOnStairsLeg,
@@ -575,6 +628,7 @@ OBJECTIVE_LEG_TYPES: Final = (
     EnterDungeonLeg,
     ExploreDungeonLeg,
     FindOracleLeg,
+    EnterMinetownTempleLeg,
 )
 
 
@@ -582,6 +636,9 @@ def objective_leg_from_json(value: object, name: str = "objective leg") -> Objec
     if not isinstance(value, dict):
         raise ContractError(f"{name} must be an object")
     kind = enum_value(value.get("kind"), f"{name} kind", ObjectiveLegKind)
+    if kind is ObjectiveLegKind.ENTER_MINETOWN_TEMPLE:
+        object_value(value, name, {"kind"})
+        return EnterMinetownTempleLeg()
     if kind is ObjectiveLegKind.FIND_ORACLE:
         object_value(value, name, {"kind"})
         return FindOracleLeg()

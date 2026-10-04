@@ -117,6 +117,7 @@ from nethack_agent.tasks import (
 )
 from nethack_agent.traversal import (
     EnterDungeonLeg,
+    EnterMinetownTempleLeg,
     ExploreDungeonLeg,
     FindOracleLeg,
     LevelKey,
@@ -211,6 +212,8 @@ class MetricName(Enum):
     # NLE hunger index at the last live observation preceding death; non-deaths
     # contribute 0 to allow a maximum at_most 2 gate. Missing evidence fails.
     HUNGER_AT_DEATH = "hunger_at_death"
+    ORACLE_ATTACKS = "oracle_attacks"
+    PEACEFUL_ATTACKS = "peaceful_attacks"
 
 
 class MetricStatistic(Enum):
@@ -1254,8 +1257,44 @@ class EpisodeMetrics:
     # The last *live* hunger observation before death, not a zeroed terminal
     # observation or an unobservable claim about the exact death instant.
     hunger_at_death: HungerState | None = None
+    oracle_attacks: int | None = None
+    peaceful_attacks: int | None = None
+    max_depth_by_branch: tuple[tuple[int, int, int], ...] | None = None
+    turns_per_level: tuple[tuple[LevelKey, int], ...] | None = None
 
     def __post_init__(self) -> None:
+        for name in ("oracle_attacks", "peaceful_attacks"):
+            value = getattr(self, name)
+            if value is not None:
+                integer_value(value, f"episode metrics {name}", minimum=0)
+        evidence = (
+            self.oracle_attacks,
+            self.peaceful_attacks,
+            self.max_depth_by_branch,
+            self.turns_per_level,
+        )
+        if any(value is not None for value in evidence) and any(
+            value is None for value in evidence
+        ):
+            raise ContractError("location metrics must be recorded together")
+        if self.max_depth_by_branch is not None:
+            branches = []
+            for branch, relative, depth in self.max_depth_by_branch:
+                integer_value(branch, "metric branch", minimum=0)
+                integer_value(relative, "metric relative depth", minimum=1)
+                integer_value(depth, "metric absolute depth", minimum=1)
+                branches.append(branch)
+            if len(set(branches)) != len(branches):
+                raise ContractError("duplicate branch depth")
+        if self.turns_per_level is not None:
+            levels = []
+            for level, turns in self.turns_per_level:
+                if not isinstance(level, LevelKey):
+                    raise TypeError("metric level must be a LevelKey")
+                integer_value(turns, "metric level turns", minimum=0)
+                levels.append(level)
+            if len(set(levels)) != len(levels):
+                raise ContractError("duplicate level turns")
         for name in (
             "steps",
             "game_turns",
@@ -1415,11 +1454,47 @@ class EpisodeMetrics:
             payload["steps_by_skill"] = {
                 skill.value: count for skill, count in self.steps_by_skill
             }
+        if self.oracle_attacks is not None:
+            payload["oracle_attacks"] = self.oracle_attacks
+            payload["peaceful_attacks"] = self.peaceful_attacks
+            payload["max_depth_by_branch"] = (
+                [
+                    {
+                        "dungeon_number": branch,
+                        "dungeon_level": relative,
+                        "depth": depth,
+                    }
+                    for branch, relative, depth in self.max_depth_by_branch or ()
+                ]
+                if self.max_depth_by_branch is not None
+                else None
+            )
+            payload["turns_per_level"] = (
+                [
+                    {"level": level.to_json(), "turns": turns}
+                    for level, turns in self.turns_per_level or ()
+                ]
+                if self.turns_per_level is not None
+                else None
+            )
+
+        if self.search_steps is not None:
             payload["search_steps"] = self.search_steps
             payload["first_hungry_turn"] = self.first_hungry_turn
             payload["hunger_at_death"] = (
                 None if self.hunger_at_death is None else self.hunger_at_death.value
             )
+        if self.oracle_attacks is not None:
+            payload["oracle_attacks"] = self.oracle_attacks
+            payload["peaceful_attacks"] = self.peaceful_attacks
+            payload["max_depth_by_branch"] = [
+                {"dungeon_number": branch, "dungeon_level": relative, "depth": depth}
+                for branch, relative, depth in self.max_depth_by_branch or ()
+            ]
+            payload["turns_per_level"] = [
+                {"level": level.to_json(), "turns": turns}
+                for level, turns in self.turns_per_level or ()
+            ]
         return payload
 
     @classmethod
@@ -1450,7 +1525,14 @@ class EpisodeMetrics:
             value,
             "episode metrics",
             fields,
-            optional=_EXPLORATION_METRIC_FIELDS | _FAILURE_DIAGNOSTIC_FIELDS,
+            optional=_EXPLORATION_METRIC_FIELDS
+            | _FAILURE_DIAGNOSTIC_FIELDS
+            | {
+                "oracle_attacks",
+                "peaceful_attacks",
+                "max_depth_by_branch",
+                "turns_per_level",
+            },
         )
         recorded = _EXPLORATION_METRIC_FIELDS & payload.keys()
         if recorded and recorded != _EXPLORATION_METRIC_FIELDS:
@@ -1600,7 +1682,46 @@ class EpisodeMetrics:
                     HungerState,
                 )
             ),
+            oracle_attacks=None
+            if "oracle_attacks" not in payload
+            else integer_value(payload["oracle_attacks"], "oracle_attacks", minimum=0),
+            peaceful_attacks=None
+            if "peaceful_attacks" not in payload
+            else integer_value(
+                payload["peaceful_attacks"], "peaceful_attacks", minimum=0
+            ),
+            max_depth_by_branch=None
+            if "max_depth_by_branch" not in payload
+            else tuple(
+                _branch_depth_from_json(value)
+                for value in array_value(
+                    payload["max_depth_by_branch"], "max_depth_by_branch"
+                )
+            ),
+            turns_per_level=None
+            if "turns_per_level" not in payload
+            else tuple(
+                _level_turns_from_json(value)
+                for value in array_value(payload["turns_per_level"], "turns_per_level")
+            ),
         )
+
+
+def _branch_depth_from_json(value: object) -> tuple[int, int, int]:
+    payload = object_value(
+        value, "branch depth", {"dungeon_number", "dungeon_level", "depth"}
+    )
+    return tuple(
+        integer_value(payload[name], name, minimum=0)
+        for name in ("dungeon_number", "dungeon_level", "depth")
+    )
+
+
+def _level_turns_from_json(value: object) -> tuple[LevelKey, int]:
+    payload = object_value(value, "level turns", {"level", "turns"})
+    return LevelKey.from_json(payload["level"]), integer_value(
+        payload["turns"], "turns", minimum=0
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -1728,6 +1849,13 @@ def summarize_run(
         kill_count = decided_on.message.count("You kill")
         if _observation_is_live(decided_on):
             prayer_memory.observe(decided_on)
+            prayer_memory.current.target_conduct = any(
+                isinstance(leg, FindOracleLeg | EnterMinetownTempleLeg)
+                for leg in task.objective.legs
+            )
+            prayer_memory.current.oracle_navigation = any(
+                isinstance(leg, FindOracleLeg) for leg in task.objective.legs
+            )
 
     terminal_step_index: int | None = None
     for position, event in enumerate(events):
@@ -1906,6 +2034,13 @@ def summarize_run(
             decided_on = payload.observation
             if _observation_is_live(decided_on):
                 prayer_memory.observe(decided_on)
+                prayer_memory.current.target_conduct = any(
+                    isinstance(leg, FindOracleLeg | EnterMinetownTempleLeg)
+                    for leg in task.objective.legs
+                )
+                prayer_memory.current.oracle_navigation = any(
+                    isinstance(leg, FindOracleLeg) for leg in task.objective.legs
+                )
             if payload.observation.step_index != len(step_payloads):
                 problems.append(
                     f"step event {event.sequence} has step_index "
@@ -2151,7 +2286,37 @@ def _episode_metrics(
         )
     )
     worst_hunger = max(hunger, key=_HUNGER_STATES.index, default=None)
-    legs_completed = _objective_legs_completed(task, samples)
+    if any(
+        isinstance(leg, FindOracleLeg | EnterMinetownTempleLeg)
+        for leg in task.objective.legs
+    ):
+        from nethack_agent.conduct import attack_evidence
+        from nethack_agent.planner import leg_complete
+
+        memory = DungeonMemory()
+        legs_completed = 0
+        if initial is not None and _observation_is_live(initial):
+            memory.observe(initial)
+        for payload in steps:
+            if memory.levels:
+                if memory.current.live_observation is not None:
+                    name, _ = attack_evidence(
+                        payload.action, memory.current.live_observation
+                    )
+                    memory.current.oracle_attacks += name == "Oracle"
+                memory.current.record(
+                    derive_action_record(
+                        payload.selection, payload.action.name, memory.current
+                    )
+                )
+            if _observation_is_live(payload.observation):
+                memory.observe(payload.observation)
+                while legs_completed < len(task.objective.legs) and leg_complete(
+                    task.objective.legs[legs_completed], memory
+                ):
+                    legs_completed += 1
+    else:
+        legs_completed = _objective_legs_completed(task, samples)
     # Staircase's successful end state is NLE-owned and its terminal observation
     # has no live player cell. That task result is the direct evidence for its
     # equivalent single stand-on-downstairs objective.
@@ -2190,7 +2355,51 @@ def _episode_metrics(
             and 0 <= final.hunger < len(_HUNGER_STATES)
             else None
         ),
+        **_location_metrics(initial, steps, live),
     )
+
+
+def _location_metrics(
+    initial: ProjectedObservation | None,
+    steps: Sequence[StepPayload],
+    live: Sequence[ProjectedObservation],
+) -> dict[str, object]:
+    from nethack_agent.conduct import attack_evidence
+
+    oracle = peaceful = 0
+    before = initial
+    recorded = initial is not None and initial.cell_descriptions is not None
+    turns: Counter[LevelKey] = Counter()
+    for payload in steps:
+        if before is not None and _observation_is_live(before):
+            name, was_peaceful = attack_evidence(payload.action, before)
+            oracle += name == "Oracle"
+            peaceful += was_peaceful
+            after = payload.observation
+            if _observation_is_live(after):
+                turns[_observation_level(before)] += max(
+                    0, after.player.turn - before.player.turn
+                )
+        before = payload.observation
+    depths: dict[int, tuple[int, int]] = {}
+    for observation in live:
+        player = observation.player
+        old = depths.get(player.dungeon_number, (0, 0))
+        depths[player.dungeon_number] = (
+            max(old[0], player.dungeon_level),
+            max(old[1], player.depth),
+        )
+        turns.setdefault(_observation_level(observation), 0)
+    return {
+        "oracle_attacks": oracle if recorded else None,
+        "peaceful_attacks": peaceful if recorded else None,
+        "max_depth_by_branch": tuple(
+            (branch, *depth) for branch, depth in sorted(depths.items())
+        )
+        if recorded
+        else None,
+        "turns_per_level": tuple(turns.items()) if recorded else None,
+    }
 
 
 def _observation_is_live(observation: ProjectedObservation) -> bool:
@@ -2248,7 +2457,11 @@ def _observation_completes_leg(
     if isinstance(leg, ExploreDungeonLeg):
         return set(leg.levels) <= explored
     if isinstance(leg, FindOracleLeg):
-        raise ValueError(f"{leg.kind.value} legs have no evaluation yet")
+        from nethack_agent.targets import oracle_adjacent
+
+        return oracle_adjacent(observation, 0)
+    if isinstance(leg, EnterMinetownTempleLeg):
+        raise ValueError("Minetown completion requires recorded stair-link memory")
     player = observation.player
     glyph = observation.map.glyph_rows[player.y][player.x]
     cmap = nethack.glyph_to_cmap(glyph) if nethack.glyph_is_cmap(glyph) else None
@@ -2338,6 +2551,17 @@ def _action_is_valid(
         0 <= action.index < len(legal_actions)
         and legal_actions[action.index] == action
         and payload.selection.action_index == action.index
+    ):
+        return False
+    from nethack_agent.conduct import conduct_error
+
+    if (
+        conduct_error(
+            action,
+            decided_on,
+            None if dungeon_memory is None else dungeon_memory.current,
+        )
+        is not None
     ):
         return False
     selection = payload.selection
@@ -2856,6 +3080,8 @@ def _episode_metric_value(metric: MetricName, result: SeedResult) -> float | Non
     """One episode's value of a threshold metric; None if it was not recorded."""
     metrics = result.metrics
     died = result.outcome is RunOutcome.DEATH
+    if metric in (MetricName.ORACLE_ATTACKS, MetricName.PEACEFUL_ATTACKS):
+        return getattr(metrics, metric.value)
     match metric:
         case MetricName.TASK_RETURN:
             return metrics.task_return
@@ -3604,6 +3830,12 @@ class EvaluationReport:
             "aggregate": self.aggregate_json(),
             "acceptance": self.acceptance().to_json(),
         }
+        if self.suite.schema_version == 2 and any(
+            isinstance(leg, FindOracleLeg | EnterMinetownTempleLeg)
+            for case in self.suite.cases
+            for leg in case.task.objective.legs
+        ):
+            payload["report_schema_version"] = 5
         return (
             self._schema_four_json(payload)
             if self.suite.schema_version == 3
@@ -3813,7 +4045,7 @@ _RUN_CONFIGURATION_FIELDS: Final = frozenset(
 
 
 def render_report_markdown(payload: dict[str, object]) -> str:
-    """Strictly render report schema 2, 3, or 4 from its JSON source of truth."""
+    """Strictly render historical schemas and opt-in location report schema 5."""
     version = integer_value(
         payload.get("report_schema_version"), "report_schema_version"
     )
@@ -3823,9 +4055,41 @@ def render_report_markdown(payload: dict[str, object]) -> str:
         return _render_report_markdown_v3(payload)
     if version == 4:
         return _render_report_markdown_v4(payload)
+    if version == 5:
+        normalized = dict(payload)
+        normalized["report_schema_version"] = REPORT_SCHEMA_VERSION
+        markdown = _render_report_markdown_v3(normalized)
+        lines = [
+            markdown.rstrip(),
+            "",
+            "## Location and conduct measurements",
+            "",
+            "| Case / seed | Oracle attacks | Peaceful attacks | Branch maximum (relative / absolute) | Turns per level (all visits) |",
+            "| --- | ---: | ---: | --- | --- |",
+        ]
+        for case in array_value(payload["case_results"], "case results"):
+            for result in array_value(case["results"], "case results"):
+                metrics = EpisodeMetrics.from_json(result["metrics"])
+                if metrics.oracle_attacks is None:
+                    lines.append(
+                        f"| {case['case_id']} / {result['seed']} | unknown | unknown | unknown | unknown |"
+                    )
+                    continue
+                depths = ", ".join(
+                    f"{branch}:{relative}/{depth}"
+                    for branch, relative, depth in metrics.max_depth_by_branch or ()
+                )
+                turns = ", ".join(
+                    f"{level.dungeon_number}:{level.dungeon_level}={count}"
+                    for level, count in metrics.turns_per_level or ()
+                )
+                lines.append(
+                    f"| {case['case_id']} / {result['seed']} | {metrics.oracle_attacks} | {metrics.peaceful_attacks} | {depths} | {turns} |"
+                )
+        return "\n".join(lines) + "\n"
     raise ContractError(
         "report_schema_version must be "
-        f"{LEGACY_REPORT_SCHEMA_VERSION}, {REPORT_SCHEMA_VERSION}, or 4"
+        f"{LEGACY_REPORT_SCHEMA_VERSION}, {REPORT_SCHEMA_VERSION}, 4, or 5"
     )
 
 
@@ -5244,10 +5508,16 @@ def finalize_aborted_report(json_path: Path, reason: str) -> ReportPaths:
         version = integer_value(
             payload.get("report_schema_version"), "report_schema_version"
         )
-        if version not in (1, LEGACY_REPORT_SCHEMA_VERSION, REPORT_SCHEMA_VERSION, 4):
+        if version not in (
+            1,
+            LEGACY_REPORT_SCHEMA_VERSION,
+            REPORT_SCHEMA_VERSION,
+            4,
+            5,
+        ):
             raise ContractError(
                 "report_schema_version must be 1, "
-                f"{LEGACY_REPORT_SCHEMA_VERSION}, {REPORT_SCHEMA_VERSION}, or 4"
+                f"{LEGACY_REPORT_SCHEMA_VERSION}, {REPORT_SCHEMA_VERSION}, 4, or 5"
             )
         fields = (
             _REPORT_FIELDS_V1
@@ -5255,7 +5525,7 @@ def finalize_aborted_report(json_path: Path, reason: str) -> ReportPaths:
             else _REPORT_FIELDS_V2
             if version == LEGACY_REPORT_SCHEMA_VERSION
             else _REPORT_FIELDS_V3
-            if version == REPORT_SCHEMA_VERSION
+            if version in (REPORT_SCHEMA_VERSION, 5)
             else _REPORT_FIELDS_V4
         )
         object_value(payload, "evaluation report", fields)

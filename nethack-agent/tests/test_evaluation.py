@@ -3556,3 +3556,50 @@ def test_schema_four_failure_diagnostics_render_without_changing_old_reports(
     )
     with pytest.raises(ContractError, match="all record failure diagnostics"):
         report.to_markdown()
+
+
+def test_location_metrics_sum_turns_across_revisits_and_preserve_missing_evidence() -> (
+    None
+):
+    first, second = LevelKey(0, 1), LevelKey(2, 1)
+    initial = replace(synthetic_observation(0, first, 3, 1), cell_descriptions=())
+    observations = [
+        replace(
+            synthetic_observation(1, first, 3, 1),
+            player=replace(initial.player, turn=10),
+        ),
+        replace(
+            synthetic_observation(2, second, 3, 1),
+            player=replace(
+                initial.player, dungeon_number=2, dungeon_level=1, depth=3, turn=14
+            ),
+        ),
+        replace(
+            synthetic_observation(3, first, 3, 1),
+            player=replace(initial.player, turn=20),
+        ),
+        replace(
+            synthetic_observation(4, first, 3, 1),
+            player=replace(initial.player, turn=23),
+        ),
+    ]
+    wait = LegalAction(0, ord("."), "MiscDirection.WAIT")
+    steps = tuple(
+        replace(synthetic_step(observation), action=wait)
+        for observation in observations
+    )
+    metrics = evaluation._episode_metrics(
+        initial, steps, STAIRCASE_TASK, RunOutcome.TRUNCATED, None
+    )
+    assert dict(metrics.turns_per_level) == {first: 17 - initial.player.turn, second: 6}
+    assert metrics.max_depth_by_branch == ((0, 1, initial.player.depth), (2, 1, 3))
+    assert metrics.oracle_attacks == 0
+    legacy = evaluation._episode_metrics(
+        replace(initial, cell_descriptions=None),
+        steps,
+        STAIRCASE_TASK,
+        RunOutcome.TRUNCATED,
+        None,
+    )
+    assert legacy.oracle_attacks is None
+    assert "oracle_attacks" not in legacy.to_json()

@@ -84,6 +84,32 @@ or Luck (`winrl.cc:535-562`). Do not read `mpeaceful` directly ([NLE projection]
 `(21,79,80)` description array and normal Oracle glyph 270; it did not exercise
 temple entry or Oracle adjacency.
 
+**Phase 1 amendment (2026-10-05): opt-in observation transport.**
+Request `screen_descriptions` only for `enter_minetown_temple` and
+`find_oracle`. It is not a passive observation addition in this NLE build:
+`win/rl/winrl.cc:940-941` conditionally calls `store_screen_description`,
+which calls `do_screen_description` at line 508. The call chain
+`src/pager.c:1119` (`lookat`) → `466` (`look_at_object`) → `247`
+(`object_from_map`) → `192` (`mksobj(glyphotyp, FALSE, FALSE)`) constructs
+temporary objects for stale/covered/mimic object glyphs. Even with `init=FALSE`,
+`src/mkobj.c:1072-1086` calls `rndmonnum` for corpse/statue/figurine species;
+`rndmonnum` calls `rndmonst` at `364`, which consumes
+`rnd(rndmonst_state.choice_count)` at `src/makemon.c:1591`; its fallback
+consumes `rn1` at `src/mkobj.c:371`. Object allocation also increments
+`context.ident` at `783`, and
+look evidence can set `dknown` at `src/pager.c:231`. Thus asking for public
+look descriptions can affect gameplay RNG and state. An early live seed-16
+staircase test changed from its expected exhausted search to success at
+step 181 when descriptions were unconditionally enabled.
+
+Existing objectives retain their exact old observation-key tuple. The same
+seed therefore plays a different game under Minetown/Oracle than under
+reach-D5: **cross-objective comparisons are not paired**. Pairing is valid
+only with the same objective and observation transport. The new sparse,
+typed description evidence remains ordinary public look evidence; no native
+state enters policy or completion.
+
+
 Native-truth validates all visited Mines levels and Oracle candidates
 **offline** against special-level identity, room type, altar, and monster
 attitude. Publish detector confusion counts and missed/no-message cases,

@@ -195,7 +195,10 @@ class TaskSpec:
         progression = _TASK_PROGRESSION.get(self.environment)
         if progression is None:
             for leg in self.objective.legs:
-                if isinstance(leg, ExploreDungeonLeg | FindOracleLeg):
+                if isinstance(leg, ExploreDungeonLeg) or (
+                    isinstance(leg, FindOracleLeg)
+                    and self.environment is not NleTask.SCORE
+                ):
                     tasks = " and ".join(
                         task.value
                         for task, leg_type in _TASK_PROGRESSION.items()

@@ -191,6 +191,9 @@ _NEVER_MELEE: Final = frozenset(
         "blue jelly",
         "spotted jelly",
         "ochre jelly",
+        "plains centaur",
+        "forest centaur",
+        "mountain centaur",
     }
 )
 
@@ -265,6 +268,13 @@ class LevelMemory:
 
     def reset(self) -> None:
         self.level: LevelKey | None = None
+        self.live_observation: ProjectedObservation | None = None
+        self.altars: dict[Point, str] = {}
+        self.town_identified = False
+        self.temple_entry: str | None = None
+        self.oracle_attacks = 0
+        self.target_conduct = False
+        self.oracle_navigation = False
         self.width = 0
         self.height = 0
         self._cmap: list[list[int]] = []
@@ -399,6 +409,9 @@ class LevelMemory:
         elif routed:
             self.stale_moves += 1
         self.history.append((self.position, self.knowledge, routed))
+        from nethack_agent.targets import update_target_evidence
+
+        update_target_evidence(self, observation)
         if (
             routed
             and record is not None
@@ -728,6 +741,20 @@ class LevelMemory:
             or monster.glyph in self.peaceful_glyphs
         ):
             return None
+        if self.target_conduct:
+            observation = self.live_observation
+            if observation is None or "hallucinating" in observation.player.conditions:
+                return None
+            text = next(
+                (
+                    cell.text
+                    for cell in observation.cell_descriptions or ()
+                    if (cell.x, cell.y) == point
+                ),
+                "",
+            )
+            if not text or text.startswith(("peaceful ", "tame ")):
+                return None
         return monster
 
     def oscillating(self) -> bool:
