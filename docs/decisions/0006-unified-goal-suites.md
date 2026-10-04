@@ -1,6 +1,6 @@
 # ADR 0006: Unified location-goal evaluation suites
 
-- Status: proposed
+- Status: accepted (2026-10-05; acceptance suite `descend-d5-v2`, note 0046)
 - Date: 2026-10-04
 - Supersedes: ADR 0004's environment/action-profile coupling for evaluation and ADR 0005's heterogeneous regression acceptance. Their committed suites and reports remain immutable historical evidence.
 

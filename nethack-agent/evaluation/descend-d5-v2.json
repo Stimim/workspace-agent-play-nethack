@@ -1,0 +1,59 @@
+{
+  "schema_version": 3,
+  "suite_id": "descend-d5-v2",
+  "character": "val-dwa-law",
+  "policy_version": "hierarchical-survival-hp-prayer-burden-look-v1",
+  "knowledge_bundle_id": "survival-reviewed-v2",
+  "seed_selection": "ADR 0006 fresh acceptance: 20 seeds drawn from the inclusive range [1000000, 2147483647], excluding every used seed (ledger, catalog, committed suites, and committed fresh-draw reports). Historical seeds are tracked by unified-d5-regression-v4, not by this suite.",
+  "step_cap_rationale": "3000 steps, fixed by the note 0035 held-out probes; no completion in note 0035 or in the 120 current-policy fresh development episodes of note 0046 needed more. min_success_rate 0.65 applies the frozen note 0035 rule to those 120 episodes (99/120 = 0.825; 0.825 - 0.15 rounded down to 0.05).",
+  "fresh_sample": {
+    "case_id": "reach-d5-fresh",
+    "task": {
+      "environment": "NetHackScore-v0",
+      "action_profile": "nle-survival-actions",
+      "objective": {
+        "legs": [
+          {
+            "kind": "reach_level",
+            "level": {
+              "dungeon_number": 0,
+              "dungeon_level": 5
+            }
+          }
+        ]
+      }
+    },
+    "max_episode_steps": 3000,
+    "count": 20,
+    "range": [
+      1000000,
+      2147483647
+    ],
+    "acceptance": {
+      "min_success_rate": 0.65,
+      "metric_thresholds": [
+        {
+          "metric": "starvation_death",
+          "statistic": "sum",
+          "bound": {
+            "comparison": "at_most",
+            "value": 0
+          }
+        },
+        {
+          "metric": "hunger_at_death",
+          "statistic": "maximum",
+          "bound": {
+            "comparison": "at_most",
+            "value": 2
+          }
+        }
+      ]
+    }
+  },
+  "acceptance": {
+    "max_invalid_actions": 0,
+    "max_gate_rejections": 0,
+    "require_complete_records": true
+  }
+}
