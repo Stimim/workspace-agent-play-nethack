@@ -84,14 +84,21 @@ Out of scope: Oracle navigation and the `gold-v1` and `oracle-v1` suites (milest
   23→21/30 objectives and seven gate stops. Retain prayer-only product;
   no retreat/rest/disengagement work in this qualification
   ([0044](docs/notes/0044-single-rule-hazard-qualification.md)).
-- [ ] Qualify HP/threat-aware recovery: current 703 gas-spore explosion, 1379
-  homunculus, 1377 involuntary vault relocation/guard handling, and low-HP melee.
-- [ ] Resolve remaining hidden-exit failures 5/701; preserve the retained
-  1376 hunger/prayer investigation even though its current run dies earlier
-  to a goblin. Reconcile the ADR's prayer interval with code before changing it.
-- [ ] After qualified fixes, run a new fresh-draw milestone suite with declared
-  objective-success and explicit zero-starvation/zero-Weak-or-worse death gates.
-  Never replace the first real-model reports or relabel historical suites.
+- [x] Qualify burden recovery (no outcome change, two defects fixed during
+  qualification) and look-here stairs under object piles (dev seed 5
+  starvation→truncation) ([0045](docs/notes/0045-three-single-rule-qualification.md)).
+  Rule 3 (ranged dagger at gas spores/floating eyes) was paused mid-run and
+  is not shipped; its code was withdrawn from `main` (`086f61e`).
+- [x] Run the fresh-draw milestone suite `descend-d5-v2` once with the real
+  model: 16/20 objectives (gate 0.65 passed) but one death while Fainting, so
+  **acceptance failed** on the hunger gate
+  ([0046](docs/notes/0046-descend-d5-v2-real-model-acceptance.md)). ADR 0006
+  accepted.
+- [ ] Plan the next round toward 67/67 and a passing retry (new policy
+  version, new draw): exit discovery when the main downstairs is hidden or
+  blocked (the stall that becomes hunger), HP/threat recovery when prayer is
+  unavailable (703, 1379, 1377 vault guard), rule 3 requalification, and the
+  prayer-interval reconciliation (1376).
 
 
 ## Robust dungeon play (ADR 0004)

@@ -973,6 +973,11 @@ seeds under `reach_level(0,5)`; its 67/67 target is diagnostic and does not
 block commits. Historical suites and reports retain their former task and
 profile as immutable evidence. A later fresh-draw milestone suite must gate
 both its declared success rate and zero starvation/Weak-or-worse hunger deaths.
+That suite is `evaluation/descend-d5-v2.json` (20 fresh seeds, cap 3000,
+success rate at least 0.65, `starvation_death` sum at most 0,
+`hunger_at_death` maximum at most Hungry). Its first real-model run passed
+the success rate (16/20) and failed the hunger gate with one Fainting death
+([note 0046](docs/notes/0046-descend-d5-v2-real-model-acceptance.md)).
 Development qualification uses non-decreasing objectives and non-increasing
 deaths on that 67-seed runner, not individual trajectory retention. Every
 lost success/new death on development and the frozen 30-seed sample receives

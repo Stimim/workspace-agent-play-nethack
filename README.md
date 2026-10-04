@@ -162,6 +162,16 @@ increased qualification deaths was rejected and retained
 ([0037](docs/notes/0037-goal-aware-branch-gate-probes.md),
 [0038](docs/notes/0038-branch-exit-frontier-preserving-probes.md)).
 
+Under [ADR 0006](docs/decisions/0006-unified-goal-suites.md) (accepted), the
+frozen policy `hierarchical-survival-hp-prayer-burden-look-v1` ran the
+fresh-draw acceptance suite `descend-d5-v2` once with the real model:
+16/20 reached Dlvl 5 (0.65 required) with zero invalid actions or gate
+rejections, but one hero died while Fainting after a 2,700-turn stall on a
+level whose main downstairs it never found. **Milestone 2 acceptance failed
+again**, on the zero Weak-or-worse death gate
+([0046](docs/notes/0046-descend-d5-v2-real-model-acceptance.md)). The
+scripted 67-seed development set stands at 54/67.
+
 ## Documentation
 
 Start with [`docs/README.md`](docs/README.md). Architecture documents describe

@@ -1,0 +1,2511 @@
+{
+  "acceptance": {
+    "checks": {
+      "all_seeds_evaluated": true,
+      "complete_records": true,
+      "fixed_configuration": true,
+      "fresh:hunger_at_death:maximum:at_most": false,
+      "fresh:min_success_rate": true,
+      "fresh:starvation_death:sum:at_most": true,
+      "gate_rejections": true,
+      "inputs_unchanged": true,
+      "invalid_actions": true
+    },
+    "development_model": false,
+    "milestone_accepted": false,
+    "passed": false,
+    "reasons": [
+      "fresh sample: hunger_at_death maximum is 4; at_most 2 required"
+    ]
+  },
+  "aggregate": {
+    "decision_failures": 0,
+    "decisions": {
+      "failed_decisions": 0,
+      "latency_max_ms": 1459.558,
+      "latency_p50_ms": 1096.962,
+      "latency_p95_ms": 1391.868,
+      "latency_samples": 154,
+      "model_decisions": 154,
+      "output_tokens": 7332,
+      "prompt_tokens": 333307,
+      "repaired_decisions": 0
+    },
+    "evaluated_seeds": 20,
+    "gate_rejections": 0,
+    "integrity_failures": [],
+    "invalid_actions": 0,
+    "outcomes": {
+      "death": 2,
+      "objective_complete": 16,
+      "truncated": 2
+    },
+    "selection_sources": {
+      "deterministic_prompt": 97,
+      "deterministic_skill": 21204,
+      "model_fallback": 0
+    },
+    "steps": 21301,
+    "task_successes": 16,
+    "total_wall_seconds": 588.627
+  },
+  "baseline": {
+    "catalog": null,
+    "entries": [],
+    "passed": true
+  },
+  "case_results": [
+    {
+      "acceptance": {
+        "criteria": {
+          "metric_thresholds": [
+            {
+              "bound": {
+                "comparison": "at_most",
+                "value": 0
+              },
+              "metric": "starvation_death",
+              "statistic": "sum"
+            },
+            {
+              "bound": {
+                "comparison": "at_most",
+                "value": 2
+              },
+              "metric": "hunger_at_death",
+              "statistic": "maximum"
+            }
+          ],
+          "min_successes": 0,
+          "required_success_seeds": []
+        },
+        "metrics": [
+          {
+            "bound": {
+              "comparison": "at_most",
+              "value": 0
+            },
+            "metric": "starvation_death",
+            "passed": true,
+            "statistic": "sum",
+            "value": 0
+          },
+          {
+            "bound": {
+              "comparison": "at_most",
+              "value": 2
+            },
+            "metric": "hunger_at_death",
+            "passed": false,
+            "statistic": "maximum",
+            "value": 4
+          }
+        ],
+        "passed": false,
+        "successes": 16
+      },
+      "aggregate": {
+        "decision_failures": 0,
+        "decisions": {
+          "failed_decisions": 0,
+          "latency_max_ms": 1459.558,
+          "latency_p50_ms": 1096.962,
+          "latency_p95_ms": 1391.868,
+          "latency_samples": 154,
+          "model_decisions": 154,
+          "output_tokens": 7332,
+          "prompt_tokens": 333307,
+          "repaired_decisions": 0
+        },
+        "evaluated_seeds": 20,
+        "gate_rejections": 0,
+        "integrity_failures": [],
+        "invalid_actions": 0,
+        "outcomes": {
+          "death": 2,
+          "objective_complete": 16,
+          "truncated": 2
+        },
+        "selection_sources": {
+          "deterministic_prompt": 97,
+          "deterministic_skill": 21204,
+          "model_fallback": 0
+        },
+        "steps": 21301,
+        "task_successes": 16,
+        "total_wall_seconds": 588.627
+      },
+      "case_id": "reach-d5-fresh",
+      "max_episode_steps": 3000,
+      "requested_seeds": [
+        1987814290,
+        1213151840,
+        340697573,
+        1507056209,
+        337773271,
+        2059028023,
+        178234322,
+        442930654,
+        758990772,
+        1536412837,
+        1420394012,
+        1768159875,
+        2005928350,
+        1034991231,
+        245658383,
+        249447619,
+        1036106856,
+        2064852799,
+        1624140803,
+        559341345
+      ],
+      "results": [
+        {
+          "case_id": "reach-d5-fresh",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackScore-v0",
+            "knowledge_version": "survival-reviewed-v2+sha256:d5cb109e09e3d798a97f9521411a914c8fc2855916c6d4a6e3298e591e0fa19e",
+            "max_episode_steps": 3000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-survival-hp-prayer-burden-look-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 1268.721,
+            "latency_p50_ms": 1268.721,
+            "latency_p95_ms": 1268.721,
+            "latency_samples": 1,
+            "model_decisions": 1,
+            "output_tokens": 46,
+            "prompt_tokens": 1861,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 735,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "unknown",
+            "deepest_level": {
+              "dungeon_level": 1,
+              "dungeon_number": 2
+            },
+            "down_stair_traversals": 5,
+            "explored_cells": 1769,
+            "final_experience_level": 1,
+            "final_gold": 29,
+            "final_hit_points": 16,
+            "final_score": 277,
+            "first_hungry_turn": null,
+            "game_turns": 750,
+            "hunger_at_death": null,
+            "hunger_states": [
+              "not_hungry"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 2,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 3,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 4,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 2
+              },
+              {
+                "dungeon_level": 5,
+                "dungeon_number": 0
+              }
+            ],
+            "max_depth": 5,
+            "objective_legs_completed": 1,
+            "probe_misses": 0,
+            "search_steps": 1,
+            "steps": 733,
+            "steps_by_skill": {
+              "corpse": 9,
+              "explore_level": 690,
+              "hunger": 8,
+              "staircase_navigation": 26
+            },
+            "task_return": 276.97,
+            "unknown_stair_probes": 4,
+            "up_stair_traversals": 1,
+            "worst_hunger_state": "not_hungry"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "objective_complete",
+          "run_id": "9819a230-3d55-4bc5-a7ec-73d47dcc79d1",
+          "seed": 1987814290,
+          "selection_sources": {
+            "deterministic_prompt": 3,
+            "deterministic_skill": 730,
+            "model_fallback": 0
+          },
+          "steps": 733,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/9819a230-3d55-4bc5-a7ec-73d47dcc79d1/episode-uxf5wnbs/nle.2127093.0.ttyrec3.bz2",
+          "wall_seconds": 12.443
+        },
+        {
+          "case_id": "reach-d5-fresh",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackScore-v0",
+            "knowledge_version": "survival-reviewed-v2+sha256:d5cb109e09e3d798a97f9521411a914c8fc2855916c6d4a6e3298e591e0fa19e",
+            "max_episode_steps": 3000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-survival-hp-prayer-burden-look-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 1351.371,
+            "latency_p50_ms": 1246.158,
+            "latency_p95_ms": 1351.371,
+            "latency_samples": 4,
+            "model_decisions": 4,
+            "output_tokens": 201,
+            "prompt_tokens": 8017,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 1425,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "unknown",
+            "deepest_level": {
+              "dungeon_level": 5,
+              "dungeon_number": 0
+            },
+            "down_stair_traversals": 5,
+            "explored_cells": 878,
+            "final_experience_level": 2,
+            "final_gold": 16,
+            "final_hit_points": 26,
+            "final_score": 344,
+            "first_hungry_turn": 962,
+            "game_turns": 1425,
+            "hunger_at_death": null,
+            "hunger_states": [
+              "not_hungry",
+              "hungry"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 2,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 2
+              },
+              {
+                "dungeon_level": 3,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 4,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 5,
+                "dungeon_number": 0
+              }
+            ],
+            "max_depth": 5,
+            "objective_legs_completed": 1,
+            "probe_misses": 0,
+            "search_steps": 846,
+            "steps": 1423,
+            "steps_by_skill": {
+              "corpse": 10,
+              "explore_level": 1378,
+              "hunger": 2,
+              "staircase_navigation": 33
+            },
+            "task_return": 343.87,
+            "unknown_stair_probes": 4,
+            "up_stair_traversals": 1,
+            "worst_hunger_state": "hungry"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "objective_complete",
+          "run_id": "7333caab-7079-45be-8666-a1deb7bb8782",
+          "seed": 1213151840,
+          "selection_sources": {
+            "deterministic_prompt": 8,
+            "deterministic_skill": 1415,
+            "model_fallback": 0
+          },
+          "steps": 1423,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/7333caab-7079-45be-8666-a1deb7bb8782/episode-z_ufzb9x/nle.2127093.0.ttyrec3.bz2",
+          "wall_seconds": 25.615
+        },
+        {
+          "case_id": "reach-d5-fresh",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackScore-v0",
+            "knowledge_version": "survival-reviewed-v2+sha256:d5cb109e09e3d798a97f9521411a914c8fc2855916c6d4a6e3298e591e0fa19e",
+            "max_episode_steps": 3000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-survival-hp-prayer-burden-look-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 1135.63,
+            "latency_p50_ms": 1135.63,
+            "latency_p95_ms": 1135.63,
+            "latency_samples": 1,
+            "model_decisions": 1,
+            "output_tokens": 46,
+            "prompt_tokens": 1873,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 321,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "unknown",
+            "deepest_level": {
+              "dungeon_level": 5,
+              "dungeon_number": 0
+            },
+            "down_stair_traversals": 4,
+            "explored_cells": 872,
+            "final_experience_level": 1,
+            "final_gold": 40,
+            "final_hit_points": 18,
+            "final_score": 272,
+            "first_hungry_turn": null,
+            "game_turns": 318,
+            "hunger_at_death": null,
+            "hunger_states": [
+              "not_hungry"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 2,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 3,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 4,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 5,
+                "dungeon_number": 0
+              }
+            ],
+            "max_depth": 5,
+            "objective_legs_completed": 1,
+            "probe_misses": 0,
+            "search_steps": 0,
+            "steps": 319,
+            "steps_by_skill": {
+              "explore_level": 294,
+              "hunger": 4,
+              "staircase_navigation": 21
+            },
+            "task_return": 271.98,
+            "unknown_stair_probes": 4,
+            "up_stair_traversals": 0,
+            "worst_hunger_state": "not_hungry"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "objective_complete",
+          "run_id": "23501200-0f9b-4140-b86f-f5a49c8b82cb",
+          "seed": 340697573,
+          "selection_sources": {
+            "deterministic_prompt": 0,
+            "deterministic_skill": 319,
+            "model_fallback": 0
+          },
+          "steps": 319,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/23501200-0f9b-4140-b86f-f5a49c8b82cb/episode-0d61wy_k/nle.2127093.0.ttyrec3.bz2",
+          "wall_seconds": 6.156
+        },
+        {
+          "case_id": "reach-d5-fresh",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackScore-v0",
+            "knowledge_version": "survival-reviewed-v2+sha256:d5cb109e09e3d798a97f9521411a914c8fc2855916c6d4a6e3298e591e0fa19e",
+            "max_episode_steps": 3000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-survival-hp-prayer-burden-look-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 845.044,
+            "latency_p50_ms": 845.044,
+            "latency_p95_ms": 845.044,
+            "latency_samples": 1,
+            "model_decisions": 1,
+            "output_tokens": 46,
+            "prompt_tokens": 1873,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 561,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "unknown",
+            "deepest_level": {
+              "dungeon_level": 1,
+              "dungeon_number": 2
+            },
+            "down_stair_traversals": 5,
+            "explored_cells": 1220,
+            "final_experience_level": 2,
+            "final_gold": 20,
+            "final_hit_points": 28,
+            "final_score": 376,
+            "first_hungry_turn": null,
+            "game_turns": 564,
+            "hunger_at_death": null,
+            "hunger_states": [
+              "not_hungry"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 2,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 3,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 4,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 2
+              },
+              {
+                "dungeon_level": 5,
+                "dungeon_number": 0
+              }
+            ],
+            "max_depth": 5,
+            "objective_legs_completed": 1,
+            "probe_misses": 0,
+            "search_steps": 0,
+            "steps": 559,
+            "steps_by_skill": {
+              "corpse": 6,
+              "explore_level": 524,
+              "hunger": 5,
+              "staircase_navigation": 24
+            },
+            "task_return": 375.98,
+            "unknown_stair_probes": 4,
+            "up_stair_traversals": 1,
+            "worst_hunger_state": "not_hungry"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "objective_complete",
+          "run_id": "4d669d82-079e-43d2-b3ed-6344f85b4db6",
+          "seed": 1507056209,
+          "selection_sources": {
+            "deterministic_prompt": 2,
+            "deterministic_skill": 557,
+            "model_fallback": 0
+          },
+          "steps": 559,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/4d669d82-079e-43d2-b3ed-6344f85b4db6/episode-9wd7hd54/nle.2127093.0.ttyrec3.bz2",
+          "wall_seconds": 9.437
+        },
+        {
+          "case_id": "reach-d5-fresh",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackScore-v0",
+            "knowledge_version": "survival-reviewed-v2+sha256:d5cb109e09e3d798a97f9521411a914c8fc2855916c6d4a6e3298e591e0fa19e",
+            "max_episode_steps": 3000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-survival-hp-prayer-burden-look-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 1060.32,
+            "latency_p50_ms": 1060.32,
+            "latency_p95_ms": 1060.32,
+            "latency_samples": 1,
+            "model_decisions": 1,
+            "output_tokens": 46,
+            "prompt_tokens": 1873,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 610,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "unknown",
+            "deepest_level": {
+              "dungeon_level": 1,
+              "dungeon_number": 2
+            },
+            "down_stair_traversals": 5,
+            "explored_cells": 1347,
+            "final_experience_level": 1,
+            "final_gold": 35,
+            "final_hit_points": 17,
+            "final_score": 307,
+            "first_hungry_turn": null,
+            "game_turns": 614,
+            "hunger_at_death": null,
+            "hunger_states": [
+              "not_hungry",
+              "satiated"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 2,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 3,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 4,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 2
+              },
+              {
+                "dungeon_level": 5,
+                "dungeon_number": 0
+              }
+            ],
+            "max_depth": 5,
+            "objective_legs_completed": 1,
+            "probe_misses": 0,
+            "search_steps": 4,
+            "steps": 608,
+            "steps_by_skill": {
+              "corpse": 3,
+              "explore_level": 572,
+              "hunger": 10,
+              "staircase_navigation": 23
+            },
+            "task_return": 306.98,
+            "unknown_stair_probes": 4,
+            "up_stair_traversals": 1,
+            "worst_hunger_state": "not_hungry"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "objective_complete",
+          "run_id": "6ddc2023-f7d9-487e-850e-9776c78c0b61",
+          "seed": 337773271,
+          "selection_sources": {
+            "deterministic_prompt": 1,
+            "deterministic_skill": 607,
+            "model_fallback": 0
+          },
+          "steps": 608,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/6ddc2023-f7d9-487e-850e-9776c78c0b61/episode-ou2iyq61/nle.2127093.0.ttyrec3.bz2",
+          "wall_seconds": 10.15
+        },
+        {
+          "case_id": "reach-d5-fresh",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackScore-v0",
+            "knowledge_version": "survival-reviewed-v2+sha256:d5cb109e09e3d798a97f9521411a914c8fc2855916c6d4a6e3298e591e0fa19e",
+            "max_episode_steps": 3000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-survival-hp-prayer-burden-look-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 1317.889,
+            "latency_p50_ms": 1317.889,
+            "latency_p95_ms": 1317.889,
+            "latency_samples": 1,
+            "model_decisions": 1,
+            "output_tokens": 46,
+            "prompt_tokens": 1873,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 1096,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "unknown",
+            "deepest_level": {
+              "dungeon_level": 5,
+              "dungeon_number": 0
+            },
+            "down_stair_traversals": 5,
+            "explored_cells": 1643,
+            "final_experience_level": 1,
+            "final_gold": 37,
+            "final_hit_points": 18,
+            "final_score": 313,
+            "first_hungry_turn": null,
+            "game_turns": 1098,
+            "hunger_at_death": null,
+            "hunger_states": [
+              "not_hungry"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 2,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 2
+              },
+              {
+                "dungeon_level": 3,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 4,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 5,
+                "dungeon_number": 0
+              }
+            ],
+            "max_depth": 5,
+            "objective_legs_completed": 1,
+            "probe_misses": 0,
+            "search_steps": 72,
+            "steps": 1094,
+            "steps_by_skill": {
+              "corpse": 9,
+              "explore_level": 1045,
+              "hunger": 11,
+              "staircase_navigation": 29
+            },
+            "task_return": 312.93,
+            "unknown_stair_probes": 4,
+            "up_stair_traversals": 1,
+            "worst_hunger_state": "not_hungry"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "objective_complete",
+          "run_id": "7223f006-1407-48a6-b6d1-2c078bc4314a",
+          "seed": 2059028023,
+          "selection_sources": {
+            "deterministic_prompt": 3,
+            "deterministic_skill": 1091,
+            "model_fallback": 0
+          },
+          "steps": 1094,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/7223f006-1407-48a6-b6d1-2c078bc4314a/episode-rxf_glbp/nle.2127093.0.ttyrec3.bz2",
+          "wall_seconds": 29.292
+        },
+        {
+          "case_id": "reach-d5-fresh",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackScore-v0",
+            "knowledge_version": "survival-reviewed-v2+sha256:d5cb109e09e3d798a97f9521411a914c8fc2855916c6d4a6e3298e591e0fa19e",
+            "max_episode_steps": 3000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-survival-hp-prayer-burden-look-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 1173.296,
+            "latency_p50_ms": 1173.296,
+            "latency_p95_ms": 1173.296,
+            "latency_samples": 1,
+            "model_decisions": 1,
+            "output_tokens": 46,
+            "prompt_tokens": 1873,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 282,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "unknown",
+            "deepest_level": {
+              "dungeon_level": 5,
+              "dungeon_number": 0
+            },
+            "down_stair_traversals": 5,
+            "explored_cells": 1019,
+            "final_experience_level": 1,
+            "final_gold": 12,
+            "final_hit_points": 18,
+            "final_score": 264,
+            "first_hungry_turn": null,
+            "game_turns": 287,
+            "hunger_at_death": null,
+            "hunger_states": [
+              "not_hungry"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 2,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 2
+              },
+              {
+                "dungeon_level": 3,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 4,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 5,
+                "dungeon_number": 0
+              }
+            ],
+            "max_depth": 5,
+            "objective_legs_completed": 1,
+            "probe_misses": 0,
+            "search_steps": 6,
+            "steps": 280,
+            "steps_by_skill": {
+              "corpse": 9,
+              "explore_level": 243,
+              "staircase_navigation": 28
+            },
+            "task_return": 263.97,
+            "unknown_stair_probes": 4,
+            "up_stair_traversals": 1,
+            "worst_hunger_state": "not_hungry"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "objective_complete",
+          "run_id": "d217115c-43a9-4a22-87bf-491faf150d4f",
+          "seed": 178234322,
+          "selection_sources": {
+            "deterministic_prompt": 3,
+            "deterministic_skill": 277,
+            "model_fallback": 0
+          },
+          "steps": 280,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/d217115c-43a9-4a22-87bf-491faf150d4f/episode-l5awq9wo/nle.2127093.0.ttyrec3.bz2",
+          "wall_seconds": 10.536
+        },
+        {
+          "case_id": "reach-d5-fresh",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackScore-v0",
+            "knowledge_version": "survival-reviewed-v2+sha256:d5cb109e09e3d798a97f9521411a914c8fc2855916c6d4a6e3298e591e0fa19e",
+            "max_episode_steps": 3000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-survival-hp-prayer-burden-look-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 1284.539,
+            "latency_p50_ms": 1284.539,
+            "latency_p95_ms": 1284.539,
+            "latency_samples": 1,
+            "model_decisions": 1,
+            "output_tokens": 46,
+            "prompt_tokens": 1873,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 1478,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "unknown",
+            "deepest_level": {
+              "dungeon_level": 5,
+              "dungeon_number": 0
+            },
+            "down_stair_traversals": 4,
+            "explored_cells": 1592,
+            "final_experience_level": 2,
+            "final_gold": 44,
+            "final_hit_points": 27,
+            "final_score": 396,
+            "first_hungry_turn": 925,
+            "game_turns": 1490,
+            "hunger_at_death": null,
+            "hunger_states": [
+              "not_hungry",
+              "hungry"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 2,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 3,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 4,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 5,
+                "dungeon_number": 0
+              }
+            ],
+            "max_depth": 5,
+            "objective_legs_completed": 1,
+            "probe_misses": 0,
+            "search_steps": 297,
+            "steps": 1476,
+            "steps_by_skill": {
+              "corpse": 6,
+              "explore_level": 1430,
+              "hunger": 2,
+              "staircase_navigation": 38
+            },
+            "task_return": 395.9,
+            "unknown_stair_probes": 4,
+            "up_stair_traversals": 0,
+            "worst_hunger_state": "hungry"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "objective_complete",
+          "run_id": "651e46ba-bea0-48a6-a3ff-4ce59918316d",
+          "seed": 442930654,
+          "selection_sources": {
+            "deterministic_prompt": 3,
+            "deterministic_skill": 1473,
+            "model_fallback": 0
+          },
+          "steps": 1476,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/651e46ba-bea0-48a6-a3ff-4ce59918316d/episode-ozlfw7ck/nle.2127093.0.ttyrec3.bz2",
+          "wall_seconds": 47.923
+        },
+        {
+          "case_id": "reach-d5-fresh",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackScore-v0",
+            "knowledge_version": "survival-reviewed-v2+sha256:d5cb109e09e3d798a97f9521411a914c8fc2855916c6d4a6e3298e591e0fa19e",
+            "max_episode_steps": 3000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-survival-hp-prayer-burden-look-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 1122.978,
+            "latency_p50_ms": 1122.978,
+            "latency_p95_ms": 1122.978,
+            "latency_samples": 1,
+            "model_decisions": 1,
+            "output_tokens": 46,
+            "prompt_tokens": 1861,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 661,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "unknown",
+            "deepest_level": {
+              "dungeon_level": 5,
+              "dungeon_number": 0
+            },
+            "down_stair_traversals": 4,
+            "explored_cells": 1607,
+            "final_experience_level": 2,
+            "final_gold": 51,
+            "final_hit_points": 26,
+            "final_score": 335,
+            "first_hungry_turn": null,
+            "game_turns": 666,
+            "hunger_at_death": null,
+            "hunger_states": [
+              "not_hungry"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 2,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 3,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 4,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 5,
+                "dungeon_number": 0
+              }
+            ],
+            "max_depth": 5,
+            "objective_legs_completed": 1,
+            "probe_misses": 0,
+            "search_steps": 0,
+            "steps": 659,
+            "steps_by_skill": {
+              "corpse": 12,
+              "explore_level": 627,
+              "hunger": 2,
+              "staircase_navigation": 18
+            },
+            "task_return": 334.96,
+            "unknown_stair_probes": 4,
+            "up_stair_traversals": 0,
+            "worst_hunger_state": "not_hungry"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "objective_complete",
+          "run_id": "01e95b11-9b03-47c9-87d8-3c4d24207294",
+          "seed": 758990772,
+          "selection_sources": {
+            "deterministic_prompt": 4,
+            "deterministic_skill": 655,
+            "model_fallback": 0
+          },
+          "steps": 659,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/01e95b11-9b03-47c9-87d8-3c4d24207294/episode-ez3ce9em/nle.2127093.0.ttyrec3.bz2",
+          "wall_seconds": 10.409
+        },
+        {
+          "case_id": "reach-d5-fresh",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackScore-v0",
+            "knowledge_version": "survival-reviewed-v2+sha256:d5cb109e09e3d798a97f9521411a914c8fc2855916c6d4a6e3298e591e0fa19e",
+            "max_episode_steps": 3000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-survival-hp-prayer-burden-look-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 923.005,
+            "latency_p50_ms": 923.005,
+            "latency_p95_ms": 923.005,
+            "latency_samples": 1,
+            "model_decisions": 1,
+            "output_tokens": 46,
+            "prompt_tokens": 1873,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 1350,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "unknown",
+            "deepest_level": {
+              "dungeon_level": 1,
+              "dungeon_number": 2
+            },
+            "down_stair_traversals": 5,
+            "explored_cells": 1881,
+            "final_experience_level": 3,
+            "final_gold": 65,
+            "final_hit_points": 42,
+            "final_score": 549,
+            "first_hungry_turn": 1315,
+            "game_turns": 1369,
+            "hunger_at_death": null,
+            "hunger_states": [
+              "not_hungry",
+              "hungry"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 2,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 3,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 4,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 2
+              },
+              {
+                "dungeon_level": 5,
+                "dungeon_number": 0
+              }
+            ],
+            "max_depth": 5,
+            "objective_legs_completed": 1,
+            "probe_misses": 0,
+            "search_steps": 51,
+            "steps": 1348,
+            "steps_by_skill": {
+              "corpse": 30,
+              "explore_level": 1288,
+              "hunger": 6,
+              "staircase_navigation": 24
+            },
+            "task_return": 548.83,
+            "unknown_stair_probes": 4,
+            "up_stair_traversals": 1,
+            "worst_hunger_state": "hungry"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "objective_complete",
+          "run_id": "cac1e0de-d8ca-449c-9e0f-9ef18e63747e",
+          "seed": 1536412837,
+          "selection_sources": {
+            "deterministic_prompt": 12,
+            "deterministic_skill": 1336,
+            "model_fallback": 0
+          },
+          "steps": 1348,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/cac1e0de-d8ca-449c-9e0f-9ef18e63747e/episode-stu2psdf/nle.2127093.0.ttyrec3.bz2",
+          "wall_seconds": 22.368
+        },
+        {
+          "case_id": "reach-d5-fresh",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackScore-v0",
+            "knowledge_version": "survival-reviewed-v2+sha256:d5cb109e09e3d798a97f9521411a914c8fc2855916c6d4a6e3298e591e0fa19e",
+            "max_episode_steps": 3000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-survival-hp-prayer-burden-look-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 1222.282,
+            "latency_p50_ms": 1222.282,
+            "latency_p95_ms": 1222.282,
+            "latency_samples": 1,
+            "model_decisions": 1,
+            "output_tokens": 46,
+            "prompt_tokens": 1873,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 821,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "unknown",
+            "deepest_level": {
+              "dungeon_level": 5,
+              "dungeon_number": 0
+            },
+            "down_stair_traversals": 4,
+            "explored_cells": 1267,
+            "final_experience_level": 2,
+            "final_gold": 10,
+            "final_hit_points": 26,
+            "final_score": 350,
+            "first_hungry_turn": null,
+            "game_turns": 823,
+            "hunger_at_death": null,
+            "hunger_states": [
+              "not_hungry"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 2,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 3,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 4,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 5,
+                "dungeon_number": 0
+              }
+            ],
+            "max_depth": 5,
+            "objective_legs_completed": 1,
+            "probe_misses": 0,
+            "search_steps": 34,
+            "steps": 819,
+            "steps_by_skill": {
+              "corpse": 22,
+              "explore_level": 773,
+              "staircase_navigation": 24
+            },
+            "task_return": 349.75,
+            "unknown_stair_probes": 4,
+            "up_stair_traversals": 0,
+            "worst_hunger_state": "not_hungry"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "objective_complete",
+          "run_id": "9000e9a1-4463-4f5e-a41f-0c920a5a1518",
+          "seed": 1420394012,
+          "selection_sources": {
+            "deterministic_prompt": 8,
+            "deterministic_skill": 811,
+            "model_fallback": 0
+          },
+          "steps": 819,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/9000e9a1-4463-4f5e-a41f-0c920a5a1518/episode-q0a7ydc8/nle.2127093.0.ttyrec3.bz2",
+          "wall_seconds": 14.269
+        },
+        {
+          "case_id": "reach-d5-fresh",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackScore-v0",
+            "knowledge_version": "survival-reviewed-v2+sha256:d5cb109e09e3d798a97f9521411a914c8fc2855916c6d4a6e3298e591e0fa19e",
+            "max_episode_steps": 3000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-survival-hp-prayer-burden-look-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 1201.872,
+            "latency_p50_ms": 1201.872,
+            "latency_p95_ms": 1201.872,
+            "latency_samples": 1,
+            "model_decisions": 1,
+            "output_tokens": 46,
+            "prompt_tokens": 1861,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 422,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "unknown",
+            "deepest_level": {
+              "dungeon_level": 5,
+              "dungeon_number": 0
+            },
+            "down_stair_traversals": 4,
+            "explored_cells": 964,
+            "final_experience_level": 1,
+            "final_gold": 28,
+            "final_hit_points": 14,
+            "final_score": 284,
+            "first_hungry_turn": null,
+            "game_turns": 418,
+            "hunger_at_death": null,
+            "hunger_states": [
+              "not_hungry"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 2,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 3,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 4,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 5,
+                "dungeon_number": 0
+              }
+            ],
+            "max_depth": 5,
+            "objective_legs_completed": 1,
+            "probe_misses": 0,
+            "search_steps": 9,
+            "steps": 420,
+            "steps_by_skill": {
+              "corpse": 3,
+              "explore_level": 387,
+              "hunger": 9,
+              "staircase_navigation": 21
+            },
+            "task_return": 283.94,
+            "unknown_stair_probes": 4,
+            "up_stair_traversals": 0,
+            "worst_hunger_state": "not_hungry"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "objective_complete",
+          "run_id": "6c7b8667-7e9f-4ec8-8613-058bafcb127c",
+          "seed": 1768159875,
+          "selection_sources": {
+            "deterministic_prompt": 1,
+            "deterministic_skill": 419,
+            "model_fallback": 0
+          },
+          "steps": 420,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/6c7b8667-7e9f-4ec8-8613-058bafcb127c/episode-c4kykyoi/nle.2127093.0.ttyrec3.bz2",
+          "wall_seconds": 7.65
+        },
+        {
+          "case_id": "reach-d5-fresh",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackScore-v0",
+            "knowledge_version": "survival-reviewed-v2+sha256:d5cb109e09e3d798a97f9521411a914c8fc2855916c6d4a6e3298e591e0fa19e",
+            "max_episode_steps": 3000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-survival-hp-prayer-burden-look-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 1311.348,
+            "latency_p50_ms": 1311.348,
+            "latency_p95_ms": 1311.348,
+            "latency_samples": 1,
+            "model_decisions": 1,
+            "output_tokens": 46,
+            "prompt_tokens": 1873,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 166,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "unknown",
+            "deepest_level": {
+              "dungeon_level": 5,
+              "dungeon_number": 0
+            },
+            "down_stair_traversals": 4,
+            "explored_cells": 733,
+            "final_experience_level": 1,
+            "final_gold": 11,
+            "final_hit_points": 18,
+            "final_score": 211,
+            "first_hungry_turn": null,
+            "game_turns": 179,
+            "hunger_at_death": null,
+            "hunger_states": [
+              "not_hungry"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 2,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 3,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 4,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 5,
+                "dungeon_number": 0
+              }
+            ],
+            "max_depth": 5,
+            "objective_legs_completed": 1,
+            "probe_misses": 0,
+            "search_steps": 0,
+            "steps": 164,
+            "steps_by_skill": {
+              "explore_level": 142,
+              "hunger": 6,
+              "staircase_navigation": 16
+            },
+            "task_return": 210.96,
+            "unknown_stair_probes": 4,
+            "up_stair_traversals": 0,
+            "worst_hunger_state": "not_hungry"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "objective_complete",
+          "run_id": "0f94280d-c652-4ae8-bf76-bc38bffab655",
+          "seed": 2005928350,
+          "selection_sources": {
+            "deterministic_prompt": 0,
+            "deterministic_skill": 164,
+            "model_fallback": 0
+          },
+          "steps": 164,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/0f94280d-c652-4ae8-bf76-bc38bffab655/episode-zm4cvpgz/nle.2127093.0.ttyrec3.bz2",
+          "wall_seconds": 4.323
+        },
+        {
+          "case_id": "reach-d5-fresh",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackScore-v0",
+            "knowledge_version": "survival-reviewed-v2+sha256:d5cb109e09e3d798a97f9521411a914c8fc2855916c6d4a6e3298e591e0fa19e",
+            "max_episode_steps": 3000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-survival-hp-prayer-burden-look-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 1097.868,
+            "latency_p50_ms": 1097.868,
+            "latency_p95_ms": 1097.868,
+            "latency_samples": 1,
+            "model_decisions": 1,
+            "output_tokens": 46,
+            "prompt_tokens": 1873,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 3002,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "unknown",
+            "deepest_level": {
+              "dungeon_level": 1,
+              "dungeon_number": 2
+            },
+            "down_stair_traversals": 4,
+            "explored_cells": 1436,
+            "final_experience_level": 4,
+            "final_gold": 8,
+            "final_hit_points": 46,
+            "final_score": 568,
+            "first_hungry_turn": 795,
+            "game_turns": 3013,
+            "hunger_at_death": null,
+            "hunger_states": [
+              "not_hungry",
+              "hungry"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 2,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 3,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 4,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 2
+              }
+            ],
+            "max_depth": 5,
+            "objective_legs_completed": 0,
+            "probe_misses": 0,
+            "search_steps": 202,
+            "steps": 3000,
+            "steps_by_skill": {
+              "corpse": 33,
+              "explore_level": 1875,
+              "hunger": 20,
+              "staircase_navigation": 1072
+            },
+            "task_return": 567.7,
+            "unknown_stair_probes": 4,
+            "up_stair_traversals": 1,
+            "worst_hunger_state": "hungry"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "truncated",
+          "run_id": "bae1957e-5e19-4c7f-aaa6-7157c2227f4b",
+          "seed": 1034991231,
+          "selection_sources": {
+            "deterministic_prompt": 22,
+            "deterministic_skill": 2978,
+            "model_fallback": 0
+          },
+          "steps": 3000,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/bae1957e-5e19-4c7f-aaa6-7157c2227f4b/episode-ki_r3001/nle.2127093.0.ttyrec3.bz2",
+          "wall_seconds": 61.807
+        },
+        {
+          "case_id": "reach-d5-fresh",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackScore-v0",
+            "knowledge_version": "survival-reviewed-v2+sha256:d5cb109e09e3d798a97f9521411a914c8fc2855916c6d4a6e3298e591e0fa19e",
+            "max_episode_steps": 3000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-survival-hp-prayer-burden-look-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 1181.183,
+            "latency_p50_ms": 1181.183,
+            "latency_p95_ms": 1181.183,
+            "latency_samples": 1,
+            "model_decisions": 1,
+            "output_tokens": 46,
+            "prompt_tokens": 1873,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 924,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "unknown",
+            "deepest_level": {
+              "dungeon_level": 5,
+              "dungeon_number": 0
+            },
+            "down_stair_traversals": 4,
+            "explored_cells": 1775,
+            "final_experience_level": 2,
+            "final_gold": 49,
+            "final_hit_points": 32,
+            "final_score": 353,
+            "first_hungry_turn": null,
+            "game_turns": 936,
+            "hunger_at_death": null,
+            "hunger_states": [
+              "not_hungry"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 2,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 3,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 4,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 5,
+                "dungeon_number": 0
+              }
+            ],
+            "max_depth": 5,
+            "objective_legs_completed": 1,
+            "probe_misses": 0,
+            "search_steps": 0,
+            "steps": 922,
+            "steps_by_skill": {
+              "corpse": 12,
+              "explore_level": 882,
+              "hunger": 5,
+              "staircase_navigation": 23
+            },
+            "task_return": 352.92,
+            "unknown_stair_probes": 4,
+            "up_stair_traversals": 0,
+            "worst_hunger_state": "not_hungry"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "objective_complete",
+          "run_id": "8be31f80-de69-4ef2-92db-d9c9d6a706e3",
+          "seed": 245658383,
+          "selection_sources": {
+            "deterministic_prompt": 5,
+            "deterministic_skill": 917,
+            "model_fallback": 0
+          },
+          "steps": 922,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/8be31f80-de69-4ef2-92db-d9c9d6a706e3/episode-xnkfa96l/nle.2127093.0.ttyrec3.bz2",
+          "wall_seconds": 15.531
+        },
+        {
+          "case_id": "reach-d5-fresh",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackScore-v0",
+            "knowledge_version": "survival-reviewed-v2+sha256:d5cb109e09e3d798a97f9521411a914c8fc2855916c6d4a6e3298e591e0fa19e",
+            "max_episode_steps": 3000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-survival-hp-prayer-burden-look-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 1428.891,
+            "latency_p50_ms": 1081.478,
+            "latency_p95_ms": 1391.868,
+            "latency_samples": 132,
+            "model_decisions": 132,
+            "output_tokens": 6303,
+            "prompt_tokens": 291624,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 3002,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "unknown",
+            "deepest_level": {
+              "dungeon_level": 2,
+              "dungeon_number": 0
+            },
+            "down_stair_traversals": 1,
+            "explored_cells": 598,
+            "final_experience_level": 3,
+            "final_gold": 25,
+            "final_hit_points": 32,
+            "final_score": 351,
+            "first_hungry_turn": 1337,
+            "game_turns": 3028,
+            "hunger_at_death": null,
+            "hunger_states": [
+              "not_hungry",
+              "satiated",
+              "hungry"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 2,
+                "dungeon_number": 0
+              }
+            ],
+            "max_depth": 2,
+            "objective_legs_completed": 0,
+            "probe_misses": 0,
+            "search_steps": 1901,
+            "steps": 3000,
+            "steps_by_skill": {
+              "corpse": 12,
+              "explore_level": 2975,
+              "hunger": 6,
+              "staircase_navigation": 7
+            },
+            "task_return": 350.92,
+            "unknown_stair_probes": 1,
+            "up_stair_traversals": 0,
+            "worst_hunger_state": "hungry"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "truncated",
+          "run_id": "b10c4377-1502-4196-8f48-9664b456e8c6",
+          "seed": 249447619,
+          "selection_sources": {
+            "deterministic_prompt": 7,
+            "deterministic_skill": 2993,
+            "model_fallback": 0
+          },
+          "steps": 3000,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/b10c4377-1502-4196-8f48-9664b456e8c6/episode-756rwg04/nle.2127093.0.ttyrec3.bz2",
+          "wall_seconds": 209.49
+        },
+        {
+          "case_id": "reach-d5-fresh",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackScore-v0",
+            "knowledge_version": "survival-reviewed-v2+sha256:d5cb109e09e3d798a97f9521411a914c8fc2855916c6d4a6e3298e591e0fa19e",
+            "max_episode_steps": 3000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-survival-hp-prayer-burden-look-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 1234.419,
+            "latency_p50_ms": 1234.419,
+            "latency_p95_ms": 1234.419,
+            "latency_samples": 1,
+            "model_decisions": 1,
+            "output_tokens": 46,
+            "prompt_tokens": 1873,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 394,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "unknown",
+            "deepest_level": {
+              "dungeon_level": 1,
+              "dungeon_number": 2
+            },
+            "down_stair_traversals": 5,
+            "explored_cells": 1185,
+            "final_experience_level": 1,
+            "final_gold": 12,
+            "final_hit_points": 18,
+            "final_score": 276,
+            "first_hungry_turn": null,
+            "game_turns": 404,
+            "hunger_at_death": null,
+            "hunger_states": [
+              "not_hungry",
+              "satiated"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 2,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 3,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 4,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 2
+              },
+              {
+                "dungeon_level": 5,
+                "dungeon_number": 0
+              }
+            ],
+            "max_depth": 5,
+            "objective_legs_completed": 1,
+            "probe_misses": 0,
+            "search_steps": 0,
+            "steps": 392,
+            "steps_by_skill": {
+              "corpse": 6,
+              "explore_level": 357,
+              "hunger": 5,
+              "staircase_navigation": 24
+            },
+            "task_return": 275.95,
+            "unknown_stair_probes": 4,
+            "up_stair_traversals": 1,
+            "worst_hunger_state": "not_hungry"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "objective_complete",
+          "run_id": "57e9b54e-7a91-450a-9884-ba11cf50ae77",
+          "seed": 1036106856,
+          "selection_sources": {
+            "deterministic_prompt": 2,
+            "deterministic_skill": 390,
+            "model_fallback": 0
+          },
+          "steps": 392,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/57e9b54e-7a91-450a-9884-ba11cf50ae77/episode-b9zzg0wm/nle.2127093.0.ttyrec3.bz2",
+          "wall_seconds": 8.477
+        },
+        {
+          "case_id": "reach-d5-fresh",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackScore-v0",
+            "knowledge_version": "survival-reviewed-v2+sha256:d5cb109e09e3d798a97f9521411a914c8fc2855916c6d4a6e3298e591e0fa19e",
+            "max_episode_steps": 3000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-survival-hp-prayer-burden-look-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 908.231,
+            "latency_p50_ms": 908.231,
+            "latency_p95_ms": 908.231,
+            "latency_samples": 1,
+            "model_decisions": 1,
+            "output_tokens": 46,
+            "prompt_tokens": 1861,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 2818,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "killed by a giant bat",
+            "deepest_level": {
+              "dungeon_level": 1,
+              "dungeon_number": 2
+            },
+            "down_stair_traversals": 3,
+            "explored_cells": 710,
+            "final_experience_level": 4,
+            "final_gold": 19,
+            "final_hit_points": 26,
+            "final_score": 597,
+            "first_hungry_turn": 734,
+            "game_turns": 3025,
+            "hunger_at_death": "fainting",
+            "hunger_states": [
+              "not_hungry",
+              "hungry",
+              "weak",
+              "fainting"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 2,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 3,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 2
+              }
+            ],
+            "max_depth": 4,
+            "objective_legs_completed": 0,
+            "probe_misses": 0,
+            "search_steps": 223,
+            "steps": 2816,
+            "steps_by_skill": {
+              "corpse": 9,
+              "explore_level": 2779,
+              "hunger": 4,
+              "prayer": 2,
+              "staircase_navigation": 22
+            },
+            "task_return": 596.89,
+            "unknown_stair_probes": 3,
+            "up_stair_traversals": 1,
+            "worst_hunger_state": "fainting"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "death",
+          "run_id": "69ce1308-474a-4722-b86a-e7aef3e8e81b",
+          "seed": 2064852799,
+          "selection_sources": {
+            "deterministic_prompt": 7,
+            "deterministic_skill": 2809,
+            "model_fallback": 0
+          },
+          "steps": 2816,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/69ce1308-474a-4722-b86a-e7aef3e8e81b/episode-0ns9zsag/nle.2127093.0.ttyrec3.bz2",
+          "wall_seconds": 58.187
+        },
+        {
+          "case_id": "reach-d5-fresh",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackScore-v0",
+            "knowledge_version": "survival-reviewed-v2+sha256:d5cb109e09e3d798a97f9521411a914c8fc2855916c6d4a6e3298e591e0fa19e",
+            "max_episode_steps": 3000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-survival-hp-prayer-burden-look-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 1201.868,
+            "latency_p50_ms": 1201.868,
+            "latency_p95_ms": 1201.868,
+            "latency_samples": 1,
+            "model_decisions": 1,
+            "output_tokens": 46,
+            "prompt_tokens": 1873,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 832,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "unknown",
+            "deepest_level": {
+              "dungeon_level": 5,
+              "dungeon_number": 0
+            },
+            "down_stair_traversals": 5,
+            "explored_cells": 1813,
+            "final_experience_level": 3,
+            "final_gold": 56,
+            "final_hit_points": 36,
+            "final_score": 540,
+            "first_hungry_turn": null,
+            "game_turns": 842,
+            "hunger_at_death": null,
+            "hunger_states": [
+              "not_hungry"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 2,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 2
+              },
+              {
+                "dungeon_level": 3,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 4,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 5,
+                "dungeon_number": 0
+              }
+            ],
+            "max_depth": 5,
+            "objective_legs_completed": 1,
+            "probe_misses": 0,
+            "search_steps": 2,
+            "steps": 830,
+            "steps_by_skill": {
+              "corpse": 12,
+              "explore_level": 778,
+              "hunger": 6,
+              "staircase_navigation": 34
+            },
+            "task_return": 539.85,
+            "unknown_stair_probes": 4,
+            "up_stair_traversals": 1,
+            "worst_hunger_state": "not_hungry"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "objective_complete",
+          "run_id": "b5b2ce3a-8d16-4233-8918-9d2b0ad0e410",
+          "seed": 1624140803,
+          "selection_sources": {
+            "deterministic_prompt": 5,
+            "deterministic_skill": 825,
+            "model_fallback": 0
+          },
+          "steps": 830,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/b5b2ce3a-8d16-4233-8918-9d2b0ad0e410/episode-kimak5_t/nle.2127093.0.ttyrec3.bz2",
+          "wall_seconds": 15.589
+        },
+        {
+          "case_id": "reach-d5-fresh",
+          "configuration": {
+            "character": "val-dwa-law",
+            "environment": "NetHackScore-v0",
+            "knowledge_version": "survival-reviewed-v2+sha256:d5cb109e09e3d798a97f9521411a914c8fc2855916c6d4a6e3298e591e0fa19e",
+            "max_episode_steps": 3000,
+            "model": "gemma4-nethack:latest",
+            "nle_version": "1.3.0",
+            "ollama_num_ctx": 8192,
+            "policy_version": "hierarchical-survival-hp-prayer-burden-look-v1"
+          },
+          "decision_failures": 0,
+          "decisions": {
+            "failed_decisions": 0,
+            "latency_max_ms": 1459.558,
+            "latency_p50_ms": 1459.558,
+            "latency_p95_ms": 1459.558,
+            "latency_samples": 1,
+            "model_decisions": 1,
+            "output_tokens": 46,
+            "prompt_tokens": 1873,
+            "repaired_decisions": 0
+          },
+          "ended_by": "episode_end",
+          "error": null,
+          "event_count": 441,
+          "final_state": "terminal",
+          "gate_rejections": 0,
+          "integrity_ok": true,
+          "integrity_problems": [],
+          "invalid_actions": 0,
+          "metrics": {
+            "death_cause": "killed by a bolt of fire",
+            "deepest_level": {
+              "dungeon_level": 3,
+              "dungeon_number": 0
+            },
+            "down_stair_traversals": 2,
+            "explored_cells": 979,
+            "final_experience_level": 1,
+            "final_gold": 21,
+            "final_hit_points": 14,
+            "final_score": 197,
+            "first_hungry_turn": null,
+            "game_turns": 441,
+            "hunger_at_death": "not_hungry",
+            "hunger_states": [
+              "not_hungry"
+            ],
+            "level_changes_without_stair_action": 0,
+            "levels_visited": [
+              {
+                "dungeon_level": 1,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 2,
+                "dungeon_number": 0
+              },
+              {
+                "dungeon_level": 3,
+                "dungeon_number": 0
+              }
+            ],
+            "max_depth": 3,
+            "objective_legs_completed": 0,
+            "probe_misses": 0,
+            "search_steps": 0,
+            "steps": 439,
+            "steps_by_skill": {
+              "corpse": 3,
+              "explore_level": 426,
+              "staircase_navigation": 10
+            },
+            "task_return": 196.93,
+            "unknown_stair_probes": 2,
+            "up_stair_traversals": 0,
+            "worst_hunger_state": "not_hungry"
+          },
+          "ollama_version": "0.34.4",
+          "outcome": "death",
+          "run_id": "2ddf8746-2f54-4baa-b463-c328d7626f97",
+          "seed": 559341345,
+          "selection_sources": {
+            "deterministic_prompt": 1,
+            "deterministic_skill": 438,
+            "model_fallback": 0
+          },
+          "steps": 439,
+          "ttyrec_exists": true,
+          "ttyrec_path": "runs/2ddf8746-2f54-4baa-b463-c328d7626f97/episode-6slmq_3s/nle.2127093.0.ttyrec3.bz2",
+          "wall_seconds": 8.975
+        }
+      ],
+      "task": {
+        "action_profile": "nle-survival-actions",
+        "environment": "NetHackScore-v0",
+        "objective": {
+          "legs": [
+            {
+              "kind": "reach_level",
+              "level": {
+                "dungeon_level": 5,
+                "dungeon_number": 0
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "comparison": null,
+  "configuration": {
+    "data_directory": "data/evaluations/descend-d5-v2",
+    "knowledge_version": "survival-reviewed-v2+sha256:d5cb109e09e3d798a97f9521411a914c8fc2855916c6d4a6e3298e591e0fa19e",
+    "model": "gemma4-nethack:latest",
+    "model_mode": "ollama",
+    "ollama_num_ctx": 8192,
+    "policy_version": "hierarchical-survival-hp-prayer-burden-look-v1"
+  },
+  "draw_provenance": {
+    "draw_seed": 661147380,
+    "drawn_seeds": [
+      1987814290,
+      1213151840,
+      340697573,
+      1507056209,
+      337773271,
+      2059028023,
+      178234322,
+      442930654,
+      758990772,
+      1536412837,
+      1420394012,
+      1768159875,
+      2005928350,
+      1034991231,
+      245658383,
+      249447619,
+      1036106856,
+      2064852799,
+      1624140803,
+      559341345
+    ],
+    "excluded_seeds": [
+      47359449,
+      75767809,
+      253797271,
+      279714031,
+      295010814,
+      295655445,
+      296200318,
+      351146065,
+      407792242,
+      559586091,
+      577302227,
+      643863903,
+      646686252,
+      741007742,
+      773519161,
+      799362204,
+      802829109,
+      949189622,
+      965386800,
+      1003301977,
+      1009099699,
+      1063911084,
+      1077361413,
+      1097634320,
+      1101513488,
+      1113672078,
+      1150182636,
+      1187627742,
+      1195605202,
+      1235709582,
+      1254878537,
+      1259450733,
+      1271703369,
+      1295772422,
+      1318243115,
+      1354866613,
+      1467902277,
+      1500967190,
+      1528054415,
+      1574730837,
+      1631331316,
+      1655373811,
+      1703050900,
+      1711375002,
+      1713314902,
+      1759520978,
+      1776041382,
+      1807224773,
+      1840248764,
+      1858658579,
+      1887524929,
+      1891249871,
+      1936718785,
+      1947862533,
+      1980000625,
+      2014004543,
+      2047049452,
+      2065672237,
+      2094095407,
+      2105401147
+    ],
+    "exclusion_count": 60,
+    "range": [
+      1000000,
+      2147483647
+    ]
+  },
+  "finished_at": "2026-10-04T17:50:53+00:00",
+  "fresh": {
+    "acceptance": {
+      "criteria": {
+        "metric_thresholds": [
+          {
+            "bound": {
+              "comparison": "at_most",
+              "value": 0
+            },
+            "metric": "starvation_death",
+            "statistic": "sum"
+          },
+          {
+            "bound": {
+              "comparison": "at_most",
+              "value": 2
+            },
+            "metric": "hunger_at_death",
+            "statistic": "maximum"
+          }
+        ],
+        "min_success_rate": 0.65
+      },
+      "metrics": [
+        {
+          "bound": {
+            "comparison": "at_most",
+            "value": 0
+          },
+          "metric": "starvation_death",
+          "passed": true,
+          "statistic": "sum",
+          "value": 0
+        },
+        {
+          "bound": {
+            "comparison": "at_most",
+            "value": 2
+          },
+          "metric": "hunger_at_death",
+          "passed": false,
+          "statistic": "maximum",
+          "value": 4
+        }
+      ],
+      "passed": false
+    },
+    "case_id": "reach-d5-fresh",
+    "sample_size": 20,
+    "success_rate": 0.8,
+    "successes": 16,
+    "wilson_95": [
+      0.583983,
+      0.919342
+    ]
+  },
+  "report_schema_version": 4,
+  "requested_cases": [
+    {
+      "case_id": "reach-d5-fresh",
+      "seeds": [
+        1987814290,
+        1213151840,
+        340697573,
+        1507056209,
+        337773271,
+        2059028023,
+        178234322,
+        442930654,
+        758990772,
+        1536412837,
+        1420394012,
+        1768159875,
+        2005928350,
+        1034991231,
+        245658383,
+        249447619,
+        1036106856,
+        2064852799,
+        1624140803,
+        559341345
+      ]
+    }
+  ],
+  "started_at": "2026-10-04T17:40:04+00:00",
+  "status": "complete",
+  "status_reason": null,
+  "suite": {
+    "acceptance": {
+      "max_gate_rejections": 0,
+      "max_invalid_actions": 0,
+      "require_complete_records": true
+    },
+    "cases": [],
+    "character": "val-dwa-law",
+    "fresh_sample": {
+      "acceptance": {
+        "metric_thresholds": [
+          {
+            "bound": {
+              "comparison": "at_most",
+              "value": 0
+            },
+            "metric": "starvation_death",
+            "statistic": "sum"
+          },
+          {
+            "bound": {
+              "comparison": "at_most",
+              "value": 2
+            },
+            "metric": "hunger_at_death",
+            "statistic": "maximum"
+          }
+        ],
+        "min_success_rate": 0.65
+      },
+      "case_id": "reach-d5-fresh",
+      "count": 20,
+      "max_episode_steps": 3000,
+      "range": [
+        1000000,
+        2147483647
+      ],
+      "task": {
+        "action_profile": "nle-survival-actions",
+        "environment": "NetHackScore-v0",
+        "objective": {
+          "legs": [
+            {
+              "kind": "reach_level",
+              "level": {
+                "dungeon_level": 5,
+                "dungeon_number": 0
+              }
+            }
+          ]
+        }
+      }
+    },
+    "knowledge_bundle_id": "survival-reviewed-v2",
+    "path": "evaluation/descend-d5-v2.json",
+    "policy_version": "hierarchical-survival-hp-prayer-burden-look-v1",
+    "schema_version": 3,
+    "seed_selection": "ADR 0006 fresh acceptance: 20 seeds drawn from the inclusive range [1000000, 2147483647], excluding every used seed (ledger, catalog, committed suites, and committed fresh-draw reports). Historical seeds are tracked by unified-d5-regression-v4, not by this suite.",
+    "sha256": "e301e2bb675677d6639615a0c4f0d09acba0c06c6da9145738e3f7d4d3589a20",
+    "step_cap_rationale": "3000 steps, fixed by the note 0035 held-out probes; no completion in note 0035 or in the 120 current-policy fresh development episodes of note 0046 needed more. min_success_rate 0.65 applies the frozen note 0035 rule to those 120 episodes (99/120 = 0.825; 0.825 - 0.15 rounded down to 0.05).",
+    "suite_id": "descend-d5-v2"
+  }
+}
