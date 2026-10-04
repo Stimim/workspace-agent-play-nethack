@@ -107,9 +107,9 @@ temple**, and (2) reaches the **Oracle** level (Dlvl 5-9) and **stands next
 to the peaceful Oracle** without attacking her. Orcish Town counts as
 Minetown; in NetHack 3.6.7 (`dat/mines.des`, `minetn-1`) its altar lies in
 an ordinary region, not a temple room, so its success is standing on that
-unaligned altar (provisional; confirm in ADR 0007). Scope: capability areas
-A (survive), B (food), F (navigation) below. Design record: a new ADR 0007
-before implementation (objectives, detectors, suites, gates).
+unaligned altar (confirmed in [ADR 0007](docs/decisions/0007-mines-minetown-and-oracle.md),
+proposed). Scope: capability areas A (survive), B (food), F (navigation)
+below. ADR 0007 defines the proposed objectives, detectors, suites, and gates.
 
 Process rules (lessons from milestone 2, notes 0037-0046):
 one rule per worker session; every product change ships only with its
