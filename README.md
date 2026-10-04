@@ -105,13 +105,23 @@ The evidence-gated combat and hunger changes in
 evaluator-replayed exhaustion markers, and typed metric thresholds, with the
 `staircase-v3` and `traversal-v2` regression suites. Policy
 `hierarchical-task-specialists-v1` added deterministic gold navigation on
-`NetHackGold-v0`. The current policy, `hierarchical-survival-hp-prayer-v1`, pins
+`NetHackGold-v0`. Policy `hierarchical-survival-hp-prayer-v1` pinned
 `survival-reviewed-v2` and development runner `unified-d5-regression-v2`.
 Its low-HP prayer rule qualified on development 52→54/67 and fresh
 25→29/30, without retreat/rest/disengagement ([note 0043](docs/notes/0043-single-rule-prayer-qualification.md)).
 Hazard-only 3b was rejected: fresh objectives 23→21/30 and seven
 gas-spore trapped-state gate stops; its code was removed and prayer alone
-remains shipped ([note 0044](docs/notes/0044-single-rule-hazard-qualification.md)).
+remained shipped ([note 0044](docs/notes/0044-single-rule-hazard-qualification.md)).
+The current policy, `hierarchical-survival-hp-prayer-burden-v1`, pins
+`survival-reviewed-v2` and development runner `unified-d5-regression-v3`. It
+adds observed-load-refusal recovery: drop surplus food/items (keeping one
+ration, the wielded weapon, and worn equipment) until Burdened or better,
+deferring to combat defense and never during an active unrelated prompt.
+Two real defects found and fixed during qualification (an EAT/inventory-letter
+key collision, and burden preempting combat defense) are documented, not
+shipped unfixed; the qualified candidate matched baseline on every one of 97
+combined development and fresh episodes with zero invalid actions, gate
+rejections, or integrity failures ([note 0045](docs/notes/0045-three-single-rule-qualification.md)).
 The checkout refuses
 older policy-pinned suites before creating an episode; they must not be
 relabeled or rerun as later-policy evidence. The task-progression policy's

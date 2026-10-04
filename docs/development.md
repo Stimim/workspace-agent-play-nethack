@@ -342,11 +342,11 @@ New evaluation follows [ADR 0006](decisions/0006-unified-goal-suites.md):
 place-reaching goals run on `NetHackScore-v0` with `nle-survival-actions` and
 the same survival-capable policy; Staircase success ends on the first
 downstairs, making it a sub-goal rather than a D5 environment. The
-development-only `evaluation/unified-d5-regression-v2.json` runs the 67 unique
+development-only `evaluation/unified-d5-regression-v3.json` runs the 67 unique
 historical/probe seeds as `reach_level(0,5)` with a 3,000-step cap. Its
 67/67 goal tracks remediation but does not block commits; historical suites
 and reports remain immutable. Run all cases with the scripted model using
-`uv run nethack-agent eval run --suite evaluation/unified-d5-regression-v2.json --data-dir /tmp/unified-d5-scripted --report-dir /tmp/unified-d5-scripted/reports --development-scripted-model`; omit `--development-scripted-model` and choose separate data/report directories to run with the configured real model. Version 2 pins the qualified low-HP-prayer policy; v1 stays immutable. The next milestone's fresh-draw suite must declare its objective-success rate and explicit zero-starvation/zero-Weak-or-worse hunger-death gates before execution.
+`uv run nethack-agent eval run --suite evaluation/unified-d5-regression-v3.json --data-dir /tmp/unified-d5-scripted --report-dir /tmp/unified-d5-scripted/reports --development-scripted-model`; omit `--development-scripted-model` and choose separate data/report directories to run with the configured real model. Version 3 pins the qualified burden-recovery policy; v2 and v1 stay immutable. The next milestone's fresh-draw suite must declare its objective-success rate and explicit zero-starvation/zero-Weak-or-worse hunger-death gates before execution.
 
 Those committed suites continue to pin `staircase-reviewed-v3`; their
 historical reports and rendered bytes are unchanged. Other runs through

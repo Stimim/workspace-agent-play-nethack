@@ -64,3 +64,18 @@ Per the same preregistered protocol, this is a second behavior correction mid-qu
 - coordinator.py: `19a58fef94a7eaba1529e0c687d222f8248bac1fb4e9a564dc632422d9393942`
 - test_coordinator.py: `f2bc4bf080de4dec76ee28aa819bfc35c681a1babc10155e64caefb0ed4cc564`
 - all other files: unchanged from the SHA-256 lists above.
+
+## Rule 1 completed: QUALIFIED and shipped
+
+Both twice-corrected arms completed without tooling cutoff or replacement episodes.
+
+| Set | Baseline | Candidate | Changes |
+| --- | --- | --- | --- |
+| Unified development, 67 seeds | 54 objective, 5 death, 8 truncated | identical | 0 |
+| Fresh 361-390, 30 seeds | 24 objective, 4 death, 2 truncated | identical | 0 |
+
+Every one of the 97 combined episodes has an identical outcome to baseline, and both arms have zero invalid actions, zero gate rejections, zero integrity failures, and complete records on both sets. Fresh hunger deaths are 0->0. There is nothing to trace: this is a strict no-regression result, not a narrow win-loss tradeoff. The two real defects found during qualification (the EAT/inventory-letter key collision, and burden preempting combat defense) were fixed and reverified against the full suite before either corrected sample, not shipped unfixed or left as accepted limitations.
+
+Shipped the exact qualified decision/skill/coordinator/evaluator behavior as policy `hierarchical-survival-hp-prayer-burden-v1`, pinning new immutable `unified-d5-regression-v3.json` (copied from v2 with only `suite_id`/`policy_version` changed). Qualification reports retain their original policy label and frozen file hashes, not relabeled evidence. Knowledge remains `survival-reviewed-v2`, unchanged by this rule. `run_manager.py POLICY_VERSION`, `README.md`, and `ARCHITECTURE.md` updated; `docs/development.md` points at v3. All three fresh samples (301-330, 331-360, 361-390) are permanently consumed per the ledger; only 361-390 is qualification evidence.
+
+Proceeding to rule 2 (bounded look-here discovery preserving MORE pages) and rule 3 (corrected hazard behavior) next, each with its own new frozen thirty-seed sample.
