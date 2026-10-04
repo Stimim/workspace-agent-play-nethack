@@ -337,7 +337,13 @@
       "source": "note-0045-rule3-ranged-dagger-gas-spore-clearing-corrected",
       "seeds": [],
       "ranges": [[451, 480]],
-      "note": "Frozen before either arm: HEAD 5536c7d versus corrected ranged-throw candidate (decision.py permit-collision fix). Score/survival/reachD5/cap3000/survival-reviewed-v2, note0040 gates. All reserved seeds consumed regardless of completion. See note0045."
+      "note": "Spoiled: candidate-dev/fresh found a real oscillation defect (THROW item-prompt regex rejected gold-included offers, infinite open/cancel loop, see note0045), not a trapped-state limitation. Fixed and refrozen; consumed, never reused."
+    },
+    {
+      "source": "note-0045-rule3-ranged-dagger-gas-spore-clearing-twice-corrected",
+      "seeds": [],
+      "ranges": [[481, 510]],
+      "note": "Frozen before either arm: HEAD 5536c7d versus twice-corrected ranged-throw candidate (hazard.py gold-inclusive prompt regex fix). Score/survival/reachD5/cap3000/survival-reviewed-v2, note0040 gates. All reserved seeds consumed regardless of completion. See note0045."
     }
   ]
 }

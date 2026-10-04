@@ -164,3 +164,19 @@ Per the same preregistered protocol, fresh 421-450 is spoiled and never reused; 
 
 - decision.py: `ae22f1c2bdb556159a0f4f483bf44c0153c5af811a4be9ae0f91cdda163af6c0`
 - all other files: unchanged from the SHA-256 list above.
+
+## Rule 3 second spoiled sample: a real oscillation defect, not a trapped-state limitation
+
+Fresh 451-480 completed with zero errors (the first fix worked), but 4 of 30 episodes (451, 452, 454, 472) changed from a clean `objective_complete` in baseline to `truncated` with 300-900+ model decisions each in the candidate, versus 1-3 normally; the full development arm found the identical pattern on 8 seeds (1, 5, 703, 1370, 1376, 1379, 1528054415, 2105401147).
+
+Traced directly from stored events, not inferred: seed 451 opens `Command.THROW` correctly (`"What do you want to throw? [$ab or ?*]"`, the hero was carrying gold), but the *next* decision falls through to `model_fallback` choosing `MiscDirection.WAIT` ("You don't have that object."), `MiscAction.MORE` cancels it ("Never mind."), and since the gas-spore trigger condition is still true, `Command.THROW` immediately reopens — an unbounded open/reject/cancel cycle until the step cap. Root cause: `_THROW_PROMPT`'s letter group was `[A-Za-z]+` (copied from the EAT-item regex), which cannot match an offered `$` — NetHack always offers gold as throwable when the hero carries any, so any gas-spore throw opportunity while holding gold broke immediately. `burden.py`'s own `_DROP_PROMPT` already uses a permissive `.*?` group for exactly this reason; `hazard.py` did not.
+
+Fix: changed `_THROW_PROMPT` to the same permissive `.*?` pattern (the existing per-character `frozenset` membership check after the match already handles `$` correctly). Verified directly: the fixed regex matches `"What do you want to throw? [$ab or ?*]"`; a real native replay of seed 451's exact recorded prefix (steps 1-408) now completes the full open/letter/direction sequence cleanly (`"The dagger misses the gas spore."`) and resumes ordinary exploration immediately, zero oscillation. A new permanent regression covers a gold-offered throw prompt. Full suite (635 tests) and Ruff passed again.
+
+Per the same preregistered protocol, fresh 451-480 is spoiled and never reused; a third range **481-510** is reserved before either twice-corrected arm.
+
+### Twice-corrected frozen SHA-256
+
+- hazard.py: `71ca98c0596c6e9f7105d4e434b520dcc7257251932c8dc0b1f952638eeeb0e0`
+- test_skills.py: `8a3db6c481c1aa508bc94cf187c4f8948df52638e754832a003c7902930222a4`
+- all other files: unchanged from the SHA-256 lists above.
