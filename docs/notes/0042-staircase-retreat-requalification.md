@@ -111,6 +111,18 @@ reused).
 
 Patch `/tmp/fix3-candidate-v3.patch` is the result of all three fixes.
 
+### Complete consumed-sample accounting
+
+| Note / range | Fate and reason |
+| --- | --- |
+| 0041 / 61-90 | Rejected original candidate; HEAD completed 30/30 episodes, candidate completed 19/30 before tooling cut it short. All seeds reserved for this real-engine sample remain consumed. |
+| 0042 / 91-120 | Spoiled first attempt: both arms cut short by the default tooling 300-second timeout. Not resumed or counted for the decision. |
+| 0042 / 121-150 | Completed first superseded candidate (hostile-adjacency scoping fix only); revealed gas-spore-unaware search-spot choices. Superseded after changing that rule, not because failures were replaced. |
+| 0042 / 151-180 | Completed second superseded candidate (search-spot avoidance added); revealed unsafe model fallback, including seed 153. The ledger commit calls this the “third superseded-candidate seed range”, counting the spoiled 91-120 attempt as well. Superseded after changing fallback selection. |
+| 0042 / 181-210 | Completed final candidate with fallback substitution; rejected on objective regression and two remaining gate rejections. |
+
+Every range remains consumed; none is reused as a new frozen sample.
+
 ## Final results (patch v3, seeds 181-210, dev set unified-d5-regression-v2)
 
 ### Dev set (67 seeds)
@@ -149,14 +161,14 @@ Reports: `/tmp/head-fresh-181/reports/fresh-181-210-head-development-20261004T07
 |---|---|---|---|
 | 181 | death | truncated | Same non-success class; oscillates near a hazard to the step cap instead of dying. |
 | 186 | objective_complete | truncated (2,541 model decisions) | Fallback-substitution loop: repeatedly offered and accepting a different "safe" action without making progress. |
-| 190 | objective_complete | **stopped, gate-rejected** (`movement must not enter or remain in a displayed gas spore's blast radius`) | **New, unfixed defect.** A deterministic skill's own route-planned *move* (not the model-fallback path my three fixes covers) steps into gas-spore blast radius; `route_tree` pathfinding has no gas-spore awareness for ordinary travel, only `ExploreLevelSkill`'s search-spot choice and the fallback path do. |
+| 190 | objective_complete | **stopped, gate-rejected** (`movement must not enter or remain in a displayed gas spore's blast radius`) | Rejection action source is **untraced**. [INFERENCE] A deterministic route-planned move may have collided with the new safety gate; the stored error alone does not establish its skill or source. |
 | 192 | objective_complete | truncated | Same fallback-loop pattern as 186. |
-| 202 | objective_complete | death | Unrelated: candidate's RecoverySkill disengagement chooses differently and dies instead of completing; not diagnosed further given the decision below. |
-| 204 | objective_complete | truncated (1,429 model decisions) | Same fallback-loop pattern as 186. |
+| 202 | objective_complete | death | **Undiagnosed new death.** No trace-supported causal classification was completed; attributing it to unrelated divergence or disengagement is not justified. |
+| 204 | death | truncated (1,429 model decisions) | Both arms fail the objective. [INFERENCE] High fallback counts suggest the same non-progress pattern as 186; HEAD did not complete this seed. |
 | 205 | objective_complete | truncated (725 model decisions) | Same fallback-loop pattern as 186. |
 | 206 | death | objective_complete | One genuine improvement: the goal-stair-retention behavior from the original fix-3 brief working as intended. |
 | 209 | truncated | truncated | Same non-success class both arms. |
-| 210 | objective_complete | **stopped, gate-rejected** (`search/wait must not idle beside a gas spore`) | **Unfixed defect, same class as the dev-set one**, but here the rejected selection was not traced before the decision below; likely another deterministic-skill (not fallback) WAIT/SEARCH choice outside `RecoverySkill`'s own path. |
+| 210 | objective_complete | **stopped, gate-rejected** (`search/wait must not idle beside a gas spore`) | Rejection action source is **untraced**. [INFERENCE] Another deterministic WAIT/SEARCH choice is possible, but neither a deterministic source nor exclusion of model fallback was established. |
 
 ## Decision: REJECT
 
@@ -171,11 +183,11 @@ set:
 - Dev-set objectives (50/67) are lower than HEAD's qualified 52/67.
 - Fresh-sample objectives (18/30) are substantially lower than HEAD's
   23/30.
-- Two fresh-sample gate rejections remain (seeds 190, 210), from a
-  **fourth** defect class this iteration did not reach: ordinary
-  route-planned movement and non-Recovery, non-fallback WAIT/SEARCH
-  selections have no gas-spore awareness, only the two paths (search-spot
-  choice, model fallback) this session happened to fix.
+- Two fresh-sample gate rejections remain (seeds 190, 210). Their error
+  messages establish movement and search/wait gas-spore safety collisions,
+  respectively, but the rejected selections' sources were not traced.
+  A fourth independent caller defect is [INFERENCE], not an established
+  diagnosis.
 - The fallback-substitution fix itself introduces a new failure mode —
   unproductive oscillation loops burning the full step budget — that is
   not an integrity violation but is a real behavioral regression visible
