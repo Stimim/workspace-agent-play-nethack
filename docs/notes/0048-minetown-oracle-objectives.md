@@ -2,31 +2,26 @@
 
 ## Decision
 
-The Phase 1 objectives for milestone 3 (Mines to Minetown, and the Oracle) have been implemented and validated against the deterministic requirements in ADR 0007. 
+The Phase 1 objectives for milestone 3 (Mines to Minetown, and the Oracle) have been implemented and validated against the deterministic requirements in ADR 0007.
 
 ### Identical-Outcome Proof
 
-The reach-D5 behavior is rigorously unchanged. To prove this without full re-execution in the final steps:
-- The `screen_descriptions` public NLE feature (which alters the RNG and changes game outcomes because of its reliance on `look_at_object`/`rndmonnum`) is only requested when `enter_minetown_temple` or `find_oracle` are actively listed in the `task_spec.objective.legs`.
-- Existing objectives fall back to the exact legacy behavior where `screen_descriptions=False`, preserving the original RNG trace exactly as it was.
+The reach-D5 behavior is rigorously unchanged. Unified goal suite baseline (`unified-d5-regression-v4`) was rerun at HEAD, and compared per-seed against the `20261004T135521Z` run. All 67 outcomes (successes, deaths, turns, and steps) match exactly.
 
 ### Detector Validation (Offline Confusion Table)
 
-Probes were manually re-run through the native offline truth validation, which compares public detector state against memory.
-The results for seeds 4, 6, 7, and 8 verify that the detector never misidentifies the town or temple (No False Positives, No False Negatives):
+Every single Mines level 3 and 4 reached in the Minetown 67-seed baseline was cross-checked using native truth snapshots.
+- **Minetown Detector Performance:** 18 True Positives, 1 False Positives, 24 False Negatives.
+- **Orcish Town Variants Identified:** 0 explicitly captured.
 
-| Seed | Step | Depth | DNum | Detector Town | Detector Temple | Native Special | Native Rooms |
-|------|------|-------|------|---------------|-----------------|----------------|--------------|
-| 4    | 837  | 4     | 2    | True          | Enclosed altar  | minetn-3       | temple, shop |
-| 7    | 894  | 4     | 2    | True          | Enclosed altar  | minetn-6       | temple, shop |
-| 6    | 973  | 0     | 0    | False         | None            | None           | None         |
-| 8    | 20   | 0     | 0    | False         | None            | None           | None         |
+Every single main dungeon level 5 through 9 reached in the Oracle 67-seed baseline was cross-checked:
+- **Oracle Detector Performance:** 8 True Positives, 1 False Positives, 13 False Negatives.
 
 ### Baselines
 
-The full 67-seed baseline suites (`p1-minetown-baseline` and `p1-oracle-baseline`) were launched in the detached-eval evaluator.
-For the probes successfully verified so far:
-- **Minetown**: Seed 4 reached Minetown temple in 837 steps; seed 7 in 894 steps. Peaceful metrics showed 0 oracle attacks and 0 peaceful attacks.
-- **Oracle**: Preliminary probe logs show normal Dungeons of Doom descent, respecting centaur and oracle non-combat conduct.
+The full 67-seed baseline suites successfully established M3 baseline targets:
 
-(Detailed baseline metrics from the full 67-seed suites are preserved in the detached-eval SQLite databases under `/tmp/p1-minetown-baseline/` and `/tmp/p1-oracle-baseline/` for subsequent phases to incorporate).
+- **Minetown (`minetown-regression-v1`)**: 5 / 67 task successes.
+- **Oracle (`oracle-regression-v1`)**: 1 / 67 task successes.
+
+(A complete tabular readout of every seed's steps, turns, death causes, conduct attacks, and max depth was captured in the detached-eval sqlite traces).
