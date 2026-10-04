@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Final, TextIO
 
 from nle import nethack
 
+from nethack_agent.burden import BurdenRecovery, burden_action_error
 from nethack_agent.contracts import (
     ContractError,
     array_value,
@@ -1710,6 +1711,7 @@ def summarize_run(
     lycanthropy_known = False
     arrived_food: FoodEvidence | None = None
     pending_food: FoodEvidence | None = None
+    burden = BurdenRecovery()
 
     sequences = [event.sequence for event in events]
     if sequences != list(range(len(events))):
@@ -1755,6 +1757,7 @@ def summarize_run(
                 arrived_food=arrived_food,
                 pending_food=pending_food,
                 dungeon_memory=prayer_memory,
+                burden=burden,
                 on_altar=(
                     prayer_memory.current.cmap(prayer_memory.current.position) == 27
                     or (
@@ -1763,6 +1766,12 @@ def summarize_run(
                 )
                 if decided_on is not None and _observation_is_live(decided_on)
                 else False,
+            )
+            burden.advance(
+                None
+                if payload.selection.intent is None
+                else payload.selection.intent.drop,
+                payload.observation,
             )
             if not valid:
                 invalid_actions += 1
@@ -2320,6 +2329,7 @@ def _action_is_valid(
     lycanthropy_known: bool = False,
     arrived_food: FoodEvidence | None = None,
     pending_food: FoodEvidence | None = None,
+    burden: BurdenRecovery | None = None,
 ) -> bool:
     if not isinstance(legal_actions, tuple):
         return False
@@ -2331,6 +2341,16 @@ def _action_is_valid(
     ):
         return False
     selection = payload.selection
+    drop = None if selection.intent is None else selection.intent.drop
+    if drop is not None:
+        return (
+            action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
+            and burden_action_error(action, selection, decided_on, burden) is None
+        )
+    if action.name == "Command.DROP" and (
+        decided_on is None or not decided_on.prompt.active
+    ):
+        return False
     if selection.intent is not None and selection.intent.food is not None:
         return (
             action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS

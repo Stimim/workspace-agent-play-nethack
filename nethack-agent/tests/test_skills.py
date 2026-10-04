@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 from nle import nethack
 
+from nethack_agent.burden import BurdenRecovery, drop_candidate
 from nethack_agent.coordinator import AgentCoordinator
 from nethack_agent.corpse import CorpseKill
 from nethack_agent.decision import (
@@ -21,6 +22,7 @@ from nethack_agent.decision import (
     StuckReason,
 )
 from nethack_agent.environment import LegalAction, NleEnvironment, ScenarioConfig
+from nethack_agent.foraging import FoodSkill
 from nethack_agent.model import ScriptedDevelopmentModel
 from nethack_agent.navigation import (
     GOLD_GLYPH,
@@ -2123,3 +2125,263 @@ def test_committed_search_is_not_interrupted_by_a_monster_blocked_frontier(
     next_action = ExploreLevelSkill().select_action(memory, actions).action
     assert next_action is not None
     assert next_action.intent.destination.kind is DestinationKind.FRONTIER
+
+
+@pytest.mark.parametrize(
+    ("encumbrance", "message", "must_drop"),
+    (
+        (1, "You can't do that while carrying so much stuff.", False),
+        (2, "You can't do that while carrying so much stuff.", True),
+        (5, "You can't do that while carrying so much stuff.", True),
+        (5, "You see here a food ration.", False),
+    ),
+)
+def test_burden_recovery_requires_public_load_refusal(
+    template: ProjectedObservation,
+    encumbrance: int,
+    message: str,
+    must_drop: bool,
+) -> None:
+    observation = replace(
+        template,
+        player=replace(template.player, encumbrance=encumbrance),
+        message=message,
+        inventory=(_ration(template, description="5 uncursed food rations"),),
+    )
+    proposed = BurdenRecovery().select_action(observation, _HUNGER_BY_COMMAND)
+    if must_drop:
+        assert proposed.intent.drop.quantity == 4
+        assert proposed.action_index == _HUNGER_BY_NAME["Command.DROP"].index
+    else:
+        assert proposed is None
+
+
+def test_burden_recovery_protects_ration_weapon_and_worn_armor(
+    template: ProjectedObservation,
+) -> None:
+    weapon = replace(
+        template.inventory[0],
+        letter="a",
+        object_class=2,
+        description="a +1 long sword (weapon in hand)",
+    )
+    armor = replace(
+        template.inventory[0],
+        letter="c",
+        object_class=3,
+        description="an uncursed +0 small shield (being worn)",
+    )
+    reserve = _ration(template)
+    spare = _ration(template, letter="e", description="4 food rations")
+    observation = replace(template, inventory=(weapon, armor, reserve, spare))
+    assert drop_candidate(observation, set()) == (spare, 4)
+    assert (
+        drop_candidate(replace(observation, inventory=(weapon, armor, reserve)), set())
+        is None
+    )
+    unwielded = replace(
+        weapon, description="a +1 long sword (alternate weapon; not wielded)"
+    )
+    assert (
+        drop_candidate(
+            replace(observation, inventory=(unwielded, armor, reserve)), set()
+        )
+        is None
+    )
+    apples = replace(reserve, letter="f", description="2 apples")
+    assert drop_candidate(
+        replace(observation, inventory=(weapon, armor, reserve, apples)), set()
+    ) == (apples, 2)
+
+
+def test_burden_recovery_partial_stack_uses_only_offered_current_item(
+    template: ProjectedObservation,
+) -> None:
+    recovery = BurdenRecovery()
+    before = replace(
+        template,
+        player=replace(template.player, encumbrance=5),
+        message="You can't do that while carrying so much stuff.",
+        inventory=(_ration(template, description="5 food rations"),),
+    )
+    initial = recovery.expected(before)
+    prompt = replace(
+        before,
+        message="What do you want to drop? [d or ?*]",
+        prompt=PromptState(True, False, False),
+    )
+    recovery.advance(initial, prompt)
+    count = recovery.expected(prompt)
+    assert (count.command, count.quantity) == (ord("4"), 4)
+    recovery.advance(count, prompt)
+    item = recovery.expected(prompt)
+    assert (item.command, item.letter) == (ord("d"), "d")
+    assert (
+        recovery.expected(
+            replace(prompt, message="What do you want to drop? [e or ?*]")
+        )
+        is None
+    )
+    assert (
+        recovery.expected(
+            replace(
+                prompt, inventory=(_ration(template, description="4 food rations"),)
+            )
+        )
+        is None
+    )
+
+
+def test_dropped_surplus_is_not_picked_up_into_another_drop_loop(
+    template: ProjectedObservation,
+) -> None:
+    from nethack_agent.tasks import ActionProfile
+
+    legal = tuple(
+        LegalAction(i, int(a), f"{type(a).__name__}.{a.name}")
+        for i, a in enumerate(ActionProfile.NLE_SURVIVAL_ACTIONS.actions)
+    )
+    by_name = {a.name: a for a in legal}
+    by_command = {a.command: a for a in legal}
+    before = replace(
+        sketch(template, ("-----", "|.@.|", "-----")),
+        player=replace(template.player, x=2, y=1, encumbrance=5, hunger=1),
+        message="You can't do that while carrying so much stuff.",
+        inventory=(
+            _ration(template),
+            _ration(template, letter="e", description="4 food rations"),
+        ),
+    )
+    recovery = BurdenRecovery()
+    initial = recovery.expected(before)
+    prompt = replace(
+        before,
+        message="What do you want to drop? [de or ?*]",
+        prompt=PromptState(True, False, False),
+    )
+    recovery.advance(initial, prompt)
+    answer = recovery.expected(prompt)
+    assert (answer.command, answer.quantity) == (ord("e"), 4)
+    relieved = replace(
+        before,
+        inventory=(_ration(template),),
+        player=replace(before.player, encumbrance=1),
+        message="You drop 4 food rations.",
+    )
+    recovery.advance(answer, relieved)
+    assert recovery.select_action(relieved, by_command) is None
+
+    floor_food = replace(relieved, message="You see here 4 food rations.")
+    memory = LevelMemory()
+    memory.observe(floor_food)
+    assert FoodSkill.select_action(floor_food, memory, by_name, by_command) is None
+    unburdened = replace(floor_food, player=replace(floor_food.player, encumbrance=0))
+    assert (
+        FoodSkill.select_action(
+            unburdened,
+            memory,
+            by_name,
+            by_command,
+            excluded_cells=recovery.excluded_food_cells(unburdened),
+        )
+        is None
+    )
+    assert recovery.select_action(unburdened, by_command) is None
+    empty = replace(unburdened, inventory=())
+    retrieved = FoodSkill.select_action(
+        empty,
+        memory,
+        by_name,
+        by_command,
+        excluded_cells=recovery.excluded_food_cells(empty),
+    )
+    assert retrieved.action_index == by_name["Command.PICKUP"].index
+
+
+@pytest.mark.parametrize(
+    ("command", "quantity", "offer", "allowed"),
+    (
+        (ord("4"), 4, "d", True),
+        (ord("5"), 4, "d", False),
+        (ord("4"), 5, "d", False),
+        (ord("4"), 4, "e", False),
+    ),
+)
+def test_burden_prompt_runtime_gate_and_audit_reject_wrong_item_or_count(
+    template: ProjectedObservation,
+    command: int,
+    quantity: int,
+    offer: str,
+    allowed: bool,
+) -> None:
+    from nethack_agent.coordinator import ActionGate, ActionGateError
+    from nethack_agent.decision import ActionSelection, SkillSelectionSource
+    from nethack_agent.evaluation import _action_is_valid
+    from nethack_agent.events import StepPayload
+    from nethack_agent.tasks import ActionProfile
+    from nethack_agent.traversal import STAND_ON_DOWNSTAIRS
+
+    profile = ActionProfile.NLE_SURVIVAL_ACTIONS
+    legal = tuple(
+        LegalAction(i, int(a), f"{type(a).__name__}.{a.name}")
+        for i, a in enumerate(profile.actions)
+    )
+    action = next(a for a in legal if a.command == command)
+    refusal = replace(
+        template,
+        player=replace(template.player, encumbrance=5),
+        message="You can't do that while carrying so much stuff.",
+        inventory=(_ration(template, description="5 food rations"),),
+    )
+    before = replace(
+        refusal,
+        step_index=1,
+        message=f"What do you want to drop? [{offer} or ?*]",
+        prompt=PromptState(True, False, False),
+    )
+    recovery = BurdenRecovery()
+    initial = recovery.expected(refusal)
+    recovery.advance(initial, before)
+    evidence = replace(initial, command=command, quantity=quantity)
+    selection = ActionSelection(
+        ActionSelectionSource.DETERMINISTIC_PROMPT,
+        STAND_ON_DOWNSTAIRS,
+        Skill.BURDEN,
+        SkillSelectionSource.ARBITER,
+        None,
+        action.index,
+        "Drop only the approved surplus count.",
+        ActionIntent(None, None, None, drop=evidence),
+    )
+    payload = StepPayload(
+        selection,
+        None,
+        None,
+        None,
+        None,
+        action,
+        0.0,
+        False,
+        False,
+        0,
+        False,
+        None,
+        replace(before, step_index=2),
+    )
+    assert (
+        _action_is_valid(payload, legal, before, True, profile, burden=recovery)
+        is allowed
+    )
+    gate = ActionGate(legal, profile)
+    if allowed:
+        assert (
+            gate.resolve(
+                action.index, selection=selection, before=before, burden=recovery
+            )
+            == action
+        )
+    else:
+        with pytest.raises(ActionGateError):
+            gate.resolve(
+                action.index, selection=selection, before=before, burden=recovery
+            )

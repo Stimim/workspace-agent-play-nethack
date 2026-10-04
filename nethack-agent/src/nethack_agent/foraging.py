@@ -212,6 +212,7 @@ class FoodSkill:
         *,
         arrived: FoodEvidence | None = None,
         pending: FoodEvidence | None = None,
+        excluded_cells: frozenset[tuple[int, int]] = frozenset(),
     ) -> SkillAction | None:
         if pending is not None:
             command = food_prompt_command(observation, pending, memory)
@@ -229,6 +230,8 @@ class FoodSkill:
         candidates = []
         tree = route_tree(memory)
         for point in memory.objects | {memory.position}:
+            if point in excluded_cells:
+                continue
             evidence = eligible_food(
                 MapCell(*point), observation, memory, arrived=arrived
             )

@@ -83,6 +83,7 @@ class Skill(Enum):
     CORPSE = "corpse"
     HUNGER = "hunger"
     PRAYER = "prayer"
+    BURDEN = "burden"
     # Route to visible gold on NetHackGold-v0; deterministic, never offered to
     # the model.
     GOLD_NAVIGATION = "gold_navigation"
@@ -876,6 +877,40 @@ class FoodEvidence:
 
 
 @dataclass(frozen=True, slots=True)
+class DropEvidence:
+    letter: str
+    description: str
+    quantity: int
+    refusal_step: int
+    command: int
+
+    def __post_init__(self) -> None:
+        string_value(self.letter, "drop letter", minimum=1, maximum=1)
+        string_value(self.description, "drop description", minimum=1, maximum=200)
+        integer_value(self.quantity, "drop quantity", minimum=1)
+        integer_value(self.refusal_step, "drop refusal step", minimum=0)
+        integer_value(self.command, "drop command", minimum=0, maximum=255)
+
+    def to_json(self) -> dict[str, object]:
+        return {
+            "letter": self.letter,
+            "description": self.description,
+            "quantity": self.quantity,
+            "refusal_step": self.refusal_step,
+            "command": self.command,
+        }
+
+    @classmethod
+    def from_json(cls, value: object) -> Self:
+        payload = object_value(
+            value,
+            "drop evidence",
+            {"letter", "description", "quantity", "refusal_step", "command"},
+        )
+        return cls(**payload)
+
+
+@dataclass(frozen=True, slots=True)
 class ActionIntent:
     """The route, attack target, or prayer evidence for one deterministic action.
 
@@ -901,6 +936,7 @@ class ActionIntent:
     prayer: PrayerEvidence | None = None
     corpse: CorpseEvidence | None = None
     food: FoodEvidence | None = None
+    drop: DropEvidence | None = None
 
     def __post_init__(self) -> None:
         if self.destination is not None and not isinstance(
@@ -919,12 +955,27 @@ class ActionIntent:
             raise TypeError("intent corpse must be a CorpseEvidence or None")
         if self.food is not None and not isinstance(self.food, FoodEvidence):
             raise TypeError("intent food must be FoodEvidence or None")
+        if self.drop is not None and not isinstance(self.drop, DropEvidence):
+            raise TypeError("drop must be DropEvidence")
+        if self.drop is not None and any(
+            value is not None
+            for value in (
+                self.destination,
+                self.attack_target,
+                self.path,
+                self.prayer,
+                self.corpse,
+                self.food,
+            )
+        ):
+            raise ContractError("drop intent cannot also select another action")
         if (
             self.destination is None
             and self.attack_target is None
             and self.prayer is None
             and self.corpse is None
             and self.food is None
+            and self.drop is None
         ):
             raise ContractError(
                 "intent requires a destination, attack target, prayer, "
@@ -965,6 +1016,8 @@ class ActionIntent:
             payload["corpse"] = self.corpse.to_json()
         if self.food is not None:
             payload["food"] = self.food.to_json()
+        if self.drop is not None:
+            payload["drop"] = self.drop.to_json()
         return payload
 
     @classmethod
@@ -976,7 +1029,7 @@ class ActionIntent:
             value,
             "intent",
             {"destination", "attack_target"},
-            optional={"path", "level", "prayer", "corpse", "food"},
+            optional={"path", "level", "prayer", "corpse", "food", "drop"},
         )
         destination = payload["destination"]
         attack_target = payload["attack_target"]
@@ -985,6 +1038,7 @@ class ActionIntent:
         prayer = payload.get("prayer")
         corpse = payload.get("corpse")
         food = payload.get("food")
+        drop = payload.get("drop")
         if path is not None:
             path = array_value(path, "intent path")
             if len(path) > MAX_INTENT_PATH_LENGTH:
@@ -1011,6 +1065,7 @@ class ActionIntent:
             prayer=None if prayer is None else PrayerEvidence.from_json(prayer),
             corpse=None if corpse is None else CorpseEvidence.from_json(corpse),
             food=None if food is None else FoodEvidence.from_json(food),
+            drop=None if drop is None else DropEvidence.from_json(drop),
         )
 
 
@@ -1091,7 +1146,8 @@ class ActionSelection:
                 raise TypeError("intent must be an ActionIntent or None")
             if self.source is not ActionSelectionSource.DETERMINISTIC_SKILL and not (
                 self.source is ActionSelectionSource.DETERMINISTIC_PROMPT
-                and self.skill in (Skill.PRAYER, Skill.CORPSE, Skill.HUNGER)
+                and self.skill
+                in (Skill.PRAYER, Skill.CORPSE, Skill.HUNGER, Skill.BURDEN)
                 and self.intent.destination is None
                 and self.intent.attack_target is None
                 and self.intent.path is None
@@ -1099,6 +1155,7 @@ class ActionSelection:
                     (self.skill is Skill.PRAYER and self.intent.prayer is not None)
                     or (self.skill is Skill.CORPSE and self.intent.corpse is not None)
                     or (self.skill is Skill.HUNGER and self.intent.food is not None)
+                    or (self.skill is Skill.BURDEN and self.intent.drop is not None)
                 )
             ):
                 raise ContractError(
@@ -1128,6 +1185,16 @@ class ActionSelection:
             )
         ):
             raise ContractError("food skill needs matching food evidence and cell")
+        if (
+            self.intent is not None
+            and self.intent.drop is not None
+            and self.skill is not Skill.BURDEN
+        ):
+            raise ContractError("only the burden skill carries drop evidence")
+        if self.skill is Skill.BURDEN and (
+            self.intent is None or self.intent.drop is None
+        ):
+            raise ContractError("burden skill requires drop evidence")
         corpse_route = (
             self.intent is not None
             and self.intent.destination is not None
@@ -1328,6 +1395,16 @@ def survival_action_selection_error(
     action_name: str, selection: ActionSelection
 ) -> str | None:
     """Why a restricted action is invalid from its recorded selection fields."""
+    if selection.intent is not None and selection.intent.drop is not None:
+        if selection.skill is Skill.BURDEN and (
+            selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
+            or (
+                selection.source is ActionSelectionSource.DETERMINISTIC_SKILL
+                and action_name == "Command.DROP"
+            )
+        ):
+            return None
+        return "drop requires deterministic burden recovery"
     if (
         selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
         and selection.skill is Skill.HUNGER
