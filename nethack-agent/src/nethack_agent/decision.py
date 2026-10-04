@@ -1454,6 +1454,19 @@ def confirmation_prompt_kind(
     return None
 
 
+def major_hit_point_trouble(hit_points: int, maximum: int, level: int) -> bool:
+    """NetHack 3.6.7 pray.c critically_low_hp, including its effective HP cap."""
+    return (
+        maximum > 0
+        and hit_points > 0
+        and level > 0
+        and (
+            hit_points <= 5
+            or hit_points <= min(maximum, 15 * level) // (5 + (level + 2) // 8)
+        )
+    )
+
+
 def prayer_action_error(
     action_name: str,
     selection: ActionSelection,
@@ -1466,6 +1479,9 @@ def prayer_action_error(
     prior_prayers: int,
     on_altar: bool,
     last_prayer_turn: int | None = None,
+    hit_points: int = 0,
+    max_hit_points: int = 0,
+    experience_level: int = 0,
 ) -> str | None:
     """The same prayer authorization predicate used at execution and audit."""
     if action_name != PRAY_ACTION_NAME:
@@ -1491,8 +1507,17 @@ def prayer_action_error(
         or (prior_prayers > 0) != (last_prayer_turn is not None)
     ):
         return "PRAY requires a matching deterministic prayer permit and evidence"
-    if hunger < 3 or turn < safe_turn or prompt_active or ration_available or on_altar:
-        return "PRAY requires Weak+ hunger, safe turn, and no prompt, ration, or altar"
+    hp_trouble = major_hit_point_trouble(hit_points, max_hit_points, experience_level)
+    if (
+        (not hp_trouble and (hunger < 3 or ration_available))
+        or turn < safe_turn
+        or prompt_active
+        or on_altar
+    ):
+        return (
+            "PRAY requires major HP trouble or Weak+ hunger, safe turn, "
+            "and no prompt or altar"
+        )
     return None
 
 

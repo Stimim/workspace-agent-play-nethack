@@ -6,7 +6,11 @@ Build a local, autonomous NetHack agent whose long-term success criterion is asc
 
 ## Current status
 
-The deterministic NLE adapter, immutable observation projector, typed traversal planner, per-level dungeon memory, deterministic staircase-navigation, exploration, gold-navigation, bounded hunger, prayer, and safe-corpse skills, contextual action gate, structured Ollama decision model, reviewed local knowledge, typed SQLite event log, loopback control service and browser UI, scenario orchestrator, network-boundary verifier, exhaustion-marker replay, and policy-pinned evaluation harness with typed metric thresholds are implemented. Milestone 1, traversal-policy, and survival-policy evidence remain accepted or recorded as they were; `POLICY_VERSION` remains `hierarchical-survival-exit-v1`.
+The deterministic NLE adapter, immutable observation projector, typed traversal planner, per-level dungeon memory, deterministic staircase-navigation, exploration, gold-navigation, bounded hunger, prayer, and safe-corpse skills, contextual action gate, structured Ollama decision model, reviewed local knowledge, typed SQLite event log, loopback control service and browser UI, scenario orchestrator, network-boundary verifier, exhaustion-marker replay, and policy-pinned evaluation harness with typed metric thresholds are implemented. Milestone 1, traversal-policy, and survival-policy evidence remain accepted or recorded as they were.
+
+The active policy is `hierarchical-survival-hp-prayer-v1`. Low-HP prayer alone
+qualified under note 0043; `unified-d5-regression-v2` pins the new policy
+while all old suite definitions and reports stay unchanged.
 
 ## System context
 ```mermaid
@@ -195,9 +199,10 @@ arbiter owns execution; the hunger, prayer, corpse, and gold-navigation skills
 are never model choices. Per step, in order:
 
 1. on `nle-survival-actions`, finish a pending prayer, ration, or corpse prompt;
-   otherwise defend against a safely attackable adjacent hostile;
-2. `PrayerSkill` considers PRAY for Weak-or-worse hunger with no known ration,
-   active prompt, or observed altar, after its conservative timeout bound;
+2. `PrayerSkill` considers timeout-safe PRAY for NetHack 3.6.7 major HP
+   trouble before melee or food, otherwise retains Weak-or-worse hunger
+   prayer with no known ration. Active prompts and observed altars exclude
+   new prayer; safely attackable adjacent hostiles preempt hunger-only prayer;
 3. `HungerSkill` proposes `EAT` for the first exactly verified inventory food
    ration, cram ration, K-ration, C-ration, lembas wafer, or reviewed
    fruit/vegetable at NLE hunger value 2 (Hungry) or worse, including an
@@ -273,8 +278,8 @@ Mines entrance behind a secret door can be missed; Sokoban's dungeon number is
 inferred from `dungeon.def` order and has not been reached; and ladders and
 portals are not stairs. Survival policy is intentionally narrow: it has no
 retreat, rest, weapon, arbitrary floor-food, general inventory, or speculative
-navigation policy; only guarded Weak prayer and specifically verified fresh
-corpses extend the known-ration policy.
+navigation policy; guarded major-HP/Weak prayer and specifically verified
+fresh corpses extend the known-ration policy.
 
 Breadth-first routes follow NetHack 3.6.7 `test_move`: no diagonal move into or
 out of an open or closed door (doorless and broken doorways allow diagonals),
@@ -378,8 +383,9 @@ matching `FoodPermit`, verified against the live observation's identified
 comestible, non-shop cell, and unburdened encumbrance at gate time, the same
 predicate the evaluator replays. Prayer needs a `deterministic_skill`
 selection, a one-turn
-`PrayerPermit`, Weak-or-worse hunger, no verified ration, no active prompt, no
-observed altar under the hero, and a conservative timeout estimate: first
+`PrayerPermit`, major HP trouble or Weak-or-worse hunger without a verified
+ration, no active prompt, no observed altar under the hero, and a conservative
+timeout estimate: first
 PRAY from game turn 100 (initial 300 minus 100 = 200, below the major-trouble
 limit of 201); later prayers only after at least 1,229 further game turns.
 The latter bound covers at most 95% of post-prayer resets and leaves residual
@@ -430,8 +436,9 @@ map target is present:
   into it. Exploration fights before choosing a frontier, so its attacks carry
   no destination.
 
-Prayer uses a separate typed, map-free intent: the observed Weak-or-worse
-trigger, game turn, timeout bound, and count of literal `You kill` messages;
+Prayer uses a separate typed, map-free intent: observed hunger, game turn,
+timeout bound, and count of literal `You kill` messages. Major HP trouble is
+recomputed from public HP/maxHP/XL at execution and audit;
 its exact confirmation step records the first live outcome and message. A
 terminal/truncated confirmation has no reliable live outcome because NLE
 zeroes the bottom-line stats, so the outcome remains absent.

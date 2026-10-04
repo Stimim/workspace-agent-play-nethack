@@ -105,8 +105,11 @@ The evidence-gated combat and hunger changes in
 evaluator-replayed exhaustion markers, and typed metric thresholds, with the
 `staircase-v3` and `traversal-v2` regression suites. Policy
 `hierarchical-task-specialists-v1` added deterministic gold navigation on
-`NetHackGold-v0`. The current policy, `hierarchical-survival-exit-v1`, pins
-`survival-reviewed-v2` and its own milestone-2 suites. The checkout refuses
+`NetHackGold-v0`. The current policy, `hierarchical-survival-hp-prayer-v1`, pins
+`survival-reviewed-v2` and development runner `unified-d5-regression-v2`.
+Its low-HP prayer rule qualified on development 52→54/67 and fresh
+25→29/30, without retreat/rest/disengagement ([note 0043](docs/notes/0043-single-rule-prayer-qualification.md)).
+The checkout refuses
 older policy-pinned suites before creating an episode; they must not be
 relabeled or rerun as later-policy evidence. The task-progression policy's
 single real-model runs:

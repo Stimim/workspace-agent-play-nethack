@@ -77,6 +77,9 @@ Out of scope: Oracle navigation and the `gold-v1` and `oracle-v1` suites (milest
   causal protocol: retained development 52→52/67, deaths 8→8, fresh 17→20/30,
   deaths 7→6; all required losses are pre-existing failure classes reached
   after trajectory divergence ([0040](docs/notes/0040-causal-hidden-detour-qualification.md)).
+- [x] Qualify low-HP prayer alone using the actual 3.6.7 major-trouble predicate
+  and unchanged public timeout bounds: dev 52→54/67, deaths 8→5; fresh
+  25→29/30, deaths 4→0 ([0043](docs/notes/0043-single-rule-prayer-qualification.md)).
 - [ ] Qualify HP/threat-aware recovery: current 703 gas-spore explosion, 1379
   homunculus, 1377 involuntary vault relocation/guard handling, and low-HP melee.
 - [ ] Resolve remaining hidden-exit failures 5/701; preserve the retained

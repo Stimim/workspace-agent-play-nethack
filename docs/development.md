@@ -342,11 +342,11 @@ New evaluation follows [ADR 0006](decisions/0006-unified-goal-suites.md):
 place-reaching goals run on `NetHackScore-v0` with `nle-survival-actions` and
 the same survival-capable policy; Staircase success ends on the first
 downstairs, making it a sub-goal rather than a D5 environment. The
-development-only `evaluation/unified-d5-regression-v1.json` runs the 67 unique
+development-only `evaluation/unified-d5-regression-v2.json` runs the 67 unique
 historical/probe seeds as `reach_level(0,5)` with a 3,000-step cap. Its
 67/67 goal tracks remediation but does not block commits; historical suites
 and reports remain immutable. Run all cases with the scripted model using
-`uv run nethack-agent eval run --suite evaluation/unified-d5-regression-v1.json --data-dir /tmp/unified-d5-scripted --report-dir /tmp/unified-d5-scripted/reports --development-scripted-model`; omit `--development-scripted-model` and choose separate data/report directories to run with the configured real model. The next milestone's fresh-draw suite must declare its objective-success rate and explicit zero-starvation/zero-Weak-or-worse hunger-death gates before execution.
+`uv run nethack-agent eval run --suite evaluation/unified-d5-regression-v2.json --data-dir /tmp/unified-d5-scripted --report-dir /tmp/unified-d5-scripted/reports --development-scripted-model`; omit `--development-scripted-model` and choose separate data/report directories to run with the configured real model. Version 2 pins the qualified low-HP-prayer policy; v1 stays immutable. The next milestone's fresh-draw suite must declare its objective-success rate and explicit zero-starvation/zero-Weak-or-worse hunger-death gates before execution.
 
 Those committed suites continue to pin `staircase-reviewed-v3`; their
 historical reports and rendered bytes are unchanged. Other runs through
@@ -659,12 +659,15 @@ replays the gate predicates against the prior recorded observation, including
 the offered item-letter and ration evidence. See
 [note 0025](notes/0025-survival-action-profile-and-prayer-gate.md).
 
-### Deterministic Weak-hunger prayer (milestone 2, item 7)
+### Deterministic hunger and low-HP prayer
 
-On `nle-survival-actions`, a verified inventory food ration is eaten first;
-safe adjacent-hostile defense takes precedence over PRAY to avoid praying for
-three helpless turns under attack. With no safe ration, prompt, or observed
-altar, `PrayerSkill` may pray at Weak-or-worse hunger from game turn 100:
+On `nle-survival-actions`, timeout-safe major-HP prayer precedes food and
+adjacent-hostile melee. The 3.6.7 predicate is HP <= 5 or
+HP * divisor <= min(maxHP, 15 * XL), with divisor 5/6/7/8/9 at
+XL 1–5/6–13/14–21/22–29/30. No retreat/rest/disengagement is added.
+Otherwise ration and safely attackable adjacent-hostile defense retain
+precedence over hunger-only prayer. With no prompt or observed altar,
+`PrayerSkill` may pray from game turn 100:
 the nominal initial timeout is 300, and `300 - 100 = 200 < 201`, the major
 trouble threshold. Any repeat must wait at least 1,229 game turns after the
 previous PRAY, regardless of the previous result. That post-prayer bound
@@ -673,8 +676,10 @@ alignment record, or divine anger. No model prompt offers PRAY.
 
 The coordinator records prayer count and most recent PRAY turn, plus the count
 of literal observed `You kill` messages as an **ungated** proxy for hidden
-alignment record. A typed intent records the Weak trigger, prayer turn, bound,
-proxy count, and first live confirmation outcome. The outcome is `fixed` if
+alignment record. A typed intent records observed hunger, prayer turn, bound,
+proxy count, and first live confirmation outcome. HP eligibility is independently
+recomputed from the live public state at runtime and replay audit. The existing
+outcome classification describes hunger only, not HP recovery: `fixed` means
 hunger drops below Weak or the stomach-content message appears,
 `displeased/punished` for the observed anger or punishment messages, or
 `not fixed` when prayer finishes without fixing hunger. Terminal/truncated
@@ -693,10 +698,10 @@ Prayer-page explanation, and the residual uncertainty.
 ### Fresh-corpse eating (milestone 2, item 8)
 
 `nle-survival-actions` adds a deterministic corpse skill, not another NLE
-action. Priority is safe adjacent-hostile defense, eligible Weak prayer,
-verified inventory ration at Hungry or worse, then an eligible corpse before
-stairs or exploration. A known ration still preempts prayer under its existing
-no-ration safety guard. Never start eating while Satiated (NLE hunger 0);
+action. Priority is eligible major-HP prayer, safe adjacent-hostile defense,
+eligible Weak prayer, verified inventory ration at Hungry or worse, then an
+eligible corpse before stairs or exploration. A ration preempts hunger-only
+prayer, not major-HP prayer. Never start eating while Satiated (NLE hunger 0);
 Not Hungry or worse permits use of a fresh corpse before the first Hungry turn.
 
 Lichen, newt, sewer rat, giant rat, gecko, garter snake, hobbit, goblin,
@@ -846,7 +851,7 @@ seed ledger were committed.
 ### Current causal qualification protocol
 
 [Note 0040](notes/0040-causal-hidden-detour-qualification.md) supersedes
-individual success retention. Use `evaluation/unified-d5-regression-v1.json`
+individual success retention. Use `evaluation/unified-d5-regression-v2.json`
 for every new 67-seed development run; require objectives not lower and deaths
 not higher than HEAD. Diagnose every lost success/new death in that run and
 the frozen fresh 30-seed comparison from its traces. If the new behavior acts

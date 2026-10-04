@@ -306,6 +306,11 @@ class ActionGate:
                 permit=prayer_permit,
                 turn=None if before is None else before.player.turn,
                 hunger=None if before is None else before.player.hunger,
+                hit_points=0 if before is None else before.player.hit_points,
+                max_hit_points=0 if before is None else before.player.max_hit_points,
+                experience_level=0
+                if before is None
+                else before.player.experience_level,
                 prompt_active=False if before is None else before.prompt.active,
                 ration_available=False
                 if before is None
@@ -779,17 +784,6 @@ class AgentCoordinator:
                     skill_model_decision,
                     source=ActionSelectionSource.DETERMINISTIC_PROMPT,
                 )
-        if not before.prompt.active and self._corpse is not None:
-            defense = _attack_adjacent_hostile(memory, actions, None)
-            if defense is not None:
-                return self._skill_plan(
-                    defense,
-                    goal,
-                    Skill.EXPLORE_LEVEL,
-                    arbiter,
-                    None,
-                    skill_model_decision,
-                )
         if self._prayer is not None:
             pending = (
                 self._pending_prayer
@@ -820,6 +814,17 @@ class AgentCoordinator:
                     None,
                     skill_model_decision,
                     source=source,
+                )
+        if not before.prompt.active and self._corpse is not None:
+            defense = _attack_adjacent_hostile(memory, actions, None)
+            if defense is not None:
+                return self._skill_plan(
+                    defense,
+                    goal,
+                    Skill.EXPLORE_LEVEL,
+                    arbiter,
+                    None,
+                    skill_model_decision,
                 )
         if not before.prompt.active and self._hunger is not None:
             hunger = self._hunger.select_action(
@@ -1199,6 +1204,9 @@ class AgentCoordinator:
             permit=permit,
             turn=before.player.turn,
             hunger=before.player.hunger,
+            hit_points=before.player.hit_points,
+            max_hit_points=before.player.max_hit_points,
+            experience_level=before.player.experience_level,
             prompt_active=before.prompt.active,
             ration_available=bool(safe_inventory_food(before)),
             prior_prayers=self._prayer_count,

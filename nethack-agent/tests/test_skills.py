@@ -1320,6 +1320,51 @@ def test_unknown_food_is_not_eaten_and_floor_corpse_prompt_is_declined(
     assert declined.action_index == _HUNGER_BY_COMMAND[ord("n")].index
 
 
+@pytest.mark.parametrize(
+    ("hp", "maximum", "level", "turn", "expected"),
+    [
+        (5, 20, 1, 100, True),
+        (6, 20, 1, 100, False),
+        (6, 60, 2, 100, True),
+        (7, 60, 2, 100, False),
+        (5, 20, 1, 99, False),
+    ],
+)
+def test_low_hp_prayer_overrides_food_but_preserves_timeout(
+    template: ProjectedObservation,
+    hp: int,
+    maximum: int,
+    level: int,
+    turn: int,
+    expected: bool,
+) -> None:
+    base = sketch(template, ("|.@j.|",))
+    observation = replace(
+        base,
+        player=replace(
+            base.player,
+            hit_points=hp,
+            max_hit_points=maximum,
+            experience_level=level,
+            hunger=0,
+            turn=turn,
+        ),
+        inventory=(_ration(template),),
+    )
+    memory = LevelMemory()
+    memory.observe(observation)
+    pray = LegalAction(0, int(nethack.Command.PRAY), "Command.PRAY")
+    result = PrayerSkill().select_action(
+        observation,
+        memory,
+        {pray.name: pray},
+        {},
+        prior_prayers=0,
+        pending=None,
+    )
+    assert (result is not None and result.action_index == pray.index) is expected
+
+
 def test_prayer_skill_requires_weak_safe_turn_no_ration_or_altar(
     template: ProjectedObservation,
 ) -> None:

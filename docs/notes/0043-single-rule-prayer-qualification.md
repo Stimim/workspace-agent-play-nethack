@@ -40,3 +40,44 @@ ordinary hunger-defense was removed; its actual attack-target assertion remains.
 Full tests initially found five failures from pre-existing ledger notes
 exceeding the schema's 300-character limit; notes were shortened with full
 history retained in note 0042, and all five affected tests then passed.
+
+## Final qualification and decision: SHIP 3a
+
+Corrected candidate completed without cutoff. Dev baseline 52 objectives,
+8 deaths, 7 truncations; candidate 54 objectives, 5 deaths, 8 truncations.
+Fresh 241-270 baseline 25 objectives, 4 deaths, 1 truncation; candidate
+29 objectives, 0 deaths, 1 truncation. Fresh hunger deaths 1→0 by last-live
+hunger/starvation criterion. Both sets/arms have zero invalid actions,
+gate rejections and integrity failures. No lost success or new death occurs
+on either set: the required causal-loss table is empty.
+
+| Fresh seeds | Baseline | Candidate |
+| --- | --- | --- |
+| 241-242, 244-246, 248-249, 251-254, 256-266, 268-270 | objective_complete | objective_complete |
+| 243, 247, 250, 267 | death | objective_complete |
+| 255 | truncated | truncated |
+
+| Causal evidence | Public state immediately before first changed action |
+| --- | --- |
+| Fresh 243 | Step569, HP1/max25/XL2, turn575: candidate PRAY instead of baseline melee. |
+| Fresh 247 | Step777, HP3/max18/XL1, turn774: candidate PRAY instead of baseline melee. |
+| Fresh 250 | Step378, HP4/max18/XL1, turn377: candidate PRAY; eventual baseline death is absent in candidate. |
+| Fresh 267 | Step223, HP4/max18/XL1, turn221: candidate PRAY instead of baseline melee. |
+| Dev losses/new deaths | None; 900/1362 improve death→success, 1379 death→truncated. |
+
+Reports: `/tmp/3a-base-dev/reports/unified-d5-regression-v1-development-20261004T082653Z.json`,
+`/tmp/3a2-cand-dev/reports/unified-d5-regression-v1-development-20261004T085711Z.json`,
+`/tmp/3a2-base-fresh/reports/prayer-3a-fresh-241-270-development-20261004T085727Z.json`,
+`/tmp/3a2-cand-fresh/reports/prayer-3a-fresh-241-270-development-20261004T085719Z.json`.
+Comparison exports: `/tmp/3a2-{dev,fresh}-comparison.json`. All SQLite events
+and native ttyrecs stay with those data dirs. Full corrected tests: 614 pass,
+three dependency warnings. This is scripted development qualification,
+not real-model milestone acceptance.
+
+Ship the exact qualified decision/skill/coordinator/evaluator behavior.
+Metadata-only integration assigns policy `hierarchical-survival-hp-prayer-v1`
+and new immutable `unified-d5-regression-v2`; qualification reports retain
+their original old policy label and frozen file hashes, not relabeled evidence.
+Knowledge remains survival-reviewed-v2. Existing prayer outcome classification
+reports hunger, not HP healing; HP recovery evidence is the public trace.
+No retreat, rest, disengagement, hazard gate or generic retry is included.
