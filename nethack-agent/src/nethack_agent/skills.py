@@ -32,6 +32,7 @@ from nethack_agent.food import (
     known_inventory_food,
     safe_inventory_food,
 )
+from nethack_agent.health import critical_hit_points, major_hit_point_trouble
 from nethack_agent.navigation import (
     MOVE_ACTION_NAMES,
     ORTHOGONAL_DELTAS,
@@ -363,7 +364,7 @@ def safe_food_rations(
 
 
 class PrayerSkill:
-    """Guard Weak-or-worse prayer by initial and repeat timeout bounds."""
+    """Guard hunger or critical-HP prayer by the same public timeout bounds."""
 
     @staticmethod
     def select_action(
@@ -398,6 +399,12 @@ class PrayerSkill:
                 ActionIntent(None, None, None, prayer=pending),
             )
         turn = observation.player.turn
+        player = observation.player
+        hp_reason = critical_hit_points(
+            player.hit_points, player.max_hit_points
+        ) and major_hit_point_trouble(
+            player.hit_points, player.max_hit_points, player.experience_level
+        )
         safe_turn = (
             PRAYER_FIRST_SAFE_TURN
             if last_prayer_turn is None
@@ -407,10 +414,10 @@ class PrayerSkill:
         )
         if (
             observation.prompt.active
-            or observation.player.hunger < 3
+            or (observation.player.hunger < 3 and not hp_reason)
             or turn < safe_turn
             or (prior_prayers > 0) != (last_prayer_turn is not None)
-            or safe_inventory_food(observation)
+            or (safe_inventory_food(observation) and not hp_reason)
             or memory.cmap(origin) == 27  # NetHack 3.6.7 S_altar.
             or "altar" in observation.message.lower()
         ):
@@ -418,20 +425,27 @@ class PrayerSkill:
         pray = actions_by_name.get("Command.PRAY")
         if pray is None:
             return None
-        defense = _attack_adjacent_hostile(memory, actions_by_name, None)
-        if defense is not None:
-            return defense
+        if (
+            not hp_reason
+            and _attack_adjacent_hostile(memory, actions_by_name, None) is not None
+        ):
+            return None
         return SkillAction(
             pray.index,
-            "Pray at Weak or worse only after the conservative initial or "
-            "repeat prayer timeout bound.",
+            f"Pray for {'critical HP' if hp_reason else 'Weak+ hunger'} only "
+            "after the unchanged conservative initial or repeat timeout bound.",
             ActionRecord(ActionKind.OTHER, origin),
             ActionIntent(
                 None,
                 None,
                 None,
                 prayer=PrayerEvidence(
-                    observation.player.hunger, turn, safe_turn, kill_count
+                    observation.player.hunger,
+                    turn,
+                    safe_turn,
+                    kill_count,
+                    reason_hit_points=player.hit_points if hp_reason else None,
+                    reason_max_hit_points=player.max_hit_points if hp_reason else None,
                 ),
             ),
         )

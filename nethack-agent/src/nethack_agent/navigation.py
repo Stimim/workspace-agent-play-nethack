@@ -202,6 +202,7 @@ class ActionKind(Enum):
     KICK_DIRECTION = "kick_direction"
     SEARCH = "search"
     WAIT = "wait"
+    REST = "rest"
     # Use the staircase under the hero (`<` or `>`) to change level.
     TRAVERSE = "traverse"
     OTHER = "other"
@@ -300,6 +301,14 @@ class LevelMemory:
         self.position: Point = (0, 0)
         self.monsters: dict[Point, Monster] = {}
         self.hit_points = 0
+        self.max_hit_points = 0
+        self.experience_level = 0
+        self.turn = 0
+        self.conditions: tuple[str, ...] = ()
+        self.recovery_actions = 0
+        self.last_damage_turn: int | None = None
+        self.held_by: str | None = None
+        self.gas_spores: tuple[Point, ...] = ()
         self.hunger = 0
         self.boulders: frozenset[Point] = frozenset()
         self.objects: frozenset[Point] = frozenset()
@@ -340,8 +349,16 @@ class LevelMemory:
                 f"memory of level {self.level} cannot observe level {level}"
             )
         self.step_index = observation.step_index
+        old_position = self.position
+        if self.hit_points > player.hit_points:
+            self.last_damage_turn = player.turn
+            self.recovery_actions = 0
         self.position = (player.x, player.y)
         self.hit_points = player.hit_points
+        self.max_hit_points = player.max_hit_points
+        self.experience_level = player.experience_level
+        self.turn = player.turn
+        self.conditions = player.conditions
         self.hunger = player.hunger
         self._update_cells(observation)
         record, self._pending = self._pending, None
@@ -351,6 +368,13 @@ class LevelMemory:
         x, y = self.position
         self._correct_terrain_here(observation.message.lower())
         message = observation.message.lower()
+        if self.position != old_position or (
+            self.held_by is not None and f"you kill the {self.held_by}!" in message
+        ):
+            self.held_by = None
+        held = re.search(r"you cannot escape from the ([a-z][a-z -]*?)!", message)
+        if held is not None:
+            self.held_by = held.group(1)
         if "closed for inventory" in message:
             self.inventory_closed_doors.update(
                 p
@@ -443,6 +467,8 @@ class LevelMemory:
     def record(self, record: ActionRecord) -> None:
         """Remember the executed action so the next observation can explain it."""
         self._pending = record
+        if record.kind is ActionKind.REST:
+            self.recovery_actions += 1
         if record.kind in (ActionKind.MOVE, ActionKind.OPEN_DOOR, ActionKind.SEARCH):
             self.search_goal = record.search_spot
         if record.kind in (ActionKind.SEARCH, ActionKind.WAIT):
@@ -493,6 +519,9 @@ class LevelMemory:
         self.boulders = frozenset(boulders)
         self.objects = frozenset(objects)
         self.gold = frozenset(gold)
+        self.gas_spores = tuple(
+            point for point, monster in monsters.items() if monster.name == "gas spore"
+        )
 
     def _learn(self, record: ActionRecord, observation: ProjectedObservation) -> None:
         message = observation.message.lower()
@@ -599,6 +628,16 @@ class LevelMemory:
             and self.kind(point) is CellKind.CLOSED_DOOR
             and point not in self.locked_doors
         )
+
+    def gas_spore_distance(self, point: Point) -> int | None:
+        return min(
+            (max(abs(point[0] - x), abs(point[1] - y)) for x, y in self.gas_spores),
+            default=None,
+        )
+
+    def gas_spore_danger(self, point: Point) -> bool:
+        distance = self.gas_spore_distance(point)
+        return distance is not None and distance <= 1
 
     def stair_direction(self, point: Point) -> StairDirection | None:
         """The direction of the remembered staircase at `point`, if any."""
@@ -922,6 +961,8 @@ def route_tree(
             continue  # A closed door must open before anything beyond it.
         for candidate in memory.neighbors(current):
             if candidate in parents:
+                continue
+            if memory.gas_spore_danger(candidate):
                 continue
             if not (
                 memory.passable(candidate)

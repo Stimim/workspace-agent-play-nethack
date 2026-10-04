@@ -105,8 +105,10 @@ The evidence-gated combat and hunger changes in
 evaluator-replayed exhaustion markers, and typed metric thresholds, with the
 `staircase-v3` and `traversal-v2` regression suites. Policy
 `hierarchical-task-specialists-v1` added deterministic gold navigation on
-`NetHackGold-v0`. The current policy, `hierarchical-survival-exit-v1`, pins
-`survival-reviewed-v2` and its own milestone-2 suites. The checkout refuses
+`NetHackGold-v0`. The current policy is `hierarchical-survival-exit-v1`;
+its historical milestone-2 suites pin `survival-reviewed-v2`. Active unified
+development uses `unified-d5-regression-v2`, pinned to `survival-reviewed-v3`.
+The checkout refuses
 older policy-pinned suites before creating an episode; they must not be
 relabeled or rerun as later-policy evidence. The task-progression policy's
 single real-model runs:

@@ -28,7 +28,6 @@ from nethack_agent.decision import (
     ModelActionDecision,
     ModelSkillDecision,
     PrayerEvidence,
-    PrayerOutcome,
     PrayerPermit,
     PromptKind,
     PromptPermit,
@@ -40,7 +39,6 @@ from nethack_agent.decision import (
     StuckReason,
     TraversalPermit,
     classify_corpse_outcome,
-    classify_prayer_outcome,
     confirmation_answer_error,
     confirmation_prompt_kind,
     corpse_confirmation_error,
@@ -49,6 +47,7 @@ from nethack_agent.decision import (
     level_change_error,
     model_selectable_skills,
     observed_corpse_decline,
+    observed_prayer_outcome,
     prayer_action_error,
     prompt_response_error,
 )
@@ -69,6 +68,7 @@ from nethack_agent.navigation import (
 )
 from nethack_agent.observation import ObservationProjector, ProjectedObservation
 from nethack_agent.planner import ObjectivePlanner, leg_complete
+from nethack_agent.recovery import RecoverySkill, health_action_error
 from nethack_agent.replay import kick_action_error, routine_actions, stair_target
 from nethack_agent.skills import (
     CorpseSkill,
@@ -199,6 +199,19 @@ class ActionGate:
         if not 0 <= action_index < len(self._legal_actions):
             raise ActionGateError(f"action index {action_index} is not legal")
         action = self._legal_actions[action_index]
+        if (
+            selection is not None
+            and selection.skill is Skill.RECOVERY
+            and self._profile is not ActionProfile.NLE_SURVIVAL_ACTIONS
+        ):
+            raise ActionGateError("recovery requires the survival action profile")
+        if (
+            self._profile is ActionProfile.NLE_SURVIVAL_ACTIONS
+            and selection is not None
+        ):
+            error = health_action_error(action.name, selection, before, memory)
+            if error is not None:
+                raise ActionGateError(error)
         food = (
             None
             if selection is None or selection.intent is None
@@ -306,6 +319,11 @@ class ActionGate:
                 permit=prayer_permit,
                 turn=None if before is None else before.player.turn,
                 hunger=None if before is None else before.player.hunger,
+                hit_points=None if before is None else before.player.hit_points,
+                max_hit_points=None if before is None else before.player.max_hit_points,
+                experience_level=None
+                if before is None
+                else before.player.experience_level,
                 prompt_active=False if before is None else before.prompt.active,
                 ration_available=False
                 if before is None
@@ -452,6 +470,11 @@ class AgentCoordinator:
         )
         self._prayer = (
             PrayerSkill()
+            if task.action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
+            else None
+        )
+        self._recovery = (
+            RecoverySkill()
             if task.action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
             else None
         )
@@ -710,7 +733,7 @@ class AgentCoordinator:
         canceled: Callable[[], bool],
         leg: int,
     ) -> _Plan | None:
-        """Select prompt answers, then defense, prayer, ration, corpse, navigation."""
+        """Answer prompts, then handle HP prayer, recovery, defense and nutrition."""
         memory = self._dungeon.observe(before)
         goal = self._plan_goal(leg, memory)
         skill_model_decision: ModelSkillDecision | None = None
@@ -779,17 +802,6 @@ class AgentCoordinator:
                     skill_model_decision,
                     source=ActionSelectionSource.DETERMINISTIC_PROMPT,
                 )
-        if not before.prompt.active and self._corpse is not None:
-            defense = _attack_adjacent_hostile(memory, actions, None)
-            if defense is not None:
-                return self._skill_plan(
-                    defense,
-                    goal,
-                    Skill.EXPLORE_LEVEL,
-                    arbiter,
-                    None,
-                    skill_model_decision,
-                )
         if self._prayer is not None:
             pending = (
                 self._pending_prayer
@@ -820,6 +832,35 @@ class AgentCoordinator:
                     None,
                     skill_model_decision,
                     source=source,
+                )
+        if self._recovery is not None:
+            recovery = self._recovery.select_action(
+                before,
+                memory,
+                actions,
+                goal,
+                self._gate.level_change_actions,
+                level_changes_allowed=self._level_changes_allowed,
+            )
+            if recovery is not None:
+                return self._skill_plan(
+                    recovery,
+                    goal,
+                    Skill.RECOVERY,
+                    arbiter,
+                    None,
+                    skill_model_decision,
+                )
+        if not before.prompt.active and self._corpse is not None:
+            defense = _attack_adjacent_hostile(memory, actions, None)
+            if defense is not None:
+                return self._skill_plan(
+                    defense,
+                    goal,
+                    Skill.EXPLORE_LEVEL,
+                    arbiter,
+                    None,
+                    skill_model_decision,
                 )
         if not before.prompt.active and self._hunger is not None:
             hunger = self._hunger.select_action(
@@ -1084,6 +1125,10 @@ class AgentCoordinator:
         level = memory.level
         assert level is not None
         position = memory.position
+        if selection.skill is Skill.RECOVERY:
+            error = health_action_error(name, selection, before, memory)
+            if error is not None:
+                raise ActionGateError(error)
         error = level_change_error(
             name,
             selection,
@@ -1199,6 +1244,9 @@ class AgentCoordinator:
             permit=permit,
             turn=before.player.turn,
             hunger=before.player.hunger,
+            hit_points=before.player.hit_points,
+            max_hit_points=before.player.max_hit_points,
+            experience_level=before.player.experience_level,
             prompt_active=before.prompt.active,
             ration_available=bool(safe_inventory_food(before)),
             prior_prayers=self._prayer_count,
@@ -1318,20 +1366,12 @@ class AgentCoordinator:
             if not transition.terminated and not transition.truncated:
                 intent = selection.intent
                 assert intent is not None and intent.prayer is not None
-                kind = classify_prayer_outcome(after.player.hunger, after.message)
-                if kind is None:
+                outcome = observed_prayer_outcome(intent.prayer, after)
+                if outcome is None:
                     raise CoordinatorInvariantError(
                         "live prayer confirmation returned no recognized outcome"
                     )
-                evidence = replace(
-                    intent.prayer,
-                    outcome=PrayerOutcome(
-                        after.player.turn,
-                        after.player.hunger,
-                        after.message,
-                        kind,
-                    ),
-                )
+                evidence = replace(intent.prayer, outcome=outcome)
                 selection = replace(selection, intent=replace(intent, prayer=evidence))
         else:
             self._pending_prayer = None

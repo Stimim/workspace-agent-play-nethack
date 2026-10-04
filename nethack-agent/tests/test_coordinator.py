@@ -1213,6 +1213,22 @@ def test_survival_arbitration_defense_then_prayer_ration_corpse(
         assert defense.selection.skill is Skill.EXPLORE_LEVEL
         assert defense.selection.intent is not None
         assert defense.selection.intent.attack_target == MapCell(*neighbor)
+        critical = replace(
+            observation,
+            step_index=observation.step_index + 1,
+            player=replace(
+                observation.player, hit_points=3, max_hit_points=18, hunger=1
+            ),
+        )
+        memory.observe(critical)
+        memory.monsters[neighbor] = Monster(nethack.GLYPH_MON_OFF, "jackal", False)
+        hp_prayer = agent._decide(critical, None, lambda: False, 0)
+        assert hp_prayer is not None
+        assert hp_prayer.selection.skill is Skill.PRAYER
+        assert hp_prayer.selection.intent.prayer.reason_hit_points == 3
+        assert hp_prayer.selection.intent.attack_target is None
+        observation = replace(observation, step_index=critical.step_index + 1)
+        memory.observe(observation)
         memory.monsters.clear()
         prayer = agent._decide(observation, None, lambda: False, 0)
         assert prayer is not None

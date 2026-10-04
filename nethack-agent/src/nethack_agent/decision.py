@@ -18,6 +18,7 @@ from nethack_agent.contracts import (
     string_value,
 )
 from nethack_agent.food import SAFE_COMESTIBLES, public_lycanthropy_evidence
+from nethack_agent.health import critical_hit_points, major_hit_point_trouble
 from nethack_agent.observation import ProjectedObservation
 from nethack_agent.tasks import PROMPT_KEY_ACTION_NAMES
 from nethack_agent.traversal import (
@@ -83,6 +84,7 @@ class Skill(Enum):
     CORPSE = "corpse"
     HUNGER = "hunger"
     PRAYER = "prayer"
+    RECOVERY = "recovery"
     # Route to visible gold on NetHackGold-v0; deterministic, never offered to
     # the model.
     GOLD_NAVIGATION = "gold_navigation"
@@ -135,6 +137,8 @@ class DestinationKind(Enum):
     GOLD = "gold"
     CORPSE = "corpse"
     FOOD = "food"
+    RETREAT = "retreat"
+    REST = "rest"
 
 
 STAIR_DESTINATIONS: Final = {
@@ -740,15 +744,24 @@ class PrayerOutcomeKind(Enum):
     DISPLEASED_OR_PUNISHED = "displeased_or_punished"
 
 
-def classify_prayer_outcome(hunger: int, message: str) -> PrayerOutcomeKind | None:
-    """Classify a live prayer result, without treating hidden favor as evidence."""
+def classify_prayer_outcome(
+    hunger: int,
+    message: str,
+    *,
+    hit_points: int | None = None,
+    max_hit_points: int | None = None,
+) -> PrayerOutcomeKind | None:
+    """Classify the observed trouble, never hidden divine favor."""
     if (
         "displeased" in message
         or "Thou must relearn thy lessons!" in message
         or "You feel foolish!" in message
     ):
         return PrayerOutcomeKind.DISPLEASED_OR_PUNISHED
-    if hunger < 3 or "Your stomach feels content." in message:
+    if hit_points is not None:
+        if max_hit_points is not None and hit_points >= max_hit_points:
+            return PrayerOutcomeKind.FIXED
+    elif hunger < 3 or "Your stomach feels content." in message:
         return PrayerOutcomeKind.FIXED
     if "You finish your prayer." in message or "You feel that" in message:
         return PrayerOutcomeKind.NOT_FIXED
@@ -761,30 +774,52 @@ class PrayerOutcome:
     hunger: int
     message: str
     kind: PrayerOutcomeKind
+    hit_points: int | None = None
+    max_hit_points: int | None = None
 
     def __post_init__(self) -> None:
         integer_value(self.turn, "prayer outcome turn", minimum=0)
         integer_value(self.hunger, "prayer outcome hunger", minimum=0)
         string_value(self.message, "prayer outcome message", maximum=4096)
+        if (self.hit_points is None) != (self.max_hit_points is None):
+            raise ContractError("prayer outcome requires both observed HP values")
+        if self.hit_points is not None:
+            integer_value(self.hit_points, "prayer outcome hit_points", minimum=0)
+            integer_value(
+                self.max_hit_points, "prayer outcome max_hit_points", minimum=1
+            )
         if not isinstance(self.kind, PrayerOutcomeKind):
             raise TypeError("prayer outcome kind must be a PrayerOutcomeKind")
-        if self.kind is not classify_prayer_outcome(self.hunger, self.message):
+        if self.kind is not classify_prayer_outcome(
+            self.hunger,
+            self.message,
+            hit_points=self.hit_points,
+            max_hit_points=self.max_hit_points,
+        ):
             raise ContractError(
-                "prayer outcome kind does not match observed hunger and message"
+                "prayer outcome kind does not match observed trouble and message"
             )
 
     def to_json(self) -> dict[str, object]:
-        return {
+        payload = {
             "turn": self.turn,
             "hunger": self.hunger,
             "message": self.message,
             "kind": self.kind.value,
         }
+        if self.hit_points is not None:
+            payload.update(
+                hit_points=self.hit_points, max_hit_points=self.max_hit_points
+            )
+        return payload
 
     @classmethod
     def from_json(cls, value: object) -> Self:
         payload = object_value(
-            value, "prayer outcome", {"turn", "hunger", "message", "kind"}
+            value,
+            "prayer outcome",
+            {"turn", "hunger", "message", "kind"},
+            optional={"hit_points", "max_hit_points"},
         )
         return cls(
             turn=integer_value(payload["turn"], "prayer outcome turn", minimum=0),
@@ -793,6 +828,8 @@ class PrayerOutcome:
                 payload["message"], "prayer outcome message", maximum=4096
             ),
             kind=enum_value(payload["kind"], "prayer outcome kind", PrayerOutcomeKind),
+            hit_points=payload.get("hit_points"),
+            max_hit_points=payload.get("max_hit_points"),
         )
 
 
@@ -803,23 +840,45 @@ class PrayerEvidence:
     safe_turn: int
     kill_count: int = 0
     outcome: PrayerOutcome | None = None
+    reason_hit_points: int | None = None
+    reason_max_hit_points: int | None = None
 
     def __post_init__(self) -> None:
         integer_value(self.reason_hunger, "prayer reason_hunger", minimum=0)
         integer_value(self.prayer_turn, "prayer prayer_turn", minimum=0)
         integer_value(self.safe_turn, "prayer safe_turn", minimum=0)
         integer_value(self.kill_count, "prayer kill_count", minimum=0)
-        if self.outcome is not None and not isinstance(self.outcome, PrayerOutcome):
-            raise TypeError("prayer outcome must be a PrayerOutcome or None")
+        if (self.reason_hit_points is None) != (self.reason_max_hit_points is None):
+            raise ContractError("HP prayer requires both observed reason HP values")
+        if self.reason_hit_points is not None:
+            integer_value(self.reason_hit_points, "prayer reason_hit_points", minimum=1)
+            integer_value(
+                self.reason_max_hit_points, "prayer reason_max_hit_points", minimum=1
+            )
+            if not critical_hit_points(
+                self.reason_hit_points, self.reason_max_hit_points
+            ):
+                raise ContractError("HP prayer requires critical observed HP")
+        if self.outcome is not None:
+            if not isinstance(self.outcome, PrayerOutcome):
+                raise TypeError("prayer outcome must be a PrayerOutcome or None")
+            if (self.reason_hit_points is None) != (self.outcome.hit_points is None):
+                raise ContractError("prayer reason and observed outcome must agree")
 
     def to_json(self) -> dict[str, object]:
-        return {
+        payload = {
             "reason_hunger": self.reason_hunger,
             "prayer_turn": self.prayer_turn,
             "safe_turn": self.safe_turn,
             "kill_count": self.kill_count,
             "outcome": None if self.outcome is None else self.outcome.to_json(),
         }
+        if self.reason_hit_points is not None:
+            payload.update(
+                reason_hit_points=self.reason_hit_points,
+                reason_max_hit_points=self.reason_max_hit_points,
+            )
+        return payload
 
     @classmethod
     def from_json(cls, value: object) -> Self:
@@ -827,7 +886,7 @@ class PrayerEvidence:
             value,
             "prayer evidence",
             {"reason_hunger", "prayer_turn", "safe_turn", "kill_count"},
-            optional={"outcome"},
+            optional={"outcome", "reason_hit_points", "reason_max_hit_points"},
         )
         outcome = payload.get("outcome")
         return cls(
@@ -844,7 +903,35 @@ class PrayerEvidence:
                 payload["kill_count"], "prayer kill_count", minimum=0
             ),
             outcome=None if outcome is None else PrayerOutcome.from_json(outcome),
+            reason_hit_points=payload.get("reason_hit_points"),
+            reason_max_hit_points=payload.get("reason_max_hit_points"),
         )
+
+
+def observed_prayer_outcome(
+    evidence: PrayerEvidence | None, observation: ProjectedObservation
+) -> PrayerOutcome | None:
+    if evidence is None:
+        return None
+    hp_reason = evidence.reason_hit_points is not None
+    hp = observation.player.hit_points if hp_reason else None
+    maximum = observation.player.max_hit_points if hp_reason else None
+    kind = classify_prayer_outcome(
+        observation.player.hunger,
+        observation.message,
+        hit_points=hp,
+        max_hit_points=maximum,
+    )
+    if kind is None:
+        return None
+    return PrayerOutcome(
+        observation.player.turn,
+        observation.player.hunger,
+        observation.message,
+        kind,
+        hp,
+        maximum,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -1466,6 +1553,9 @@ def prayer_action_error(
     prior_prayers: int,
     on_altar: bool,
     last_prayer_turn: int | None = None,
+    hit_points: int | None = None,
+    max_hit_points: int | None = None,
+    experience_level: int | None = None,
 ) -> str | None:
     """The same prayer authorization predicate used at execution and audit."""
     if action_name != PRAY_ACTION_NAME:
@@ -1480,19 +1570,41 @@ def prayer_action_error(
         if last_prayer_turn is not None
         else PRAYER_FIRST_SAFE_TURN,
     )
+    hp_reason = evidence.reason_hit_points is not None
+    hp_trouble = (
+        hp_reason
+        and hit_points is not None
+        and max_hit_points is not None
+        and experience_level is not None
+        and critical_hit_points(hit_points, max_hit_points)
+        and major_hit_point_trouble(hit_points, max_hit_points, experience_level)
+    )
     if (
         not isinstance(permit, PrayerPermit)
         or turn is None
         or hunger is None
         or permit.turn != turn
         or evidence.reason_hunger != hunger
+        or (
+            hp_reason
+            and (
+                evidence.reason_hit_points != hit_points
+                or evidence.reason_max_hit_points != max_hit_points
+            )
+        )
         or evidence.prayer_turn != turn
         or evidence.safe_turn != safe_turn
         or (prior_prayers > 0) != (last_prayer_turn is not None)
     ):
         return "PRAY requires a matching deterministic prayer permit and evidence"
-    if hunger < 3 or turn < safe_turn or prompt_active or ration_available or on_altar:
-        return "PRAY requires Weak+ hunger, safe turn, and no prompt, ration, or altar"
+    if (
+        (not hp_trouble if hp_reason else hunger < 3)
+        or turn < safe_turn
+        or prompt_active
+        or (ration_available and not hp_reason)
+        or on_altar
+    ):
+        return "PRAY requires observed major trouble, safe turn, and no prompt or altar"
     return None
 
 
@@ -1754,13 +1866,14 @@ def level_change_selection_error(
 ) -> str | None:
     """Why a selection may not change level, from its own recorded fields.
 
-    A level change needs a traverse_stairs goal in its direction, chosen by
-    deterministic staircase navigation, with an in-place intent on a staircase
-    of that direction that records the staircase's identity and level.
+    Navigation requires a matching traverse_stairs goal. Deterministic recovery
+    retains the original goal; callers must also apply the shared public-health
+    authorization. Both require an in-place, identified staircase intent.
     """
     goal = selection.goal
-    if not isinstance(goal, TraverseStairsGoal) or goal.target.direction is not (
-        direction
+    if selection.skill is not Skill.RECOVERY and (
+        not isinstance(goal, TraverseStairsGoal)
+        or goal.target.direction is not direction
     ):
         return (
             f"changing level {direction.value} requires a traverse_stairs goal "
@@ -1768,9 +1881,9 @@ def level_change_selection_error(
         )
     if (
         selection.source is not ActionSelectionSource.DETERMINISTIC_SKILL
-        or selection.skill is not Skill.STAIRCASE_NAVIGATION
+        or selection.skill not in (Skill.STAIRCASE_NAVIGATION, Skill.RECOVERY)
     ):
-        return "only deterministic staircase navigation may change level"
+        return "only proper staircase navigation or survival recovery may change level"
     intent = selection.intent
     destination = None if intent is None else intent.destination
     if (
@@ -1821,6 +1934,10 @@ def level_change_error(
     destination = intent.destination
     if intent.level != level or (destination.x, destination.y) != position:
         return "the hero is not standing on the intent's staircase"
+    if selection.skill is Skill.RECOVERY:
+        # Its original objective is retained; shared health authorization
+        # verifies the urgent public-state escape and known stair identity.
+        return None
     goal = selection.goal
     assert isinstance(goal, TraverseStairsGoal) and destination.stair is not None
     if candidate_tier(goal.target, destination.stair, pair_known=pair_known) is None:
