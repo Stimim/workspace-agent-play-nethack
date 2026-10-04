@@ -350,6 +350,12 @@
       "seeds": [47359449, 75767809, 295655445, 351146065, 559586091, 577302227, 773519161, 949189622, 965386800, 1150182636, 1187627742, 1235709582, 1254878537, 1295772422, 1318243115, 1500967190, 1776041382, 1858658579, 1891249871, 2047049452],
       "ranges": [],
       "note": "Draw 3519210030 of a descend-d5-v2 launch cancelled seconds in, before any episode finished (no deadline set). Never acceptance evidence; consumed, never reused. See note0046."
+    },
+    {
+      "source": "note-0046-descend-d5-v2-aborted-launch-2",
+      "seeds": [253797271, 295010814, 407792242, 646686252, 741007742, 802829109, 1097634320, 1101513488, 1113672078, 1271703369, 1467902277, 1574730837, 1631331316, 1655373811, 1711375002, 1713314902, 1759520978, 1936718785, 1947862533, 1980000625],
+      "ranges": [],
+      "note": "Draw 2937289252 of a second descend-d5-v2 launch under a 300s default tool deadline, cancelled after episode 1 (objective_complete). Never acceptance evidence; consumed, never reused. See note0046."
     }
   ]
 }

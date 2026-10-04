@@ -44,3 +44,16 @@ committed report directory at
 ledger and never reused. The acceptance run below is a complete new draw
 under the unchanged preregistration, launched with no deadline; it is not a
 selective resume.
+
+## Disclosure: aborted second launch
+
+The second launch (report stamp `20261004T173934Z`, draw seed
+`2937289252`) again ran under the shell tool's
+default 300-second deadline, shorter than the ~470-second previous D5 run.
+It was cancelled to avoid a mid-run cutoff, but only after episode 1 had
+finished: seed 1980000625, `objective_complete` in 366 steps. That was the
+only observed result; the cancellation was for a tooling reason and was
+not a reaction to an unfavorable outcome. Its report and data are kept at
+`nethack-agent/data/evaluations/descend-d5-v2-aborted-20261004T173934Z/`, and all 20 drawn
+seeds are registered in the ledger and never reused. The acceptance run is
+the third launch, detached from any tool deadline.
