@@ -120,16 +120,6 @@ Dependency order for the four capability items below: traversal goals, then NLE 
   checks before allowing a commit.
 - [x] omp-commit resolves the active conversation from its OMP ancestor process, so commits work while several OMP sessions run.
 
-- [x] Tune the local coding workers and consolidate every local OMP role on one
-  64k-context `omp-coder` model (gemma4:26b) with the `replace` edit tool
-  ([0019](docs/notes/0019-local-coding-worker-tuning.md)).
-- [ ] After `/restart`, verify that one Vibe `fast` and one `good` turn name
-  `ollama/omp-coder:latest` and edit without hashline errors. After a few
-  iterations, review whether `task.maxConcurrency: 2` helps or hurts on a
-  single local model.
-- [ ] Remove the legacy `retry.fallbackChains` entries (Gemini, `smol`, `tiny`;
-  needs user approval), then the `omp-coder-smol` tag and recipe.
-
 ### Observability and browser UI
 
 Browser tooling for inspecting runs. Evidence, design, and the limitations behind the open items are in notes 0009-0012.

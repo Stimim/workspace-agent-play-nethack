@@ -51,12 +51,3 @@ that behavior. Seven of the eleven entries are `must_pass`.
 - `uv run pytest -q`: 477 passed, 3 warnings (21 in
   `tests/test_seed_catalog.py`).
 - `uv run ruff check .` and `uv run ruff format --check .` passed.
-
-## Local worker process
-
-The local coding workers (note 0019) could not implement this change: one
-session rewrote the module repeatedly and invented a different ledger schema.
-The director wrote the code; a worker copied it in chunks of at most 130 lines
-through quoted heredocs, and each chunk was read back. Copying introduced about
-one error per 100 lines, each fixed with an exact single-match replacement.
-Long one-shot copies and hand-made fixes by the worker failed.

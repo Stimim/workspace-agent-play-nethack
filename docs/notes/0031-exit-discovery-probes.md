@@ -334,8 +334,4 @@ had completed, and checking the persisted JSON confirmed 10/10 and clean
 records without rerunning them.
 
 The used-seed catalog validates 260 used seeds, including all 1240–1269.
-Both worktree and staged `git diff --check` pass. Strict MkDocs built
-successfully from `/tmp/item9-exit-staged-export/`, a clean export of the
-staged index; unrelated pre-existing `.gitignore`, local-worker checklist,
-development-guide, and note-0019 edits were excluded from staging.
-The final note records those observed results; no policy/runtime edits follow.
+Both worktree and staged `git diff --check` pass. Strict MkDocs built successfully from `/tmp/item9-exit-staged-export/`, a clean export of the staged index. The local coding-worker material was unrelated and has moved out of the repository (developer tooling). The final note records those observed results; no policy/runtime edits follow.

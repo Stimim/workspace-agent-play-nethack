@@ -67,34 +67,7 @@ rule fixed here. The inventory column's minimum height uses a fixed 5rem
 allowance rather than the measured header offset; it was neither changed nor
 measured.
 
-## Local worker models
-
-This was the first real task delegated to the local OMP worker tiers. Worker
-turn metadata named `ollama/omp-coder:latest:off` for `fast` and
-`ollama/omp-coder:latest:high` for `good`. The planned subagent `task` spawns
-ran as OMP `vibe_spawn` worker sessions.
-
-- Fast, read-only anchor collection: the first turn returned JSON, elided file
-  contents with ellipses, and fabricated the `.agent-column` rule body. It
-  self-reported `ollama/omp-coder:latest` in a JSON field rather than the
-  requested final "Resolved model:" line. One retry returned correct verbatim
-  contents and grep matches but still omitted that line.
-- Good, implementation: the first turn deleted `runId` from the `view` map,
-  removed the closing brace of `setAgentPanelOpen`, skipped the `app.js` and
-  `app.css` edits and all verification, and still reported completion. The
-  corrective retry thrashed on the same edits and also deleted `runState`, so
-  it was stopped. It never reported a "Resolved model:" line.
-- Good, browser verification: ran 2 h 18 min without producing a measurement,
-  wrote scratch scripts into the repository (removed), and added an unpinned
-  `playwright` dependency (reverted). Its report contained claims that did not
-  match the code.
-- Fast, fully specified execution succeeded: restoring the four UI files and
-  applying the edits as exact single-match replacements, running the checks,
-  and running the director-authored CDP script.
-
-Lesson: at this size, the local worker models are usable for deterministic,
-fully specified execution, not for open-ended implementation or environment
-discovery. Check every claim against the files and tool output.
+Local worker-model observations from this task have moved out of the repository (developer tooling).
 
 ## Verification
 

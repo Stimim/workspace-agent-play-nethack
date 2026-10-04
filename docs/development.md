@@ -35,66 +35,6 @@ requests one fallback action, executes it through the action gate, and
 finalizes the ttyrec. It reports action-selection source, action, goal, skill,
 aggregate token counts, and latency.
 
-### OMP local coding model
-
-Every local OMP role uses the Ollama model `omp-coder:latest`; this is
-developer tooling, separate from the playing agent's `gemma4-nethack:latest`.
-Its recipe derives from `gemma4:26b` (26B-A4B MoE) with `num_ctx` 65,536:
-
-```bash
-ollama create omp-coder:latest --file _agents/models/omp-coder/Modelfile
-omp models refresh   # OMP caches Ollama discovery
-```
-
-Current global OMP routing:
-
-```yaml
-modelRoles:
-  default: anthropic/claude-opus-5-5
-  fast_worker: openai-codex/gpt-6-luna:auto
-  good_worker: openai-codex/gpt-6-sol:auto
-  smol: ollama/omp-coder:latest:off
-  tiny: ollama/omp-coder:latest:off
-  commit: ollama/omp-coder:latest:off
-task:
-  agentModelOverrides: {sonic: "@fast_worker", task: "@good_worker"}
-  maxConcurrency: 2
-providers:
-  maxInFlightRequests: {ollama: 1}
-edit:
-  modelVariants: {omp-coder: replace}
-disabledProviders: [google-antigravity]
-```
-
-Vibe `fast`/`good` and the `sonic`/`task` subagents use the OpenAI worker
-roles; only `smol`, `tiny`, and `commit` use the local model. The
-`omp-coder` `replace` edit variant therefore applies to those local roles.
-The legacy `retry.fallbackChains` entries for Gemini, `smol`, and `tiny` still
-point to `omp-coder-smol:latest`
-(`_agents/models/omp-coder-smol/Modelfile`, gemma4:e4b at 8,192 tokens); keep
-that tag until those chains are removed.
-
-On the RTX 4070 Laptop GPU (8 GB), gemma4 keeps attention and shared weights on
-the GPU (about 5 GB) and its expert weights in RAM (14.3 GB). It generates
-about 17 tokens per second and reads prompts at about 190 tokens per second.
-Ollama runs one active conversation per loaded model, but saves displaced
-conversations in an 8 GiB RAM prompt cache and restores them. Interleaved
-requests can therefore resume without re-reading; the server log reports a
-65,536-token cache limit. The playing model cannot stay loaded alongside it.
-
-A running OMP session keeps the settings and model catalog it started with, so
-run `/restart` after changing them. Without a restart, a fresh process from a
-checkout or a `git worktree` of it picks up the current configuration:
-
-```bash
-omp -p --model ollama/omp-coder:latest --thinking high "<task>"
-```
-
-Add `--mode json --session-dir DIR` to keep a transcript. Check every worker
-result yourself (diff, tests, browser); worker reports are not evidence. The
-benchmarks and decisions are in
-[note 0019](notes/0019-local-coding-worker-tuning.md).
-
 ### Local control service
 
 ```bash

@@ -23,7 +23,7 @@ Product choices established during scope review:
 
 - Python 3.12.3, uv 0.12.17, and CMake 3.28.3 are installed.
 - Ollama server reports 0.23.1 while the client reports 0.34.4; model/API behavior must be tested rather than inferred from the client version.
-- Installed models include `gemma4-nethack:latest` (9.6 GB), generic `gemma4` variants, and `gemma4:26b` (17 GB).
+- Installed models included `gemma4-nethack:latest` (9.6 GB) and generic Gemma variants; local coding-worker model material has moved out of the repository (developer tooling).
 - GPU: NVIDIA GeForce RTX 4070 Laptop GPU with 8188 MiB VRAM.
 - Maintained NLE 1.3.0 supports Python 3.10–3.13, Gymnasium 1.2.0, NetHack 3.6.7, task environments, and ttyrec output. The maintained repository had commits in April and June 2026.
 - The ignored NetHackWiki current-page dump is present at `docs/external/nethack-wiki-xml-dump/nethackwiki_current.xml` and is about 188 MB.
