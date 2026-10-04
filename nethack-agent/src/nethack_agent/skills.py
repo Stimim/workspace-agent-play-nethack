@@ -41,6 +41,7 @@ from nethack_agent.navigation import (
     LevelMemory,
     Point,
     RouteTree,
+    downstairs_known,
     locked_door_kick_error,
     route_tree,
 )
@@ -291,27 +292,11 @@ class ExploreLevelSkill:
             return ExploreResult(defense, None)
         stairs = () if target is None else tuple(stair_candidates(memory, target))
         tree = route_tree(memory)
-        if not memory.stairs(StairDirection.DOWN):
-            covered = [
-                p
-                for p in memory.objects
-                if p not in memory.visited
-                and p not in memory.abandoned_goals
-                and p not in memory.monsters
-                and p in tree.distances
-                and memory.passable(p)
-            ]
-            if covered:
-                point = min(covered, key=lambda p: (tree.distances[p], p[1], p[0]))
-                action = _route_step(
-                    memory,
-                    tree.route(point),
-                    actions_by_name,
-                    f"Check object-covered terrain at {_cell(point)} for stairs.",
-                    IntentDestination(DestinationKind.FRONTIER, *point),
-                )
-                if action is not None:
-                    return ExploreResult(action, None)
+        covered_first = not memory.stairs(StairDirection.DOWN)
+        if covered_first:
+            action = _check_covered_exit(memory, tree, actions_by_name)
+            if action is not None:
+                return ExploreResult(action, None)
         goal = _frontier_goal(memory, tree, stairs)
         if goal is not None:
             action = _route_step(
@@ -322,6 +307,10 @@ class ExploreLevelSkill:
                 f"({tree.distances[goal]} steps).",
                 IntentDestination(DestinationKind.FRONTIER, *goal),
             )
+            if action is not None:
+                return ExploreResult(action, None)
+        if not covered_first and not downstairs_known(memory, target):
+            action = _check_covered_exit(memory, tree, actions_by_name)
             if action is not None:
                 return ExploreResult(action, None)
 
@@ -341,7 +330,7 @@ class ExploreLevelSkill:
                 return ExploreResult(action, None)
             blocked_by_monster = True
 
-        action = _kick_locked_door(memory, tree, actions_by_name)
+        action = _kick_locked_door(memory, tree, actions_by_name, target)
         if action is None:
             action = _search(memory, tree, actions_by_name)
         if action is not None:
@@ -909,8 +898,36 @@ def _frontier_goal(
     return goal
 
 
-def _kick_locked_door(
+def _check_covered_exit(
     memory: LevelMemory, tree: RouteTree, actions_by_name: dict[str, LegalAction]
+) -> SkillAction | None:
+    """Check unvisited object-covered terrain for an undiscovered staircase."""
+    covered = [
+        p
+        for p in memory.objects
+        if p not in memory.visited
+        and p not in memory.abandoned_goals
+        and p not in memory.monsters
+        and p in tree.distances
+        and memory.passable(p)
+    ]
+    if not covered:
+        return None
+    point = min(covered, key=lambda p: (tree.distances[p], p[1], p[0]))
+    return _route_step(
+        memory,
+        tree.route(point),
+        actions_by_name,
+        f"Check object-covered terrain at {_cell(point)} for stairs.",
+        IntentDestination(DestinationKind.FRONTIER, *point),
+    )
+
+
+def _kick_locked_door(
+    memory: LevelMemory,
+    tree: RouteTree,
+    actions_by_name: dict[str, LegalAction],
+    target: StairTarget | None,
 ) -> SkillAction | None:
     """Kick a known-locked door that is the only way into unexplored space."""
     kick = actions_by_name.get("Command.KICK")
@@ -923,7 +940,7 @@ def _kick_locked_door(
             if (
                 stand in tree.distances
                 and stand not in memory.monsters
-                and locked_door_kick_error(memory, door, stand) is None
+                and locked_door_kick_error(memory, door, stand, target) is None
             ):
                 candidates.append(
                     (tree.distances[stand], stand[1], stand[0], stand, door)
@@ -935,7 +952,8 @@ def _kick_locked_door(
     if stand == origin:
         return SkillAction(
             kick.index,
-            f"Kick the locked route gate at {_cell(door)}: downstairs are unknown "
+            f"Kick the locked route gate at {_cell(door)}: the goal's downstairs "
+            "are unknown "
             "and observed shop, health, hunger and retry checks permit it.",
             ActionRecord(ActionKind.KICK, origin, door),
             _toward(DestinationKind.LOCKED_DOOR, door),

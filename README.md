@@ -125,6 +125,17 @@ are retained; acceptance remediation is next, not a rerun or retuning of
 these suites ([note 0036](docs/notes/0036-milestone-2-real-model-evaluation.md),
 [`TODO_LIST.md`](TODO_LIST.md)).
 
+The first unified-survival remediation makes exit discovery goal-aware:
+remembered Mines branch stairs no longer suppress guarded forcing of a main
+exit gate or covered-cell checks. Reachable frontiers keep precedence when
+only incompatible stairs are known. Its scripted development set improves
+50/67 to 52/67 without losing an existing success; a frozen new 30-seed
+comparison improves 24/30 to 27/30 with deaths unchanged. This is qualified
+development evidence, not milestone acceptance. The earlier candidate that
+increased qualification deaths was rejected and retained
+([0037](docs/notes/0037-goal-aware-branch-gate-probes.md),
+[0038](docs/notes/0038-branch-exit-frontier-preserving-probes.md)).
+
 ## Documentation
 
 Start with [`docs/README.md`](docs/README.md). Architecture documents describe

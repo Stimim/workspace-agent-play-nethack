@@ -174,7 +174,9 @@ def kick_action_error(
     ):
         return "kicking requires deterministic locked-gate evidence"
     door = (destination.x, destination.y)
-    error = locked_door_kick_error(memory, door, memory.position)
+    error = locked_door_kick_error(
+        memory, door, memory.position, stair_target(selection.goal)
+    )
     if error is not None:
         return error
     if action_name != _KICK_ACTION_NAME and (

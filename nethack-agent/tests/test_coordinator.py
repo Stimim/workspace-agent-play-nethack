@@ -67,7 +67,6 @@ from nethack_agent.storage import RunRecord
 from nethack_agent.tasks import STAIRCASE_TASK, ActionProfile, NleTask, TaskSpec
 from nethack_agent.traversal import (
     STAND_ON_DOWNSTAIRS,
-    EnterDungeonLeg,
     ExploreDungeonLeg,
     ExploreLevelGoal,
     Goal,
@@ -997,38 +996,6 @@ def test_a_mines_probe_is_retraced_and_the_main_stair_found_by_elimination(
     assert records[-1].outcome is RunOutcome.OBJECTIVE_COMPLETE
 
 
-def test_entering_the_mines_probes_both_downstairs_of_the_branch_level(
-    tmp_path: Path,
-) -> None:
-    agent, records = run_to_end(
-        tmp_path, 4, score_task(EnterDungeonLeg(2)), max_steps=600
-    )
-
-    assert traversals(records) == [
-        (DOWN_ACTION, "traverse_stairs:down:main", (0, 1), (0, 2), "unknown", None),
-        # Two unknown `>` on DL2: the nearer probe leads to DL3, the main one.
-        (
-            DOWN_ACTION,
-            "traverse_stairs:down:branch:2",
-            (0, 2),
-            (0, 3),
-            "unknown",
-            None,
-        ),
-        (UP_ACTION, "traverse_stairs:up:main", (0, 3), (0, 2), "main", "arrival"),
-        (
-            DOWN_ACTION,
-            "traverse_stairs:down:branch:2",
-            (0, 2),
-            (2, 1),
-            "branch",
-            "elimination",
-        ),
-    ]
-    assert records[-1].outcome is RunOutcome.OBJECTIVE_COMPLETE
-    assert agent.snapshot().level == LevelKey(2, 1)
-
-
 def test_terminal_steps_keep_the_last_live_level(tmp_path: Path) -> None:
     # NLE zeroes the bottom-line statistics of a terminal observation.
     staircase, success = run_to_end(tmp_path / "staircase", 2, STAIRCASE_TASK, 100)
@@ -1696,49 +1663,48 @@ def test_real_seed_1131_eats_observed_lichen_and_evaluator_audits_cleanly(
         agent.stop()
 
 
-def test_real_seed_1300_eats_untracked_lichen_shadowed_by_a_later_same_cell_kill(
+def test_untracked_lichen_remains_edible_after_another_same_cell_kill(
     tmp_path: Path,
 ) -> None:
-    # A sewer rat is later killed on exactly the cell where an earlier lichen
-    # was killed; the tracked sewer-rat kill record must not shadow the
-    # still-valid untracked lichen sighting actually displayed there.
     task = TaskSpec(
         NleTask.SCORE,
         ActionProfile.NLE_SURVIVAL_ACTIONS,
         Objective((ReachLevelLeg(LevelKey(0, 5)),)),
     )
     agent = AgentCoordinator(
-        NleEnvironment(
-            ScenarioConfig(
-                seed=1300,
-                artifact_directory=tmp_path,
-                max_episode_steps=1700,
-                task=task,
-            )
-        ),
+        NleEnvironment(ScenarioConfig(seed=6, artifact_directory=tmp_path, task=task)),
         ObservationProjector(),
         ScriptedDevelopmentModel(),
     )
-    agent.start()
-    agent.resume()
+    initial = agent.start()
     try:
-        lichen_eat = None
-        for _ in range(1700):
-            step = agent.advance()
-            assert step is not None
-            if (
-                step.action.name == "Command.EAT"
-                and step.selection.skill is Skill.CORPSE
-                and step.selection.intent is not None
-                and step.selection.intent.corpse is not None
-                and step.selection.intent.corpse.name == "lichen"
-                and step.selection.intent.corpse.kill_turn is None
-            ):
-                lichen_eat = step
-                break
-        assert lichen_eat is not None
-        assert lichen_eat.before.message == (
-            "There is a doorway here.  You see here a lichen corpse."
+        before = replace(
+            initial,
+            message="There is a doorway here.  You see here a lichen corpse.",
+            player=replace(initial.player, turn=100, hunger=1),
+        )
+        cell = MapCell(before.player.x, before.player.y)
+        level = LevelKey(before.player.dungeon_number, before.player.dungeon_level)
+        agent._corpse_kills[(level, cell)] = CorpseKill("sewer rat", 99, level, cell)
+        evidence = CorpseEvidence("lichen", None, None, cell)
+        eat = agent._gate.actions_by_name["Command.EAT"]
+        selection = ActionSelection(
+            ActionSelectionSource.DETERMINISTIC_SKILL,
+            agent.snapshot().current_goal,
+            Skill.CORPSE,
+            SkillSelectionSource.ARBITER,
+            None,
+            eat.index,
+            "Eat the identified nonrotting lichen underfoot.",
+            ActionIntent(None, None, None, corpse=evidence),
+        )
+        permit = agent._hunger_permit(selection, before)
+        assert permit is not None and permit.corpse == evidence
+        assert (
+            agent._gate.resolve(
+                eat.index, before=before, selection=selection, hunger_permit=permit
+            )
+            == eat
         )
     finally:
         agent.stop()

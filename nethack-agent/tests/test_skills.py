@@ -1871,3 +1871,118 @@ def test_pending_kick_accepts_only_the_gate_direction(
         )
         is not None
     )
+
+
+@pytest.mark.parametrize(
+    ("connection", "identity", "allowed"),
+    [
+        (StairConnection.MAIN, StairIdentityKind.BRANCH, True),
+        (StairConnection.MAIN, StairIdentityKind.MAIN, False),
+        (StairConnection.MAIN, StairIdentityKind.UNKNOWN, False),
+        (StairConnection.ANY, StairIdentityKind.BRANCH, False),
+    ],
+)
+def test_exit_gate_uses_goal_compatible_downstairs(
+    template: ProjectedObservation,
+    actions: dict[str, LegalAction],
+    connection: StairConnection,
+    identity: StairIdentityKind,
+    allowed: bool,
+) -> None:
+    from nethack_agent.coordinator import ActionGate, ActionGateError
+    from nethack_agent.decision import ActionSelection, SkillSelectionSource
+    from nethack_agent.replay import kick_action_error
+    from nethack_agent.tasks import ActionProfile
+
+    before = sketch(
+        template,
+        ("        ", " -----  ", " |>..@+ ", " -----  ", "        "),
+        dungeon_level=3,
+    )
+    memory = LevelMemory()
+    memory.observe(before)
+    memory.locked_doors.add((6, 2))
+    if identity is not StairIdentityKind.UNKNOWN:
+        memory.stair_identities[(2, 2)] = StairIdentity(
+            identity,
+            2 if identity is StairIdentityKind.BRANCH else 0,
+            IdentityEvidence.TRAVERSED,
+        )
+    target = StairTarget(StairDirection.DOWN, connection, None)
+    goal = StandOnStairsGoal(target)
+    result = ExploreLevelSkill().select_action(memory, actions, target).action
+    assert (
+        result is not None
+        and action_name(actions, result.action_index) == "Command.KICK"
+    ) is allowed
+    kick = actions["Command.KICK"]
+    selection = ActionSelection(
+        ActionSelectionSource.DETERMINISTIC_SKILL,
+        goal,
+        Skill.EXPLORE_LEVEL,
+        SkillSelectionSource.ARBITER,
+        None,
+        kick.index,
+        "Force the exit route.",
+        ActionIntent(IntentDestination(DestinationKind.LOCKED_DOOR, 6, 2), None, None),
+    )
+    profile = ActionProfile.NLE_TASK_ACTIONS
+    legal = tuple(
+        LegalAction(i, int(a), f"{type(a).__name__}.{a.name}")
+        for i, a in enumerate(profile.actions)
+    )
+    gate = ActionGate(legal, profile)
+    if allowed:
+        assert kick_action_error(kick.name, selection, memory) is None
+        assert (
+            gate.resolve(kick.index, selection=selection, before=before, memory=memory)
+            == kick
+        )
+    else:
+        assert kick_action_error(kick.name, selection, memory) is not None
+        with pytest.raises(ActionGateError):
+            gate.resolve(kick.index, selection=selection, before=before, memory=memory)
+
+
+def test_main_exit_checks_covered_cells_despite_known_branch_stairs(
+    template: ProjectedObservation,
+    actions: dict[str, LegalAction],
+) -> None:
+    memory = remembered(
+        template, ("         ", " ------- ", " |@..%>| ", " ------- ", "         ")
+    )
+    memory.stair_identities[(6, 2)] = StairIdentity(
+        StairIdentityKind.BRANCH, 2, IdentityEvidence.TRAVERSED
+    )
+    target = StairTarget(StairDirection.DOWN, StairConnection.MAIN, None)
+    result = ExploreLevelSkill().select_action(memory, actions, target).action
+    assert result is not None
+    assert result.intent.destination == IntentDestination(
+        DestinationKind.FRONTIER, 5, 2
+    )
+    assert action_name(actions, result.action_index) == "CompassDirection.E"
+
+
+def test_known_branch_preserves_reachable_frontier_before_covered_exit_checks(
+    template: ProjectedObservation,
+    actions: dict[str, LegalAction],
+) -> None:
+    memory = remembered(
+        template,
+        (
+            "             ",
+            " ----------- ",
+            " |@..%>D###  ",
+            " ----------- ",
+            "             ",
+        ),
+    )
+    memory.stair_identities[(6, 2)] = StairIdentity(
+        StairIdentityKind.BRANCH, 2, IdentityEvidence.TRAVERSED
+    )
+    target = StairTarget(StairDirection.DOWN, StairConnection.MAIN, None)
+    result = ExploreLevelSkill().select_action(memory, actions, target).action
+    assert result is not None
+    assert result.intent.destination == IntentDestination(
+        DestinationKind.FRONTIER, 10, 2
+    )

@@ -286,16 +286,24 @@ list covers passive-damage monsters (floating eye, gas spore, molds and
 jellies) and the always-peaceful Oracle by exact public monster glyph/name, so
 the first adjacent observation cannot attack her before peacefulness is
 learned. NLE's task action set has no fight command, so attacks move into the
-monster. When downstairs are unknown, exploration first visits reachable,
+monster. When no downstairs are known, exploration first visits reachable,
 unvisited walkable cells covered by displayed objects, skipping monsters and
 abandoned goals; standing there reuses existing underfoot stair discovery.
+When only goal-incompatible downstairs are known (for example the Mines
+branch while seeking the main downstairs), these covered-cell checks remain
+available after ordinary reachable frontiers rather than diverting them.
 It then walks to the nearest reachable frontier, a known cell next to
 never-observed blank space, with doorways and corridors winning distance ties
 and a remembered but unreachable `>` biasing the choice toward it. A frontier
 reachable only past a monster is approached, fought, or waited on (bounded).
 With no frontier it can force a known locked door whose outward cell is
-unexplored while no downstairs is known. The shared predicate requires main
-dungeon 0, at least 10 HP, hunger better than Weak, fewer than eight previous
+unexplored while no goal-compatible downstairs is known. Compatibility uses
+the same staircase identity/probe predicate as navigation; a known Mines
+branch does not satisfy a main-downstairs goal. Targetless and upstairs
+exploration retain the previous any-downstairs guard
+([note 0038](docs/notes/0038-branch-exit-frontier-preserving-probes.md)).
+The shared predicate requires main dungeon 0, at least 10 HP, hunger better
+than Weak, fewer than eight previous
 direction-confirmed kicks on that door, and no closed-inventory or known
 shop/shopkeeper evidence. Known shop floor regions and `"Closed for inventory"`
 messages persist in level memory. Shop greetings are possessive-owner

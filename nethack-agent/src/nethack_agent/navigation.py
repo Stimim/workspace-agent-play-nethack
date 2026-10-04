@@ -41,6 +41,8 @@ from nethack_agent.traversal import (
     StairDirection,
     StairIdentity,
     StairIdentityKind,
+    StairTarget,
+    candidate_tier,
 )
 
 type Point = tuple[int, int]
@@ -742,16 +744,28 @@ KICKS_PER_DOOR: Final = 8
 MIN_KICK_HP: Final = 10
 
 
+def downstairs_known(memory: LevelMemory, target: StairTarget | None) -> bool:
+    """Whether remembered downstairs satisfy the exit exploration is seeking."""
+    stairs = memory.stairs(StairDirection.DOWN)
+    if target is None or target.direction is not StairDirection.DOWN:
+        return bool(stairs)
+    return any(
+        candidate_tier(target, memory.identity(stair), pair_known=len(stairs) >= 2)
+        is not None
+        for stair in stairs
+    )
+
+
 def locked_door_kick_error(
-    memory: LevelMemory, door: Point, stand: Point
+    memory: LevelMemory, door: Point, stand: Point, target: StairTarget | None
 ) -> str | None:
     """Shared selection, execution-gate and evaluator predicate for route gates."""
     if memory.level is None or memory.level.dungeon_number != 0:
         return "kicking route gates is restricted to the main dungeon"
     if memory.hit_points < MIN_KICK_HP or memory.hunger >= 3:
         return "kicking requires at least 10 HP and hunger better than Weak"
-    if memory.stairs(StairDirection.DOWN):
-        return "downstairs are already known"
+    if downstairs_known(memory, target):
+        return "goal-compatible downstairs are already known"
     if (
         door not in memory.locked_doors
         or memory.kind(door) is not CellKind.CLOSED_DOOR

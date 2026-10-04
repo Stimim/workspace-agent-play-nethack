@@ -783,7 +783,8 @@ uv run pytest -q tests/test_skills.py tests/test_evaluation.py -k food
 
 [Note 0031](notes/0031-exit-discovery-probes.md) replaces the unqualified SEARCH
 cap work with measured exit-discovery changes. The main-dungeon exploration
-skill can force known locked route gates only while downstairs are unknown,
+skill can force known locked route gates only while goal-compatible downstairs
+are unknown (a remembered Mines branch is not the main downstairs),
 with at least 10 HP, hunger better than Weak, no closed-inventory or known
 shop/shopkeeper evidence, and fewer than eight direction-confirmed kicks.
 It records observed WHAMM/opened/Ouch outcomes and shares its predicate with
@@ -792,8 +793,13 @@ public field; only their text when emitted in messages is available. Shop
 greetings require the native possessive-owner form, not an XP-level welcome.
 
 Visited open doors can now be search stands for a blank outward extension.
-Unvisited walkable object-covered cells are visited while downstairs are
-unknown; existing look-here staircase recognition supplies the hidden terrain.
+Unvisited walkable object-covered cells are visited while goal-compatible
+downstairs are unknown; existing look-here staircase recognition supplies the
+hidden terrain. With no downstairs known, keep covered-cell-first selection.
+With known but incompatible downstairs, keep ordinary reachable frontiers
+first and use covered-cell checks as a fallback. Selection, runtime gating,
+and evaluator replay share staircase compatibility and kick safety predicates
+([note 0038](notes/0038-branch-exit-frontier-preserving-probes.md)).
 There is no per-level SEARCH cap and no new corridor-priority tier: the
 development rerun solved 1237 without rank 4.
 

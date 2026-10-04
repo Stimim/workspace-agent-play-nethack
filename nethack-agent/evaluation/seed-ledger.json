@@ -196,6 +196,28 @@
         ]
       ],
       "note": "0035 descend-d5 cap held-out probes"
+    },
+    {
+      "source": "note-0037-goal-aware-branch-gate-probes",
+      "seeds": [],
+      "ranges": [
+        [
+          1380,
+          1409
+        ]
+      ],
+      "note": "Frozen HEAD 7455cef versus goal-aware branch-gate forcing and covered-exit discovery; scripted Score/survival/reachD5/cap3000/survival-reviewed-v2. Never fresh acceptance seeds."
+    },
+    {
+      "source": "note-0038-branch-exit-frontier-preserving-probes",
+      "seeds": [],
+      "ranges": [
+        [
+          1410,
+          1439
+        ]
+      ],
+      "note": "New frozen comparison after rejected note 0037: HEAD 7455cef vs goal-aware branch-exit discovery preserving reachable frontier precedence. Scripted Score/survival/reachD5/cap3000/survival-reviewed-v2; never fresh acceptance seeds."
     }
   ]
 }

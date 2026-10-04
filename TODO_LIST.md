@@ -61,17 +61,26 @@ Out of scope: Oracle navigation and the `gold-v1` and `oracle-v1` suites (milest
 
 ## Now: milestone 2 acceptance remediation
 
-- [ ] Diagnose Mines discovery/search under `nle-task-actions`: `traversal-v3`
-  entered the Mines only 1/5 (required 2/5); seeds 701-704 died while Fainting.
-- [ ] Diagnose Eat search/nutrition budgeting under `nle-hunger-actions`:
-  `eat-v2` had two starvation deaths (at most one allowed).
-- [ ] Investigate fresh branch recovery (seed 2105401147: 1797 SEARCH steps,
-  truncated after visiting the Mines) and combat risk (1259450733: werejackal
-  death while Not Hungry), using the retained evidence.
-- [ ] Qualify any fixes on separate predeclared development probes, then use
-  a new policy, immutable suite ids and a new fresh draw; encode ADR 0005's
-  fresh hunger-death conditions as explicit metric gates. Never rerun or
-  replace the first real-model reports ([0036](docs/notes/0036-milestone-2-real-model-evaluation.md)).
+- [x] Diagnose every existing milestone-2 seed under one Score/survival/
+  reach-D5/cap-3000 setup: 50/67 objectives before remediation.
+- [x] Qualify goal-aware branch-gate and covered-exit discovery while preserving
+  ordinary reachable frontiers: development 50→52/67 with no previous success
+  lost; frozen qualification 24→27/30, deaths 2→2, hunger deaths 0→0
+  ([0038](docs/notes/0038-branch-exit-frontier-preserving-probes.md)).
+  The first candidate failed its death gate and remains recorded
+  ([0037](docs/notes/0037-goal-aware-branch-gate-probes.md)).
+- [ ] Unify active task profiles and place-reaching suites under ADR 0006;
+  preserve all historical suites/reports, add `unified-d5-regression-v1`
+  containing the 67 seeds once. 67/67 is the development goal, not a commit gate.
+- [ ] Qualify hidden-passage/search/boulder-detour handling on the 67-seed
+  development set and a new frozen 30-seed HEAD-versus-candidate sample.
+- [ ] Qualify HP/threat-aware recovery; seed 2105401147 now dies to a wererat
+  rather than truncating, and 703 still waits behind a gas spore.
+- [ ] Investigate remaining frontier churn (924) and the 1376 hunger death;
+  reconcile the ADR's prayer interval with the code before changing it.
+- [ ] After qualified fixes, version `descend-d5-v2`, draw new fresh seeds,
+  and encode explicit hunger-death gates. Never replace the first real-model
+  reports or relabel old policy-pinned suites as new-policy evidence.
 
 
 ## Robust dungeon play (ADR 0004)

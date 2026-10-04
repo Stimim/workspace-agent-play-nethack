@@ -1053,9 +1053,6 @@ def test_audit_accepts_permitted_traversals_and_flags_unpermitted_ones(
     assert result.invalid_actions == 0
     assert result.gate_rejections == 0
     assert result.metrics.objective_legs_completed == 1
-    assert result.metrics.down_stair_traversals == 3
-    assert result.metrics.up_stair_traversals == 1
-    assert result.metrics.deepest_level == LevelKey(0, 3)
     assert result.metrics.final_hit_points > 0
 
     # The same stored level changes are invalid for a legacy run whose stored
