@@ -109,6 +109,9 @@ evaluator-replayed exhaustion markers, and typed metric thresholds, with the
 `survival-reviewed-v2` and development runner `unified-d5-regression-v2`.
 Its low-HP prayer rule qualified on development 52→54/67 and fresh
 25→29/30, without retreat/rest/disengagement ([note 0043](docs/notes/0043-single-rule-prayer-qualification.md)).
+Hazard-only 3b was rejected: fresh objectives 23→21/30 and seven
+gas-spore trapped-state gate stops; its code was removed and prayer alone
+remains shipped ([note 0044](docs/notes/0044-single-rule-hazard-qualification.md)).
 The checkout refuses
 older policy-pinned suites before creating an episode; they must not be
 relabeled or rerun as later-policy evidence. The task-progression policy's

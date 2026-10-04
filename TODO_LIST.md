@@ -80,6 +80,10 @@ Out of scope: Oracle navigation and the `gold-v1` and `oracle-v1` suites (milest
 - [x] Qualify low-HP prayer alone using the actual 3.6.7 major-trouble predicate
   and unchanged public timeout bounds: dev 52→54/67, deaths 8→5; fresh
   25→29/30, deaths 4→0 ([0043](docs/notes/0043-single-rule-prayer-qualification.md)).
+- [x] Evaluate hazard-only 3b independently after prayer: rejected with fresh
+  23→21/30 objectives and seven gate stops. Retain prayer-only product;
+  no retreat/rest/disengagement work in this qualification
+  ([0044](docs/notes/0044-single-rule-hazard-qualification.md)).
 - [ ] Qualify HP/threat-aware recovery: current 703 gas-spore explosion, 1379
   homunculus, 1377 involuntary vault relocation/guard handling, and low-HP melee.
 - [ ] Resolve remaining hidden-exit failures 5/701; preserve the retained

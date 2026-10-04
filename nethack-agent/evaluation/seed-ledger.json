@@ -301,7 +301,7 @@
       "source": "single-rule-3b-hazard-avoidance",
       "seeds": [],
       "ranges": [[271, 300]],
-      "note": "Reserved before either arm for hazard-only qualification against shipped 3a; no retreat/rest/disengagement. Note 0044 protocol; never reused or selectively replaced."
+      "note": "Completed rejected hazard-only candidate: dev 54->55, deaths 5->3; fresh 23->21, deaths 5->4; seven gate stops (four dev, three fresh). All losses traced as changed-rule trapped-state defects. Consumed; see note 0044."
     }
   ]
 }
