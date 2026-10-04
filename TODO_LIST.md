@@ -121,9 +121,10 @@ Phase 0 — tooling
 - [x] Commit guard in `omp_commit.py`: refuse staged `nethack-agent/src`
   changes unless a staged note records a qualification decision or a commit
   message carries the documented exemption trailer.
-- [ ] Commit the native ground-truth reader (true map, stairs, traps,
+- [x] Commit the native ground-truth reader (true map, stairs, traps,
   secret cells, special-level name) as a coding-agent skill under
-  `_agents/skills/`, with the notes 0031/0045 validation checks.
+  `_agents/skills/`, with the notes 0031/0045 validation checks
+  ([0047](docs/notes/0047-native-truth-reader.md)).
 - [x] Long-run harness: detached suite runs with a completion marker, so no
   run is cut short by a tool deadline.
 
