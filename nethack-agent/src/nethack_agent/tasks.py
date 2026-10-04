@@ -140,22 +140,18 @@ PROMPT_KEY_ACTION_NAMES: Final = frozenset(
     f"{type(action).__name__}.{action.name}" for action in _HUNGER_ADDITIONS
 )
 
-# Tasks whose objectives have behavior. Oracle's leg is typed below but is
-# rejected until the planner and coordinator pursue it.
+# Tasks whose objectives have behavior. Action profiles are independent of the
+# NLE environment; historical profiles remain valid.
 _SUPPORTED_TASKS: Final = frozenset(
     {NleTask.STAIRCASE, NleTask.SCORE, NleTask.SCOUT, NleTask.GOLD, NleTask.EAT}
 )
-# Each task-progression task's single leg type and action profile (ADR 0004
-# section 8). Eat needs the hunger profile to answer its item prompt, and
-# Oracle's 5,000-step cap exceeds the hunger horizon; Scout and Gold need
-# nothing beyond NLE's actions.
 _TASK_PROGRESSION: Final[
-    dict[NleTask, tuple[type[ExploreDungeonLeg] | type[FindOracleLeg], ActionProfile]]
+    dict[NleTask, type[ExploreDungeonLeg] | type[FindOracleLeg]]
 ] = {
-    NleTask.SCOUT: (ExploreDungeonLeg, ActionProfile.NLE_TASK_ACTIONS),
-    NleTask.GOLD: (ExploreDungeonLeg, ActionProfile.NLE_TASK_ACTIONS),
-    NleTask.EAT: (ExploreDungeonLeg, ActionProfile.NLE_HUNGER_ACTIONS),
-    NleTask.ORACLE: (FindOracleLeg, ActionProfile.NLE_HUNGER_ACTIONS),
+    NleTask.SCOUT: ExploreDungeonLeg,
+    NleTask.GOLD: ExploreDungeonLeg,
+    NleTask.EAT: ExploreDungeonLeg,
+    NleTask.ORACLE: FindOracleLeg,
 }
 
 
@@ -189,24 +185,18 @@ class TaskSpec:
             for leg in self.objective.legs:
                 if isinstance(leg, ExploreDungeonLeg | FindOracleLeg):
                     tasks = " and ".join(
-                        task.value
-                        for task, (leg_type, _) in _TASK_PROGRESSION.items()
-                        if isinstance(leg, leg_type)
+                        task.value for task, leg_type in _TASK_PROGRESSION.items()
                     )
                     raise ContractError(
                         f"a {leg.kind.value} leg is valid only on {tasks}"
                     )
             return
-        leg_type, profile = _TASK_PROGRESSION[self.environment]
+        leg_type = progression
         legs = self.objective.legs
         if len(legs) != 1 or not isinstance(legs[0], leg_type):
             raise ContractError(
                 f"{self.environment.value} requires exactly one "
                 f"{leg_type.kind.value} leg"
-            )
-        if self.action_profile is not profile:
-            raise ContractError(
-                f"{self.environment.value} requires action profile {profile.value}"
             )
 
     def to_json(self) -> dict[str, object]:

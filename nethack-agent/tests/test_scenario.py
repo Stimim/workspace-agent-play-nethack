@@ -16,6 +16,39 @@ from nethack_agent.scenario import (
     run_scenario,
     wait_for_service,
 )
+from nethack_agent.tasks import ActionProfile, NleTask, TaskSpec
+from nethack_agent.traversal import ExploreDungeonLeg, Objective
+
+
+@pytest.mark.parametrize(
+    ("task", "seed", "max_level"),
+    [(NleTask.SCOUT, 53, 3), (NleTask.EAT, 824, 5)],
+)
+def test_scout_and_eat_run_with_survival_profile(
+    tmp_path, task: NleTask, seed: int, max_level: int
+) -> None:
+    spec = TaskSpec(
+        task,
+        ActionProfile.NLE_SURVIVAL_ACTIONS,
+        Objective((ExploreDungeonLeg(max_level),)),
+    )
+    result = run_scenario(
+        ScenarioRunConfig(
+            seed=seed,
+            max_episode_steps=100,
+            data_directory=tmp_path / task.name,
+            port=_unused_port(),
+            timeout_seconds=60.0,
+            auto_run=True,
+            development_scripted_model=True,
+            task=spec,
+        )
+    )
+
+    assert result.execution_state is RunState.TERMINAL
+    steps = [event for event in result.events if event["kind"] == "step"]
+    assert steps
+    assert result.final_status["run"]["state"] == RunState.TERMINAL.value
 
 
 class _UnavailableClient:

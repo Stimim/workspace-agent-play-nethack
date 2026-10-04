@@ -177,23 +177,28 @@ def test_oracle_is_rejected_until_it_has_behavior() -> None:
 EXPLORE_THREE = Objective((ExploreDungeonLeg(3),))
 
 
+@pytest.mark.parametrize("profile", list(ActionProfile))
+def test_staircase_accepts_every_action_profile(profile: ActionProfile) -> None:
+    spec = TaskSpec(NleTask.STAIRCASE, profile, STAIRCASE_OBJECTIVE)
+
+    assert TaskSpec.from_json(json.loads(spec.canonical_json())) == spec
+
+
 @pytest.mark.parametrize(
-    ("task", "profile"),
+    "task",
     [
-        (NleTask.SCOUT, ActionProfile.NLE_TASK_ACTIONS),
-        (NleTask.GOLD, ActionProfile.NLE_TASK_ACTIONS),
-        (NleTask.EAT, ActionProfile.NLE_HUNGER_ACTIONS),
+        NleTask.SCOUT,
+        NleTask.GOLD,
+        NleTask.EAT,
     ],
 )
-def test_exploration_tasks_take_one_explore_dungeon_leg_and_their_profile(
+@pytest.mark.parametrize("profile", list(ActionProfile))
+def test_exploration_tasks_accept_every_action_profile(
     task: NleTask, profile: ActionProfile
 ) -> None:
     spec = TaskSpec(task, profile, EXPLORE_THREE)
 
     assert TaskSpec.from_json(json.loads(spec.canonical_json())) == spec
-    other = next(item for item in ActionProfile if item is not profile)
-    with pytest.raises(ContractError, match=f"requires action profile {profile.value}"):
-        TaskSpec(task, other, EXPLORE_THREE)
     for objective in (
         ROUND_TRIP,
         Objective((ExploreDungeonLeg(3), ExploreDungeonLeg(4))),

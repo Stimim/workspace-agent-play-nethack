@@ -1,6 +1,6 @@
 # ADR 0005: Early survival and representative-plus-fresh seed evaluation
 
-- Status: accepted (design implemented and evaluated; milestone acceptance failed)
+- Status: accepted as implemented; heterogeneous active acceptance superseded by [ADR 0006](0006-unified-goal-suites.md); historical suites/reports remain immutable
 - Date: 2026-09-30
 - Refines: [ADR 0004](0004-traversal-goals-and-task-progression.md) sections 6-8
   (action profiles, evaluation suites, staged skills)

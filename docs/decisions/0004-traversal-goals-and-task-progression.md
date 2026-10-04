@@ -1,6 +1,6 @@
 # ADR 0004: Typed traversal goals and staged NLE task progression
 
-- Status: accepted
+- Status: accepted; environment/profile coupling superseded by [ADR 0006](0006-unified-goal-suites.md)
 - Date: 2026-09-27
 - Refines: [ADR 0002](0002-deterministic-skill-arbiter.md) (fixed goal,
   unconditional level-change ban) and applies
