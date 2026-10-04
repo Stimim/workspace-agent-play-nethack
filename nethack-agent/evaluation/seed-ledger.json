@@ -218,6 +218,17 @@
         ]
       ],
       "note": "New frozen comparison after rejected note 0037: HEAD 7455cef vs goal-aware branch-exit discovery preserving reachable frontier precedence. Scripted Score/survival/reachD5/cap3000/survival-reviewed-v2; never fresh acceptance seeds."
+    },
+    {
+      "source": "note-0039-hidden-passage-detour-probes",
+      "seeds": [],
+      "ranges": [
+        [
+          1440,
+          1469
+        ]
+      ],
+      "note": "Frozen HEAD 9e56dd7 versus hidden corridor/doorway continuations, boulder-excluding search and committed detours around monster-blocked frontiers. Scripted Score/survival/reachD5/cap3000/survival-reviewed-v2; never fresh acceptance seeds."
     }
   ]
 }

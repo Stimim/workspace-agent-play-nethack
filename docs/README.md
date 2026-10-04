@@ -9,6 +9,9 @@
   branch-gate comparison is retained in [note 0037](notes/0037-goal-aware-branch-gate-probes.md);
   the qualified frontier-preserving change and its complete paired results
   are in [note 0038](notes/0038-branch-exit-frontier-preserving-probes.md).
+  The subsequent hidden-passage/boulder-detour candidate was rejected for
+  losing five established development successes despite qualifying aggregate
+  held-out results ([note 0039](notes/0039-hidden-passage-detour-probes.md)).
 - [`external/`](external/): instructions for large external source material that is not committed.
 - [`../_agents/`](../_agents/): repository-specific coding-agent procedures and tools.
 - [`../nethack-agent/knowledge/`](../nethack-agent/knowledge/): reviewed knowledge made available to the local playing agent.
