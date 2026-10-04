@@ -69,7 +69,7 @@ in `FILE` ([ADR 0004](decisions/0004-traversal-goals-and-task-progression.md)):
 ```json
 {
   "environment": "NetHackScore-v0",
-  "action_profile": "nle-task-actions",
+  "action_profile": "nle-survival-actions",
   "objective": {
     "legs": [
       {"kind": "reach_level", "level": {"dungeon_number": 0, "dungeon_level": 3}}
@@ -79,14 +79,17 @@ in `FILE` ([ADR 0004](decisions/0004-traversal-goals-and-task-progression.md)):
 ```
 
 `environment` is the NLE task id and `action_profile` names the code-defined
-action tuple handed to NLE (only `nle-task-actions`, NLE's `TASK_ACTIONS`,
-exists). `NetHackStaircase-v0` accepts only its single
-`stand_on_stairs(down, any)` leg; `NetHackScore-v0` accepts any 1-8 legs of
-`stand_on_stairs`, `reach_level`, and `enter_dungeon`. Scout, Gold, Eat, and
-Oracle are rejected until their objectives exist. Unknown or duplicate keys
-and invalid values fail before the service is contacted. The run record
-stores the spec in `runs.task` and returns it as `run.task`; runs stored
-before tasks existed return `null`. The coordinator's objective planner turns
+action tuple handed to NLE. The task, profile, and objective are independent:
+all three profiles (`nle-task-actions`, `nle-hunger-actions`, and
+`nle-survival-actions`) remain valid for supported environments so historical
+TaskSpecs still load, while active place-reaching evaluations use the survival
+profile. `NetHackStaircase-v0` accepts only its single
+`stand_on_stairs(down, any)` leg; Score accepts 1-8 traversal/location legs;
+Scout, Gold, and Eat each accept one `explore_dungeon` leg. Oracle is rejected
+until its objective has behavior. Unknown or duplicate keys and invalid values
+fail before the service is contacted.
+The run record stores the spec in `runs.task` and returns it as `run.task`; runs
+stored before tasks existed return `null`. The coordinator's objective planner turns
 the legs into typed goals; on `NetHackScore-v0` a completed last leg ends the
 run with outcome `objective_complete`, while `NetHackStaircase-v0` still ends
 on NLE's own success. For example, from `nethack-agent/`, with the JSON above
@@ -334,6 +337,16 @@ the cases, seeds, caps, and thresholds above under new suite ids; they, and the
 `scout-v1` and `eat-v1` baselines, are in turn refused by earlier policies.
 
 Policy `hierarchical-survival-exit-v1` runs its own regression suites, `staircase-v4`, `traversal-v3`, `scout-v2`, and `eat-v2`, plus a schema-3 `descend-d5-v1` suite. To run them with the real model, use `uv run nethack-agent eval run --suite evaluation/<suite>.json --data-dir <dir>`.
+
+New evaluation follows [ADR 0006](decisions/0006-unified-goal-suites.md):
+place-reaching goals run on `NetHackScore-v0` with `nle-survival-actions` and
+the same survival-capable policy; Staircase success ends on the first
+downstairs, making it a sub-goal rather than a D5 environment. The
+development-only `evaluation/unified-d5-regression-v1.json` runs the 67 unique
+historical/probe seeds as `reach_level(0,5)` with a 3,000-step cap. Its
+67/67 goal tracks remediation but does not block commits; historical suites
+and reports remain immutable. Run all cases with the scripted model using
+`uv run nethack-agent eval run --suite evaluation/unified-d5-regression-v1.json --data-dir /tmp/unified-d5-scripted --report-dir /tmp/unified-d5-scripted/reports --development-scripted-model`; omit `--development-scripted-model` and choose separate data/report directories to run with the configured real model. The next milestone's fresh-draw suite must declare its objective-success rate and explicit zero-starvation/zero-Weak-or-worse hunger-death gates before execution.
 
 Those committed suites continue to pin `staircase-reviewed-v3`; their
 historical reports and rendered bytes are unchanged. Other runs through

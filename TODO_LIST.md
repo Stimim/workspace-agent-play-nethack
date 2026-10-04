@@ -69,18 +69,19 @@ Out of scope: Oracle navigation and the `gold-v1` and `oracle-v1` suites (milest
   ([0038](docs/notes/0038-branch-exit-frontier-preserving-probes.md)).
   The first candidate failed its death gate and remains recorded
   ([0037](docs/notes/0037-goal-aware-branch-gate-probes.md)).
-- [ ] Unify active task profiles and place-reaching suites under ADR 0006;
-  preserve all historical suites/reports, add `unified-d5-regression-v1`
-  containing the 67 seeds once. 67/67 is the development goal, not a commit gate.
-- [ ] Qualify hidden-passage/search/boulder-detour handling on the 67-seed
-  development set and a new frozen 30-seed HEAD-versus-candidate sample.
+- [x] Unify new place-reaching evaluation on one survival policy,
+  `NetHackScore-v0`, and `nle-survival-actions`; keep historical suites and
+  reports immutable. Add `unified-d5-regression-v1` with 67 unique seeds and a
+  non-blocking 67/67 development target ([ADR 0006](docs/decisions/0006-unified-goal-suites.md)).
+- [ ] Qualify hidden-passage/search/boulder-detour handling on the unified
+  67-seed tracking suite and a new frozen 30-seed HEAD-versus-candidate sample.
 - [ ] Qualify HP/threat-aware recovery; seed 2105401147 now dies to a wererat
   rather than truncating, and 703 still waits behind a gas spore.
 - [ ] Investigate remaining frontier churn (924) and the 1376 hunger death;
   reconcile the ADR's prayer interval with the code before changing it.
-- [ ] After qualified fixes, version `descend-d5-v2`, draw new fresh seeds,
-  and encode explicit hunger-death gates. Never replace the first real-model
-  reports or relabel old policy-pinned suites as new-policy evidence.
+- [ ] After qualified fixes, run a new fresh-draw milestone suite with declared
+  objective-success and explicit zero-starvation/zero-Weak-or-worse death gates.
+  Never replace the first real-model reports or relabel historical suites.
 
 
 ## Robust dungeon play (ADR 0004)

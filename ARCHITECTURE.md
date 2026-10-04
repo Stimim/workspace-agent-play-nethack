@@ -50,13 +50,18 @@ The adapter must:
 `NleEnvironment` implements the current boundary. Each run executes one typed
 `tasks.TaskSpec` (`ScenarioConfig.task`, default `STAIRCASE_TASK`): an NLE task
 id (`NleTask`: Staircase, Score, Scout, Gold, Eat, Oracle), an action profile,
-and a `traversal.Objective`. `NetHackStaircase-v0` accepts only its single
-`stand_on_stairs(down, any)` leg and `NetHackScore-v0` any stair or level legs.
-`NetHackScout-v0` with `nle-task-actions` and `NetHackEat-v0` with
-`nle-hunger-actions` each accept exactly one `explore_dungeon` leg, which no
-other task accepts; Gold and Oracle are rejected until ADR 0004 section 8
-defines their objectives. An `ActionProfile` is a named, code-defined tuple of NLE action
-members. `nle-task-actions` is NLE's 23 `TASK_ACTIONS`.
+and a `traversal.Objective`. Environment, profile, and goal are independent:
+the profile describes the agent's available skills, not a task restriction.
+Staircase accepts only its single `stand_on_stairs(down, any)` leg; Score
+accepts location/traversal legs; Scout, Gold, and Eat each accept one
+`explore_dungeon` leg. Oracle remains unsupported until its goal has behavior.
+New place-reaching evaluation uses one Score/survival-policy setup:
+`NetHackScore-v0`, `nle-survival-actions`, and the location objective. NLE's
+Staircase task ends when the first qualifying downstairs is reached, so it is
+a sub-goal of reaching D5 rather than a suitable D5 evaluation environment
+([ADR 0006](docs/decisions/0006-unified-goal-suites.md)).
+An `ActionProfile` is a named, code-defined tuple of NLE action members.
+`nle-task-actions` is NLE's 23 `TASK_ACTIONS`.
 `nle-hunger-actions` keeps those actions in order, then adds ESC and one enum
 member for every otherwise-missing `a-z`/`A-Z` inventory letter, deduplicated
 by integer command value. The additions have static role `prompt_key`; existing
@@ -161,8 +166,8 @@ explored once exploration has found it exhausted; that flag, unlike
 `exhausted`, survives later knowledge growth. A strict `find_oracle` leg
 (`{"kind": "find_oracle"}`) is parseable but has no behavior yet:
 `ObjectivePlanner` refuses any objective containing it, and `TaskSpec` rejects
-`NetHackOracle-v0` as "not supported yet". `NetHackGold-v0` takes one
-`explore_dungeon` leg with `nle-task-actions`. Legs are
+`NetHackOracle-v0` as "not supported yet". Gold takes one
+`explore_dungeon` leg. Legs are
 checked after every step whose NLE episode continues (NLE zeroes the
 bottom-line statistics of a terminal
 observation). On `NetHackStaircase-v0` (and later Oracle) NLE's success
@@ -939,6 +944,16 @@ keeps this evidence in JSON and rendered Markdown; schemas 1-2 and historical
 reports retain their existing readers and rendering. No milestone-2 survival
 suite or real-model run is created by the schema change
 ([note 0022](docs/notes/0022-suite-schema-3-fresh-samples.md)).
+
+New place-reaching evaluations follow
+[ADR 0006](docs/decisions/0006-unified-goal-suites.md): use
+`NetHackScore-v0`, `nle-survival-actions`, and a location objective with the
+same survival-capable policy. The development-only
+`evaluation/unified-d5-regression-v1.json` runs 67 unique historical and probe
+seeds under `reach_level(0,5)`; its 67/67 target is diagnostic and does not
+block commits. Historical suites and reports retain their former task and
+profile as immutable evidence. A later fresh-draw milestone suite must gate
+both its declared success rate and zero starvation/Weak-or-worse hunger deaths.
 
 
 `nethack-agent eval run` drives every case/seed pair in-process through one
