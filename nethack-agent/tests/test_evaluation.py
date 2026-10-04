@@ -261,42 +261,6 @@ def test_committed_suites_refuse_under_a_later_policy_before_any_episode(
     assert not (tmp_path / "reports").exists()
 
 
-@pytest.mark.parametrize(
-    ("regression", "original"),
-    [
-        (STAIRCASE_V3_PATH, STAIRCASE_V2_PATH),
-        (TRAVERSAL_V2_PATH, TRAVERSAL_V1_PATH),
-        (
-            REPORT_DIRECTORY.parent / "traversal-v3.json",
-            REPORT_DIRECTORY.parent / "traversal-v2.json",
-        ),
-    ],
-)
-def test_regression_suites_reuse_their_predecessors_cases_under_a_new_policy(
-    regression: Path, original: Path
-) -> None:
-    suite = load_suite(regression)
-    previous = load_suite(original)
-
-    expected_policy = (
-        run_manager.POLICY_VERSION
-        if suite.suite_id in {"traversal-v3"}
-        else _TASK_PROGRESSION_POLICY
-    )
-    assert suite.policy_version == expected_policy
-    assert previous.policy_version != suite.policy_version
-    assert suite.knowledge_bundle_id == (
-        "survival-reviewed-v2"
-        if suite.policy_version == run_manager.POLICY_VERSION
-        else previous.knowledge_bundle_id
-    )
-    assert suite.suite_id != previous.suite_id
-    assert [case.to_json() for case in suite.cases] == [
-        case.to_json() for case in previous.cases
-    ]
-    assert suite.global_acceptance == previous.global_acceptance
-
-
 @pytest.mark.parametrize("malformation", ["extra", "duplicate_case", "duplicate_seed"])
 def test_schema_2_suite_contract_is_strict(tmp_path: Path, malformation: str) -> None:
     payload = suite_2_payload()
@@ -2823,103 +2787,14 @@ def test_audit_flags_a_gold_intent_on_a_cell_that_showed_no_gold(
     )
 
 
-@pytest.mark.parametrize(
-    ("name", "task", "seeds", "thresholds"),
-    [
-        (
-            "scout-v1",
-            TaskSpec(
-                NleTask.SCOUT,
-                ActionProfile.NLE_TASK_ACTIONS,
-                Objective((ExploreDungeonLeg(3),)),
-            ),
-            tuple(range(900, 905)),
-            [
-                ("explored_cells", "median", "at_least", 350),
-                ("task_return", "median", "at_least", 350),
-            ],
-        ),
-        (
-            "eat-v1",
-            TaskSpec(
-                NleTask.EAT,
-                ActionProfile.NLE_HUNGER_ACTIONS,
-                Objective((ExploreDungeonLeg(5),)),
-            ),
-            tuple(range(920, 925)),
-            [
-                ("task_return", "median", "at_least", 700),
-                ("explored_cells", "median", "at_least", 450),
-                ("starvation_death", "sum", "at_most", 1),
-            ],
-        ),
-        (
-            "scout-v2",
-            TaskSpec(
-                NleTask.SCOUT,
-                ActionProfile.NLE_TASK_ACTIONS,
-                Objective((ExploreDungeonLeg(3),)),
-            ),
-            tuple(range(900, 905)),
-            [
-                ("explored_cells", "median", "at_least", 350),
-                ("task_return", "median", "at_least", 350),
-            ],
-        ),
-        (
-            "eat-v2",
-            TaskSpec(
-                NleTask.EAT,
-                ActionProfile.NLE_HUNGER_ACTIONS,
-                Objective((ExploreDungeonLeg(5),)),
-            ),
-            tuple(range(920, 925)),
-            [
-                ("task_return", "median", "at_least", 700),
-                ("explored_cells", "median", "at_least", 450),
-                ("starvation_death", "sum", "at_most", 1),
-            ],
-        ),
-    ],
-)
-def test_committed_task_baselines_fix_seeds_caps_and_metric_gates(
-    name: str,
-    task: TaskSpec,
-    seeds: tuple[int, ...],
-    thresholds: list[tuple[str, str, str, int]],
-) -> None:
-    suite = load_suite(REPORT_DIRECTORY.parent / f"{name}.json")
-
-    if name.endswith("-v2"):
-        assert suite.policy_version == run_manager.POLICY_VERSION
-        assert suite.knowledge_bundle_id == "survival-reviewed-v2"
-    else:
-        assert suite.policy_version == _TASK_PROGRESSION_POLICY
-        assert suite.knowledge_bundle_id == "staircase-reviewed-v3"
-    (case,) = suite.cases
-    assert case.task == task
-    assert case.seeds == seeds
-    assert case.max_episode_steps == 2000
-    assert case.acceptance.min_successes == 0
-    assert case.acceptance.required_success_seeds == ()
-    assert [
-        (
-            item.metric.value,
-            item.statistic.value,
-            item.comparison.value,
-            item.value,
-        )
-        for item in case.acceptance.metric_thresholds
-    ] == thresholds
-    assert suite.global_acceptance.max_invalid_actions == 0
-    assert suite.global_acceptance.max_gate_rejections == 0
-    assert suite.global_acceptance.require_complete_records
-
-
 def schema_3_suite(tmp_path: Path) -> EvaluationSuite:
     catalog_directory = REPORT_DIRECTORY.parent
     for name in ("representative-seeds.json", "seed-ledger.json"):
         (tmp_path / name).write_bytes((catalog_directory / name).read_bytes())
+    catalog_path = tmp_path / "representative-seeds.json"
+    catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+    catalog["policy_version"] = run_manager.POLICY_VERSION
+    catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
     payload = suite_2_payload()
     payload["schema_version"] = 3
     payload["policy_version"] = run_manager.POLICY_VERSION

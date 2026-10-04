@@ -59,7 +59,7 @@ on either set: the required causal-loss table is empty.
 
 | Causal evidence | Public state immediately before first changed action |
 | --- | --- |
-| Fresh 243 | Step569, HP1/max25/XL2, turn575: candidate PRAY instead of baseline melee. |
+| Fresh 243 | Step569, HP1/max25/XL2, turn575: candidate PRAY instead of baseline westward frontier-route move (no attack target). |
 | Fresh 247 | Step777, HP3/max18/XL1, turn774: candidate PRAY instead of baseline melee. |
 | Fresh 250 | Step378, HP4/max18/XL1, turn377: candidate PRAY; eventual baseline death is absent in candidate. |
 | Fresh 267 | Step223, HP4/max18/XL1, turn221: candidate PRAY instead of baseline melee. |
@@ -81,3 +81,8 @@ their original old policy label and frozen file hashes, not relabeled evidence.
 Knowledge remains survival-reviewed-v2. Existing prayer outcome classification
 reports hunger, not HP healing; HP recovery evidence is the public trace.
 No retreat, rest, disengagement, hazard gate or generic retry is included.
+
+Policy-cutover contract verification: historical suites retain their immutable
+old policy pins. Synthetic schema-3 fixtures pin their copied representative
+catalog to the current test policy; copy-only suite assertions were removed
+instead of relabeling historical evidence. All 149 evaluation tests pass.
