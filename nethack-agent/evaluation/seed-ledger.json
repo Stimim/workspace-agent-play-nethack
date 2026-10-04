@@ -320,6 +320,12 @@
       "seeds": [],
       "ranges": [[361, 390]],
       "note": "Completed, qualified, shipped as policy hierarchical-survival-hp-prayer-burden-v1: dev 54->54/67, fresh 24->24/30, zero outcome changes on all 97 combined episodes, zero invalid/gate/integrity. Consumed; see note0045."
+    },
+    {
+      "source": "note-0045-rule2-look-here-staircase-discovery",
+      "seeds": [],
+      "ranges": [[391, 420]],
+      "note": "Frozen before either arm: HEAD 90535b1 versus look-here staircase discovery under an ambiguous object pile. Same Score/survival/reachD5/cap3000/survival-reviewed-v2 protocol and note0040 gates. All reserved seeds consumed regardless of completion. See note0045."
     }
   ]
 }
