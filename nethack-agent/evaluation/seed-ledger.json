@@ -295,7 +295,13 @@
       "source": "single-rule-3a-low-hp-prayer-priority-corrected",
       "seeds": [],
       "ranges": [[241, 270]],
-      "note": "Reserved before either arm for corrected low-HP prayer priority candidate, note 0043. No retreat/rest/disengagement or hazard changes. Never reused or selectively replaced."
+      "note": "Completed qualified low-HP prayer priority candidate: dev 52->54, deaths 8->5; fresh 25->29, deaths 4->0. Shipped in c150446; seeds consumed. See note 0043."
+    },
+    {
+      "source": "single-rule-3b-hazard-avoidance",
+      "seeds": [],
+      "ranges": [[271, 300]],
+      "note": "Reserved before either arm for hazard-only qualification against shipped 3a; no retreat/rest/disengagement. Note 0044 protocol; never reused or selectively replaced."
     }
   ]
 }
