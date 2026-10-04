@@ -84,7 +84,6 @@ class Skill(Enum):
     HUNGER = "hunger"
     PRAYER = "prayer"
     BURDEN = "burden"
-    RANGED_THROW = "ranged_throw"
     # Route to visible gold on NetHackGold-v0; deterministic, never offered to
     # the model.
     GOLD_NAVIGATION = "gold_navigation"
@@ -912,62 +911,6 @@ class DropEvidence:
 
 
 @dataclass(frozen=True, slots=True)
-class ThrowEvidence:
-    """A reviewed ranged dagger thrown at a displayed, aligned gas spore.
-
-    `target` is the spore's cell; `direction` is the unit compass step from
-    the hero toward it, used to answer the native "In what direction?"
-    prompt. `command` is the next key this evidence authorizes: the item
-    letter while the throw-item prompt is open, or the direction command
-    once a letter has been answered.
-    """
-
-    letter: str
-    target: MapCell
-    direction: tuple[int, int]
-    command: int
-
-    def __post_init__(self) -> None:
-        string_value(self.letter, "throw letter", minimum=1, maximum=1)
-        if not isinstance(self.target, MapCell):
-            raise TypeError("throw target must be a MapCell")
-        if (
-            not isinstance(self.direction, tuple)
-            or len(self.direction) != 2
-            or any(component not in (-1, 0, 1) for component in self.direction)
-            or self.direction == (0, 0)
-        ):
-            raise ContractError("throw direction must be a unit compass step")
-        integer_value(self.command, "throw command", minimum=0, maximum=255)
-
-    def to_json(self) -> dict[str, object]:
-        return {
-            "letter": self.letter,
-            "target": self.target.to_json(),
-            "direction": list(self.direction),
-            "command": self.command,
-        }
-
-    @classmethod
-    def from_json(cls, value: object) -> Self:
-        payload = object_value(
-            value, "throw evidence", {"letter", "target", "direction", "command"}
-        )
-        direction = array_value(payload["direction"], "throw direction")
-        if len(direction) != 2:
-            raise ContractError("throw direction must have two components")
-        return cls(
-            string_value(payload["letter"], "throw letter", minimum=1, maximum=1),
-            MapCell.from_json(payload["target"], "throw target"),
-            (
-                integer_value(direction[0], "throw direction x", minimum=-1, maximum=1),
-                integer_value(direction[1], "throw direction y", minimum=-1, maximum=1),
-            ),
-            integer_value(payload["command"], "throw command", minimum=0, maximum=255),
-        )
-
-
-@dataclass(frozen=True, slots=True)
 class ActionIntent:
     """The route, attack target, or prayer evidence for one deterministic action.
 
@@ -994,7 +937,6 @@ class ActionIntent:
     corpse: CorpseEvidence | None = None
     food: FoodEvidence | None = None
     drop: DropEvidence | None = None
-    throw: ThrowEvidence | None = None
 
     def __post_init__(self) -> None:
         if self.destination is not None and not isinstance(
@@ -1015,8 +957,6 @@ class ActionIntent:
             raise TypeError("intent food must be FoodEvidence or None")
         if self.drop is not None and not isinstance(self.drop, DropEvidence):
             raise TypeError("drop must be DropEvidence")
-        if self.throw is not None and not isinstance(self.throw, ThrowEvidence):
-            raise TypeError("throw must be ThrowEvidence")
         if self.drop is not None and any(
             value is not None
             for value in (
@@ -1026,23 +966,9 @@ class ActionIntent:
                 self.prayer,
                 self.corpse,
                 self.food,
-                self.throw,
             )
         ):
             raise ContractError("drop intent cannot also select another action")
-        if self.throw is not None and any(
-            value is not None
-            for value in (
-                self.destination,
-                self.attack_target,
-                self.path,
-                self.prayer,
-                self.corpse,
-                self.food,
-                self.drop,
-            )
-        ):
-            raise ContractError("throw intent cannot also select another action")
         if (
             self.destination is None
             and self.attack_target is None
@@ -1050,7 +976,6 @@ class ActionIntent:
             and self.corpse is None
             and self.food is None
             and self.drop is None
-            and self.throw is None
         ):
             raise ContractError(
                 "intent requires a destination, attack target, prayer, "
@@ -1072,7 +997,6 @@ class ActionIntent:
             *(self.path or ()),
             *((self.corpse.cell,) if self.corpse is not None else ()),
             *((self.food.cell,) if self.food is not None else ()),
-            *((self.throw.target,) if self.throw is not None else ()),
         )
 
     def to_json(self) -> dict[str, object]:
@@ -1094,8 +1018,6 @@ class ActionIntent:
             payload["food"] = self.food.to_json()
         if self.drop is not None:
             payload["drop"] = self.drop.to_json()
-        if self.throw is not None:
-            payload["throw"] = self.throw.to_json()
         return payload
 
     @classmethod
@@ -1107,7 +1029,7 @@ class ActionIntent:
             value,
             "intent",
             {"destination", "attack_target"},
-            optional={"path", "level", "prayer", "corpse", "food", "drop", "throw"},
+            optional={"path", "level", "prayer", "corpse", "food", "drop"},
         )
         destination = payload["destination"]
         attack_target = payload["attack_target"]
@@ -1117,7 +1039,6 @@ class ActionIntent:
         corpse = payload.get("corpse")
         food = payload.get("food")
         drop = payload.get("drop")
-        throw = payload.get("throw")
         if path is not None:
             path = array_value(path, "intent path")
             if len(path) > MAX_INTENT_PATH_LENGTH:
@@ -1145,7 +1066,6 @@ class ActionIntent:
             corpse=None if corpse is None else CorpseEvidence.from_json(corpse),
             food=None if food is None else FoodEvidence.from_json(food),
             drop=None if drop is None else DropEvidence.from_json(drop),
-            throw=None if throw is None else ThrowEvidence.from_json(throw),
         )
 
 
@@ -1227,13 +1147,7 @@ class ActionSelection:
             if self.source is not ActionSelectionSource.DETERMINISTIC_SKILL and not (
                 self.source is ActionSelectionSource.DETERMINISTIC_PROMPT
                 and self.skill
-                in (
-                    Skill.PRAYER,
-                    Skill.CORPSE,
-                    Skill.HUNGER,
-                    Skill.BURDEN,
-                    Skill.RANGED_THROW,
-                )
+                in (Skill.PRAYER, Skill.CORPSE, Skill.HUNGER, Skill.BURDEN)
                 and self.intent.destination is None
                 and self.intent.attack_target is None
                 and self.intent.path is None
@@ -1242,10 +1156,6 @@ class ActionSelection:
                     or (self.skill is Skill.CORPSE and self.intent.corpse is not None)
                     or (self.skill is Skill.HUNGER and self.intent.food is not None)
                     or (self.skill is Skill.BURDEN and self.intent.drop is not None)
-                    or (
-                        self.skill is Skill.RANGED_THROW
-                        and self.intent.throw is not None
-                    )
                 )
             ):
                 raise ContractError(
@@ -1285,16 +1195,6 @@ class ActionSelection:
             self.intent is None or self.intent.drop is None
         ):
             raise ContractError("burden skill requires drop evidence")
-        if (
-            self.intent is not None
-            and self.intent.throw is not None
-            and self.skill is not Skill.RANGED_THROW
-        ):
-            raise ContractError("only the ranged-throw skill carries throw evidence")
-        if self.skill is Skill.RANGED_THROW and (
-            self.intent is None or self.intent.throw is None
-        ):
-            raise ContractError("ranged-throw skill requires throw evidence")
         corpse_route = (
             self.intent is not None
             and self.intent.destination is not None
@@ -1495,16 +1395,6 @@ def survival_action_selection_error(
     action_name: str, selection: ActionSelection
 ) -> str | None:
     """Why a restricted action is invalid from its recorded selection fields."""
-    if selection.intent is not None and selection.intent.throw is not None:
-        if selection.skill is Skill.RANGED_THROW and (
-            selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
-            or (
-                selection.source is ActionSelectionSource.DETERMINISTIC_SKILL
-                and action_name == "Command.THROW"
-            )
-        ):
-            return None
-        return "throw requires deterministic ranged-hazard clearing"
     if selection.intent is not None and selection.intent.drop is not None:
         if selection.skill is Skill.BURDEN and (
             selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
@@ -1593,8 +1483,7 @@ def survival_action_selection_error(
         action_name == "CompassDirection.NW"
         and selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
         and (
-            selection.skill
-            not in (Skill.PRAYER, Skill.HUNGER, Skill.CORPSE, Skill.RANGED_THROW)
+            selection.skill not in (Skill.PRAYER, Skill.HUNGER, Skill.CORPSE)
             or (selection.skill is Skill.HUNGER and selection.intent is not None)
             or (
                 selection.skill is Skill.PRAYER
@@ -1615,10 +1504,6 @@ def survival_action_selection_error(
                     or selection.intent.attack_target is not None
                     or selection.intent.path is not None
                 )
-            )
-            or (
-                selection.skill is Skill.RANGED_THROW
-                and (selection.intent is None or selection.intent.throw is None)
             )
         )
     ):

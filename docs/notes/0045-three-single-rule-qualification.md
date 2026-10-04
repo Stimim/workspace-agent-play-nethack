@@ -180,3 +180,33 @@ Per the same preregistered protocol, fresh 451-480 is spoiled and never reused; 
 - hazard.py: `71ca98c0596c6e9f7105d4e434b520dcc7257251932c8dc0b1f952638eeeb0e0`
 - test_skills.py: `8a3db6c481c1aa508bc94cf187c4f8948df52638e754832a003c7902930222a4`
 - all other files: unchanged from the SHA-256 lists above.
+
+## Rule 3 disposition: NOT qualified, not shipped (director pause)
+
+On 2026-10-04 the director paused work while the twice-corrected rule-3 arms
+were running. Fresh 481-510 completed in both arms: baseline `5536c7d` and
+candidate each scored 28/30 objectives, one death (seed 501, giant mimic, Not
+Hungry), one truncation, with identical outcomes on every seed and zero invalid
+actions, gate rejections and integrity problems. The candidate development arm
+was cut off at **56/67** when the worker was stopped (report status `running`,
+`/tmp/rule3-fix2-candidate-dev/reports/unified-d5-regression-v4-development-20261004T145349Z.json`).
+On those 56 seeds it differs from the complete baseline development report
+(`/tmp/rule3-baseline-dev/`) in two places: seed 1 truncated -> objective
+complete, and seed 1528054415 truncated -> death. That new death was never
+causally reviewed.
+
+A tooling cutoff spoils the sample (note 0040), and an unreviewed new death
+cannot ship, so rule 3 is **not qualified**. Seeds 481-510 are consumed and
+never reused.
+
+Commit hygiene: commits `efe58e3`, `cad9108` and `87f74de` put part of the
+rule-3 product code (`hazard.py`, `decision.py`, tests) on `main` during
+qualification. The remaining frozen files (`coordinator.py`,
+`environment.py`, `evaluation.py`, `tasks.py`, `test_coordinator.py`) were
+never committed. The working tree matched every frozen SHA-256 above. The
+complete candidate is preserved outside the repository as
+`/tmp/rule3-candidate-twice-corrected.patch` (SHA-256
+`06fa50f45e7eecb3acb1bf02d915f013c30d508e321aef552fe25e062f784487`). The
+disposition commit restores all product and test files to `5536c7d`, so the
+shipped policy remains `hierarchical-survival-hp-prayer-burden-look-v1`.
+Requalifying rule 3 needs a fresh frozen sample and a complete development arm.
