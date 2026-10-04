@@ -94,11 +94,148 @@ Out of scope: Oracle navigation and the `gold-v1` and `oracle-v1` suites (milest
   **acceptance failed** on the hunger gate
   ([0046](docs/notes/0046-descend-d5-v2-real-model-acceptance.md)). ADR 0006
   accepted.
-- [ ] Plan the next round toward 67/67 and a passing retry (new policy
-  version, new draw): exit discovery when the main downstairs is hidden or
-  blocked (the stall that becomes hunger), HP/threat recovery when prayer is
-  unavailable (703, 1379, 1377 vault guard), rule 3 requalification, and the
-  prayer-interval reconciliation (1376).
+- [x] Plan the next round: superseded by milestone 3 below. Its Oracle target
+  lies on Dlvl 5-9, so it subsumes the reach-D5 retry; the open D5 classes
+  (exit-discovery stalls, combat without prayer, rule 3, prayer interval)
+  are milestone-3 work items.
+
+## Next: milestone 3 — Mines to Minetown, and the Oracle
+
+Goal: the same single agent reaches **Minetown** (Gnomish Mines level 3 or
+4, Dlvl 5-8) and, separately, the **Oracle** level (Dlvl 5-9) and stands
+next to the peaceful Oracle without attacking her. Scope: capability areas
+A (survive), B (food), F (navigation) below. Design record: a new ADR 0007
+before implementation (objectives, detectors, suites, gates).
+
+Process rules (lessons from milestone 2, notes 0037-0046):
+one rule per worker session; every product change ships only with its
+qualification note (note 0040 protocol, frozen fresh sample); evaluations
+run with `timeout: 0` or detached; native-memory ground truth is
+diagnosis-only, never a policy input.
+
+Phase 0 — tooling
+- [ ] Commit guard in `omp_commit.py`: refuse staged `nethack-agent/src`
+  changes unless a staged note records a qualification decision for them.
+- [ ] Commit the native ground-truth reader (true map, stairs, traps,
+  secret cells, special-level name) as a coding-agent skill under
+  `_agents/skills/`, with the notes 0031/0045 validation checks.
+- [ ] Long-run harness: detached suite runs with a completion marker, so no
+  run is cut short by a tool deadline.
+
+Phase 1 — objectives and measurement
+- [ ] `reach_minetown` objective leg: a public-evidence detector (temple
+  or altar, priest, watchmen, shopkeepers, Minetown fountains; Orcish Town
+  by orcs on Mines level 3/4), validated against native special-level
+  identity on every Mines level visited by a probe set. Detector errors
+  are measured, not assumed.
+- [ ] Enable `find_oracle` in the planner: identify the Oracle level
+  (centaur statues, fountains, peaceful Oracle glyph, level sounds),
+  approach to adjacency, never attack; avoid the Sokoban up-branch on the
+  level above.
+- [ ] Development suites (ADR 0006: Score, survival profile): a 67-seed
+  regression per target from the historical seeds, plus held-out probes
+  that fix each step cap (likely above 3,000; NLE limit noted).
+- [ ] Baseline both targets with the current policy and classify every
+  failure with ground truth: deaths by cause and hunger, stalls by true
+  blocker, branch confusion, peaceful-monster incidents.
+
+Phase 2 — F: navigation (expected largest class)
+- [ ] Exit discovery from true-map evidence on every stalled level
+  (milestone-2 seeds plus 2064852799 and 249447619).
+- [ ] Stall breaker: when a level has consumed a fixed turn budget with the
+  goal exit unknown, change strategy (other known exits, branch detour,
+  broader search) instead of continuing; budget fixed from probes.
+- [ ] Gnomish Mines navigation: irregular cave levels, no secret doors,
+  narrow diagonals, boulders; branch identity on the way down and back up.
+- [ ] Minetown conduct: never anger the watch (no door kicking, no
+  fountain quaffing or dipping, no shop theft); avoid temple priest anger.
+- [ ] Requalify ranged clearing of gas spores and floating eyes (rule 3
+  patch in `/tmp`; note 0045) under a fresh sample.
+
+Phase 3 — A: survival in a crowded, deeper dungeon
+- [ ] Threat model from reviewed cards: monster difficulty and special
+  attacks (floating eye, cockatrice, nymph, leprechaun, soldier ant,
+  werecreatures, gas spore, mimics in shops, dwarves with mattocks).
+- [ ] Peaceful handling for a dwarven hero in the Mines: never attack
+  peaceful gnomes/dwarves/watch; keep the `Really attack?` decline.
+- [ ] Escape and recovery when prayer is unavailable: retreat to a
+  corridor or stairs, change level, Elbereth (new action through the gate
+  contract), rest to heal when no threat is visible.
+- [ ] Status effects and traps: wait out stun/confusion/blindness safely,
+  remember and route around known traps.
+- [ ] Vault-guard compliance after involuntary relocation (seed 1377).
+
+Phase 4 — B: food and prayer over a longer horizon
+- [ ] Reconcile the prayer interval (code 1,229 versus ADR 1,029) from wiki
+  evidence; change it only with evidence.
+- [ ] Carry a food reserve (non-shop floor food while unburdened), and
+  eat before long stalls; measure turns-per-level against the food horizon.
+
+Phase 5 — acceptance
+- [ ] Frozen policy, then one real-model run of fresh-draw `minetown-v1`
+  and `oracle-v1` suites: declared success rates from probes, zero
+  starvation and zero Weak-or-worse deaths, zero peaceful kills, zero
+  invalid actions and gate rejections.
+
+## Capability roadmap to ascension
+
+Tracks what the agent must eventually do. Milestones pull items from here;
+check an item only when a qualified, shipped skill covers it. Order of
+attack: A, B, F (survive and explore), then C, D, E (power), then G
+(endgame); H underpins all.
+
+### A. Survive moment to moment
+- [ ] Tactical combat: target choice, corridors and doorways, Elbereth, retreat, stair escape (now: melee, low-HP prayer).
+- [ ] Dangerous-monster rules: floating eye, cockatrice, nymph, leprechaun, soldier ant, werecreature, mind flayer, engulfers.
+- [ ] Rest and heal safely; use healing items.
+- [ ] Escape items and actions: teleport scrolls, digging down, Elbereth (now: prayer only).
+- [ ] Trap recognition and avoidance, including sinks, fountains, altars.
+- [ ] Cure status problems: blindness, confusion, stun, hallucination, sickness, sliming, stoning.
+
+### B. Food and luck
+- [ ] Nutrition across the whole game: rations, corpses, tins, prayer for food (now: partial, `survival-reviewed-v2`).
+- [ ] Avoid deadly or harmful corpses: cockatrice, poisonous, acidic, cannibalism, rotten (now: reviewed safe list).
+- [ ] Prayer timeout and luck management: no peaceful kills, no luck penalties.
+
+### C. Build a strong character
+- [ ] Pick up and evaluate weapons, armor and tools; stay under the weight limit (now: burden recovery only).
+- [ ] Weapon skills with `#enhance`; Excalibur by fountain dipping at XL 5+.
+- [ ] Armor class: wear, enchant, swap; handle cursed items.
+- [ ] Gain levels: safe experience, potions of gain level, wraith corpses.
+- [ ] Gain intrinsics from corpses: fire, cold, poison, shock, sleep, disintegration resistance, telepathy; speed, see invisible, teleport control.
+- [ ] Reflection and magic resistance before the late game.
+- [ ] Use the pet: curse testing, keeping it alive.
+
+### D. Items and identification
+- [ ] Use scrolls, potions, rings, amulets, and wands.
+- [ ] Identify: price identification, wand engrave-testing, scrolls of identify, altar BUC testing.
+- [ ] Bless and curse management: holy water, altars, remove curse.
+- [ ] Containers and stashes: bag of holding without cancellation accidents.
+
+### E. Economy and NPCs
+- [ ] Shops: buy, sell, price-identify, pay; never anger a shopkeeper (now: avoid only).
+- [ ] Temples and priests: buy protection, convert altars.
+- [ ] Other NPCs: vault guards, the Watch, the Oracle, quest leader.
+
+### F. Navigation and dungeon knowledge
+- [ ] Robust exit discovery: search, kick, dig, unlock (now: partial; the main open weakness).
+- [ ] Branches: Gnomish Mines and Minetown, Sokoban rules, Oracle, Big Room, Fort Ludios.
+- [ ] Special levels: Medusa, the Castle (wand of wishing, drawbridge), Valley of the Dead, Gehennom mazes, Vlad's Tower, the Wizard's Tower.
+- [ ] Movement tools: levitation, water walking, digging, controlled teleport.
+
+### G. Endgame (mandatory for ascension)
+- [ ] Use wishes well.
+- [ ] The Quest: XL 14, nemesis, artifact, Bell of Opening.
+- [ ] Invocation items: Candelabrum (Vlad), Book of the Dead (Wizard), Bell; invocation at the vibrating square.
+- [ ] The Amulet of Yendor from the Sanctum; ascend while harassed; reject fakes.
+- [ ] The Elemental Planes and the Astral Plane: offer at the correct high altar.
+
+### H. Agent-level capabilities
+- [ ] Long-horizon planning and cross-level memory: stashes, altars, identified items.
+- [ ] Risk assessment: fight, flee, or pray from threat level.
+- [ ] Interaction coverage: menus, prompts, extended commands, multi-turn actions.
+- [ ] Knowledge retrieval for the local model beyond hand-curated cards.
+- [ ] Staged full-game benchmarks and survival metrics; full `NetHackScore-v0` runs, then an ascension suite.
 
 
 ## Robust dungeon play (ADR 0004)
@@ -169,13 +306,6 @@ Browser tooling for inspecting runs. Evidence, design, and the limitations behin
 - [x] Keep the sticky agent column inside a 1920x1080 viewport before page scroll ([0018](docs/notes/0018-agent-column-viewport-fit.md)).
 - [ ] Mark an intent destination on the hero's own cell; the map leaves it unboxed and only the Events row names it.
 - [ ] Show where replanning diverges from a drawn path, and record routes that steps compute but do not follow (waiting for a blocker, staircase defense).
-
-## Later: autonomous ascension
-
-- [ ] Establish staged full-game benchmarks and survival metrics.
-- [ ] Design long-horizon planning, branch progression, identification, equipment, resistances, and recovery policies.
-- [ ] Build an auditable offline knowledge retrieval pipeline beyond hand-curated cards.
-- [ ] Evaluate full `NetHackScore-v0` runs, then define an ascension evaluation suite.
 
 ## Explicitly deferred
 
