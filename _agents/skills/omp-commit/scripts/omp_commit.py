@@ -265,9 +265,7 @@ def _qualification_guard(repository: Path, message: str) -> None:
         if line.startswith("Qualification-Exempt:")
     ]
     exemptions = [
-        match
-        for line in exemption_lines
-        if (match := _EXEMPT_TRAILER.fullmatch(line))
+        match for line in exemption_lines if (match := _EXEMPT_TRAILER.fullmatch(line))
     ]
     if len(exemption_lines) == 1 and len(exemptions) == 1:
         return
@@ -330,13 +328,45 @@ def _message_with_trailer(message: str, conversation: str) -> str:
 def _validate_commit_args(arguments: list[str]) -> list[str]:
     if arguments[:1] == ["--"]:
         arguments = arguments[1:]
+    forbidden = {
+        "--only",
+        "-o",
+        "-a",
+        "--all",
+        "-i",
+        "--include",
+        "--interactive",
+        "--patch",
+        "-p",
+        "--pathspec-from-file",
+        "--pathspec-file-nul",
+    }
     for argument in arguments:
+        if not argument.startswith("-"):
+            raise CommitSkillError(
+                f"pathspec argument {argument!r} is not allowed; "
+                "commit staged changes only"
+            )
         if any(
             argument == option or argument.startswith(f"{option}=")
             for option in _MESSAGE_OPTIONS
         ):
             raise CommitSkillError(
                 f"message option {argument!r} is not allowed; use --message-file"
+            )
+        if any(
+            argument == option
+            or (option.startswith("--") and argument.startswith(f"{option}="))
+            or (
+                len(option) == 2
+                and option.startswith("-")
+                and not option.startswith("--")
+                and argument.startswith(option)
+            )
+            for option in forbidden
+        ):
+            raise CommitSkillError(
+                f"commit option {argument!r} is not allowed; commit staged changes only"
             )
     return arguments
 

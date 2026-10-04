@@ -380,7 +380,11 @@ def _stage(repository: Path, relative: str, content: str) -> None:
 
 
 def _guard_commit(
-    tmp_path: Path, message_text: str, *, include_note: str | None = None
+    tmp_path: Path,
+    message_text: str,
+    *,
+    include_note: str | None = None,
+    git_arguments: tuple[str, ...] = (),
 ) -> tuple[subprocess.CompletedProcess[str], Path]:
     repository, _, environment = _scratch_repository(tmp_path)
     _stage(repository, "nethack-agent/src/change.py", "change = True\n")
@@ -404,6 +408,7 @@ def _guard_commit(
         "commit",
         "--message-file",
         str(message),
+        *git_arguments,
         env=environment,
     )
     return completed, repository
@@ -499,3 +504,32 @@ def test_staged_note_without_decision_heading_does_not_qualify(
 
     assert completed.returncode != 0
     assert "nethack-agent/src/change.py" in completed.stderr
+
+
+@pytest.mark.parametrize(
+    ("git_arguments", "rejected"),
+    [
+        (("--only", "nethack-agent/src/x.py"), "--only"),
+        (("-a",), "-a"),
+        (("nethack-agent/src/x.py",), "pathspec"),
+    ],
+)
+def test_refuses_commit_arguments_that_bypass_staged_index(
+    tmp_path: Path, git_arguments: tuple[str, ...], rejected: str
+) -> None:
+    completed, repository = _guard_commit(
+        tmp_path,
+        "Change\n\nQualification-Exempt: tooling-only test\n",
+        git_arguments=git_arguments,
+    )
+
+    assert completed.returncode != 0
+    assert rejected in completed.stderr
+    assert (
+        subprocess.run(
+            ["git", "-C", str(repository), "rev-parse", "--verify", "HEAD"],
+            check=False,
+            capture_output=True,
+        ).returncode
+        != 0
+    )

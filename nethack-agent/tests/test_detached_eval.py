@@ -128,3 +128,26 @@ def test_detached_process_survives_starting_parent_exit(tmp_path: Path) -> None:
     done = _wait_done(state, "orphan")
     assert done["exit_code"] == 0
     assert "survived" in (state / "orphan.log").read_text(encoding="utf-8")
+
+
+def test_exit_one_is_preserved_in_done_and_wait(tmp_path: Path) -> None:
+    state = tmp_path / "state"
+    started = _run(
+        state,
+        "start",
+        "--name",
+        "exit-one",
+        "--cwd",
+        str(tmp_path),
+        "--",
+        sys.executable,
+        "-c",
+        "raise SystemExit(1)",
+    )
+    assert started.returncode == 0, started.stderr
+
+    done = _wait_done(state, "exit-one")
+    assert done["exit_code"] == 1
+    waited = _run(state, "wait", "exit-one")
+    assert waited.returncode == 1
+    assert "exit 1" in waited.stdout
