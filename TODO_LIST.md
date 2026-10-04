@@ -101,9 +101,13 @@ Out of scope: Oracle navigation and the `gold-v1` and `oracle-v1` suites (milest
 
 ## Next: milestone 3 — Mines to Minetown, and the Oracle
 
-Goal: the same single agent reaches **Minetown** (Gnomish Mines level 3 or
-4, Dlvl 5-8) and, separately, the **Oracle** level (Dlvl 5-9) and stands
-next to the peaceful Oracle without attacking her. Scope: capability areas
+Goal: the same single agent, in two separate suites, (1) reaches
+**Minetown** (Gnomish Mines level 3 or 4, Dlvl 5-8) and **enters its
+temple**, and (2) reaches the **Oracle** level (Dlvl 5-9) and **stands next
+to the peaceful Oracle** without attacking her. Orcish Town counts as
+Minetown; in NetHack 3.6.7 (`dat/mines.des`, `minetn-1`) its altar lies in
+an ordinary region, not a temple room, so its success is standing on that
+unaligned altar (provisional; confirm in ADR 0007). Scope: capability areas
 A (survive), B (food), F (navigation) below. Design record: a new ADR 0007
 before implementation (objectives, detectors, suites, gates).
 
@@ -123,11 +127,12 @@ Phase 0 — tooling
   run is cut short by a tool deadline.
 
 Phase 1 — objectives and measurement
-- [ ] `reach_minetown` objective leg: a public-evidence detector (temple
-  or altar, priest, watchmen, shopkeepers, Minetown fountains; Orcish Town
-  by orcs on Mines level 3/4), validated against native special-level
-  identity on every Mines level visited by a probe set. Detector errors
-  are measured, not assumed.
+- [ ] `enter_minetown_temple` objective leg. Success evidence: the
+  temple-entry messages of 3.6.7 `src/priest.c` (`Pilgrim, you enter a ...
+  place!`, the forbidding/peace feelings) while on Mines level 3 or 4, or,
+  in Orcish Town, standing on its unaligned altar. Validate the detector
+  against native special-level identity and room type on every Mines level
+  a probe set visits; detector errors are measured, not assumed.
 - [ ] Enable `find_oracle` in the planner: identify the Oracle level
   (centaur statues, fountains, peaceful Oracle glyph, level sounds),
   approach to adjacency, never attack; avoid the Sokoban up-branch on the
