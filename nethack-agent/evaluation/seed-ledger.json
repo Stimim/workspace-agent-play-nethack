@@ -344,6 +344,12 @@
       "seeds": [],
       "ranges": [[481, 510]],
       "note": "Not qualified: fresh arms completed 28/30 each, but the candidate dev arm was cut off at 56/67 by a director pause and its one new dev death was never reviewed. Rule 3 not shipped; consumed, never reused. See note0045."
+    },
+    {
+      "source": "note-0046-descend-d5-v2-aborted-launch",
+      "seeds": [47359449, 75767809, 295655445, 351146065, 559586091, 577302227, 773519161, 949189622, 965386800, 1150182636, 1187627742, 1235709582, 1254878537, 1295772422, 1318243115, 1500967190, 1776041382, 1858658579, 1891249871, 2047049452],
+      "ranges": [],
+      "note": "Draw 3519210030 of a descend-d5-v2 launch cancelled seconds in, before any episode finished (no deadline set). Never acceptance evidence; consumed, never reused. See note0046."
     }
   ]
 }

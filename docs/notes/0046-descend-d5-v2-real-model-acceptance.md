@@ -31,3 +31,16 @@ A failed run is kept; a retry needs a new policy version and a new draw.
   the gate. The gate is not loosened for that.
 - **Single run:** no rerun, retry, or replacement. A tooling cutoff is
   disclosed and spoils the run; it does not license a selective resume.
+
+## Disclosure: aborted first launch
+
+The first launch (report stamp `20261004T173647Z`, draw seed `3519210030`)
+was started without an explicit tool deadline. It was cancelled seconds in,
+while episode 1 of 20 (seed 1187627742) was still running, so no episode
+result was observed. Its incomplete report and data are kept outside the
+committed report directory at
+`nethack-agent/data/evaluations/descend-d5-v2-aborted-20261004T173647Z/`
+(ignored by Git). All 20 of its drawn seeds are registered in the used-seed
+ledger and never reused. The acceptance run below is a complete new draw
+under the unchanged preregistration, launched with no deadline; it is not a
+selective resume.
