@@ -240,6 +240,28 @@
         ]
       ],
       "note": "Note 0041 fresh 30-seed HEAD-versus-candidate comparison for the rejected staircase-retreat/RecoverySkill candidate (survival-reviewed-v2 vs survival-reviewed-v3). HEAD run completed 30/30; candidate run completed 19/30 before an unrelated tooling execution cap. Both partial and complete results are real episodes against the live engine; the seeds are consumed regardless of completion count."
+    },
+    {
+      "source": "note-0042-fresh-91-120-spoiled-attempt",
+      "seeds": [],
+      "ranges": [
+        [
+          91,
+          120
+        ]
+      ],
+      "note": "First note-0042 fresh-sample attempt for the fixed recovery candidate. Both HEAD and candidate runs were cut short mid-suite by an unrelated tooling 300-second background execution cap (no explicit --timeout passed); results are spoiled and were not used for the note-0042 decision. Real episodes ran against the live engine, so the seeds are consumed; the requalification used a new range (121-150) instead of resuming or reusing this one."
+    },
+    {
+      "source": "note-0042-fresh-121-150-intermediate-candidate",
+      "seeds": [],
+      "ranges": [
+        [
+          121,
+          150
+        ]
+      ],
+      "note": "Second note-0042 fresh-sample run (completed, not cut short) against an intermediate candidate that fixed only the hostile-adjacency scoping defect. It revealed a second, previously latent defect from the same health_action_error check: a gas-spore blast-radius rejection of ExploreLevelSkill's in-flight search (4 new fresh gate rejections at seeds 127, 132, 144, 146; the dev set still showed its original 5). That intermediate candidate was fixed again (ExploreLevelSkill's search-spot selection now proactively avoids gas-spore blast radius) and an entirely new candidate/sample was frozen per the note-0040 protocol; these seeds are consumed and not reused."
     }
   ]
 }
