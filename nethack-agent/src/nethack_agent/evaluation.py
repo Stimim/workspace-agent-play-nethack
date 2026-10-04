@@ -50,6 +50,7 @@ from nethack_agent.decision import (
     DestinationKind,
     FoodEvidence,
     PrayerEvidence,
+    PrayerOutcome,
     PrayerPermit,
     PromptKind,
     PromptPermit,
@@ -57,6 +58,7 @@ from nethack_agent.decision import (
     RunState,
     Skill,
     classify_corpse_outcome,
+    classify_prayer_outcome,
     confirmation_answer_error,
     confirmation_prompt_kind,
     corpse_age_matches,
@@ -65,7 +67,6 @@ from nethack_agent.decision import (
     is_corpse_decline,
     level_change_error,
     observed_corpse_decline,
-    observed_prayer_outcome,
     prayer_action_error,
     prompt_response_error,
 )
@@ -98,7 +99,6 @@ from nethack_agent.navigation import (
 )
 from nethack_agent.observation import ProjectedObservation
 from nethack_agent.ollama import OllamaClient, OllamaConfig, OllamaError
-from nethack_agent.recovery import health_action_error
 from nethack_agent.replay import (
     ExplorationReplay,
     derive_action_record,
@@ -2331,22 +2331,6 @@ def _action_is_valid(
     ):
         return False
     selection = payload.selection
-    if (
-        selection.skill is Skill.RECOVERY
-        and action_profile is not ActionProfile.NLE_SURVIVAL_ACTIONS
-    ):
-        return False
-    if (
-        action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
-        and health_action_error(
-            action.name,
-            selection,
-            decided_on,
-            None if dungeon_memory is None else dungeon_memory.current,
-        )
-        is not None
-    ):
-        return False
     if selection.intent is not None and selection.intent.food is not None:
         return (
             action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
@@ -2402,9 +2386,6 @@ def _action_is_valid(
             permit=PrayerPermit(decided_on.player.turn),
             turn=decided_on.player.turn,
             hunger=decided_on.player.hunger,
-            hit_points=decided_on.player.hit_points,
-            max_hit_points=decided_on.player.max_hit_points,
-            experience_level=decided_on.player.experience_level,
             prompt_active=decided_on.prompt.active,
             ration_available=bool(safe_inventory_food(decided_on)),
             prior_prayers=prior_prayers,
@@ -2571,12 +2552,25 @@ def _action_is_valid(
             single_choice=decided_on.prompt.single_character_choice,
             offered_item_commands=offered,
         )
-        prayer_outcome = (
+        outcome_kind = (
             None
             if payload.terminated
             or payload.truncated
             or not _observation_is_live(payload.observation)
-            else observed_prayer_outcome(pending_prayer, payload.observation)
+            else classify_prayer_outcome(
+                payload.observation.player.hunger,
+                payload.observation.message,
+            )
+        )
+        prayer_outcome = (
+            PrayerOutcome(
+                payload.observation.player.turn,
+                payload.observation.player.hunger,
+                payload.observation.message,
+                outcome_kind,
+            )
+            if outcome_kind is not None
+            else None
         )
         prayer_permit = (
             PromptPermit(YES_COMMAND, PromptKind.PRAYER_CONFIRMATION)

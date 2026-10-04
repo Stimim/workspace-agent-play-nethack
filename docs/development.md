@@ -342,14 +342,13 @@ New evaluation follows [ADR 0006](decisions/0006-unified-goal-suites.md):
 place-reaching goals run on `NetHackScore-v0` with `nle-survival-actions` and
 the same survival-capable policy; Staircase success ends on the first
 downstairs, making it a sub-goal rather than a D5 environment. The
-development-only `evaluation/unified-d5-regression-v2.json` runs the same 67 unique
-historical/probe seeds and setup as immutable `unified-d5-regression-v1`, now
-pinned to `survival-reviewed-v3`: `reach_level(0,5)` with a 3,000-step cap.
-The 67/67 goal tracks remediation but does not block commits; historical suites
+development-only `evaluation/unified-d5-regression-v1.json` runs the 67 unique
+historical/probe seeds as `reach_level(0,5)` with a 3,000-step cap. Its
+67/67 goal tracks remediation but does not block commits; historical suites
 and reports remain immutable. Run all cases with the scripted model using
-`uv run nethack-agent eval run --suite evaluation/unified-d5-regression-v2.json --data-dir /tmp/unified-d5-scripted --report-dir /tmp/unified-d5-scripted/reports --development-scripted-model`; omit `--development-scripted-model` and choose separate data/report directories to run with the configured real model. The next milestone's fresh-draw suite must declare its objective-success rate and explicit zero-starvation/zero-Weak-or-worse hunger-death gates before execution.
+`uv run nethack-agent eval run --suite evaluation/unified-d5-regression-v1.json --data-dir /tmp/unified-d5-scripted --report-dir /tmp/unified-d5-scripted/reports --development-scripted-model`; omit `--development-scripted-model` and choose separate data/report directories to run with the configured real model. The next milestone's fresh-draw suite must declare its objective-success rate and explicit zero-starvation/zero-Weak-or-worse hunger-death gates before execution.
 
-The historical policy-pinned suites above continue to pin `staircase-reviewed-v3`; their
+Those committed suites continue to pin `staircase-reviewed-v3`; their
 historical reports and rendered bytes are unchanged. Other runs through
 `serve`/UI and the client-side `run` commands retain the default bundle and
 cannot override it.
@@ -847,7 +846,7 @@ seed ledger were committed.
 ### Current causal qualification protocol
 
 [Note 0040](notes/0040-causal-hidden-detour-qualification.md) supersedes
-individual success retention. Use `evaluation/unified-d5-regression-v2.json`
+individual success retention. Use `evaluation/unified-d5-regression-v1.json`
 for every new 67-seed development run; require objectives not lower and deaths
 not higher than HEAD. Diagnose every lost success/new death in that run and
 the frozen fresh 30-seed comparison from its traces. If the new behavior acts

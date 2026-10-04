@@ -348,6 +348,74 @@ def test_schema_2_pin_mismatch_is_refused_before_writing(
     assert not report_directory.exists()
 
 
+@pytest.mark.usefixtures("bound_policy")
+def test_pinned_survival_bundle_reaches_run_manager_and_record(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    payload = suite_2_payload()
+    payload["suite_id"] = "survival-bundle-smoke"
+    payload["knowledge_bundle_id"] = "survival-reviewed-v2"
+    payload["policy_version"] = run_manager.POLICY_VERSION
+    payload["cases"][0]["task"] = {
+        "environment": "NetHackScore-v0",
+        "action_profile": "nle-survival-actions",
+        "objective": {
+            "legs": [
+                {
+                    "kind": "reach_level",
+                    "level": {"dungeon_number": 0, "dungeon_level": 5},
+                }
+            ]
+        },
+    }  # type: ignore[index]
+    payload["cases"][0]["seeds"] = [1150]  # type: ignore[index]
+    payload["cases"][0]["max_episode_steps"] = 2  # type: ignore[index]
+    payload["cases"][0]["acceptance"] = {
+        "min_successes": 1,
+        "required_success_seeds": [],
+    }  # type: ignore[index]
+    suite = load_suite(write_suite(tmp_path, payload))
+
+    from nethack_agent.knowledge import KnowledgeBundle
+
+    captured: list[KnowledgeBundle] = []
+    original_init = RunManager.__init__
+
+    def inspect_init(self: RunManager, *args: object, **kwargs: object) -> None:
+        captured.append(kwargs["knowledge_bundle"])
+        original_init(self, *args, **kwargs)
+
+    monkeypatch.setattr(
+        evaluation,
+        "RunManager",
+        type("InspectRunManager", (RunManager,), {"__init__": inspect_init}),
+    )
+    run = run_evaluation(
+        EvaluationOptions(
+            suite=suite,
+            data_directory=tmp_path / "data",
+            report_directory=tmp_path / "reports",
+            development_scripted_model=True,
+            poll_interval_seconds=0.01,
+        ),
+        progress=None,
+    )
+
+    bundle = captured[0]
+    assert bundle.bundle_id == "survival-reviewed-v2"
+    assert {card.card_id for card in bundle.cards} >= {
+        "prayer-hunger",
+        "safe-corpses-v2",
+    }
+    assert "Plan food and prayer without claiming certainty" in bundle.prompt_context
+    assert "Eat only identified fresh low-risk corpses" in bundle.prompt_context
+    record = RunStore(tmp_path / "data" / "runs.sqlite3").get_run(
+        run.report.results[0].run_id
+    )
+    assert run.report.acceptance().checks["inputs_unchanged"]
+    assert record.knowledge_version == bundle.version
+
+
 def test_missing_pinned_bundle_fails_before_episode(tmp_path: Path) -> None:
     payload = suite_2_payload()
     payload["policy_version"] = run_manager.POLICY_VERSION

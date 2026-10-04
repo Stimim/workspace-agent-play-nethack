@@ -150,8 +150,6 @@ def derive_action_record(
         if destination.kind is DestinationKind.SEARCH_SPOT:
             return ActionRecord(ActionKind.SEARCH, origin, search_spot=cell)
         return ActionRecord(ActionKind.WAIT, origin)
-    if action_name == "MiscDirection.WAIT" and destination.kind is DestinationKind.REST:
-        return ActionRecord(ActionKind.REST, origin)
     return ActionRecord(ActionKind.OTHER, origin)
 
 

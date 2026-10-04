@@ -25,6 +25,7 @@ from nethack_agent.decision import (
     ActionSelectionSource,
     CorpseOutcome,
     DecisionMetrics,
+    PrayerOutcome,
     PromptKind,
     PromptPermit,
     RunOutcome,
@@ -33,12 +34,12 @@ from nethack_agent.decision import (
     SkillDecision,
     SkillSelectionSource,
     classify_corpse_outcome,
+    classify_prayer_outcome,
     confirmation_answer_error,
     confirmation_prompt_kind,
     is_corpse_decline,
     level_change_selection_error,
     observed_corpse_decline,
-    observed_prayer_outcome,
     survival_action_selection_error,
 )
 from nethack_agent.environment import LegalAction
@@ -287,12 +288,21 @@ class StepPayload:
                             "terminal prayer yes cannot claim an observed outcome"
                         )
                 else:
-                    outcome = observed_prayer_outcome(prayer, self.observation)
+                    kind = classify_prayer_outcome(
+                        self.observation.player.hunger,
+                        self.observation.message,
+                    )
                     if (
                         self.observation.player.dungeon_level < 1
-                        or outcome is None
+                        or kind is None
                         or prayer is None
-                        or prayer.outcome != outcome
+                        or prayer.outcome
+                        != PrayerOutcome(
+                            self.observation.player.turn,
+                            self.observation.player.hunger,
+                            self.observation.message,
+                            kind,
+                        )
                     ):
                         survival_error = (
                             "prayer yes requires the matching observed outcome"
