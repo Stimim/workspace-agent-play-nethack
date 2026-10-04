@@ -34,8 +34,9 @@ derivation, NLE/character identity, and the complete legal-action table. This
 reuses the adapter's task options, disabled reseeding, fixed moon phase, and
 pickup/drop/look pagination. It reissues **every** recorded action and compares
 reset plus every projected observation, including maps, changed cells,
-inventory, prompts and statistics. The only text normalization is proper names
-in NetHack's `named NAME` phrase. Any other mismatch aborts without publishing
+inventory, prompts and statistics. Text normalization is restricted to
+shopkeeper names from the NetHack 3.6.7 `shknam.c` fixed lists, wherever those
+names occur in text fields. Any other mismatch aborts without publishing
 snapshots. Terminal booleans must also agree. Run against the adapter version
 that recorded the run if historical transport/options changed; do not weaken
 comparison to make a divergent replay pass.
@@ -96,10 +97,13 @@ Offsets come from the v1.3.0 release headers and an x86_64 GCC layout probe,
 not a scan for plausible values. Every attach and live snapshot refuses output
 unless native `u.ux/u.uy`, `u.uz` agree with the public observation, `rm` has the
 expected size/offsets, true stair cells agree with exported stair coordinates,
-and visible public stairs/walls/doors agree with native data. Wall junctions
-are checked as wall terrain, not identical subtypes: `wall_angle()` depends on
-`seenv`. A secret door's low three flag bits are **wall mode**, not OPEN/BROKEN;
-mask `WM_MASK` before decoding, and an unlocked SDOOR converts to CLOSED.
+and currently visible public stairs/walls/doors agree with native data. NetHack
+retains glyphs for locations outside current vision; those remembered glyphs
+are not evidence of current terrain. Current sight is read from `viz_array`
+using `IN_SIGHT` from `vision.h`. Wall junctions are checked as wall terrain,
+not identical subtypes: `wall_angle()` depends on `seenv`. A secret door's low
+three flag bits are **wall mode**, not OPEN/BROKEN; mask `WM_MASK` before
+decoding, and an unlocked SDOOR converts to CLOSED.
 
 ## Route analysis and limits
 

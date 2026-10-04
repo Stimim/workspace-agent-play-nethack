@@ -16,19 +16,31 @@ from nethack_agent.environment import NleEnvironment, ScenarioConfig
 from nethack_agent.observation import ObservationProjector
 from nethack_agent.tasks import TaskSpec
 
+SHOPKEEPER_NAMES = tuple(
+    name
+    for name in Path(__file__)
+    .with_name("shopkeeper_names.txt")
+    .read_text(encoding="utf-8")
+    .splitlines()
+    if name
+)
+_SHOPKEEPER_NAME = re.compile(
+    r"(?<![A-Za-z])("
+    + "|".join(
+        re.escape(name) for name in sorted(SHOPKEEPER_NAMES, key=len, reverse=True)
+    )
+    + r")(?='s\b|\b)"
+)
+
 
 class ReplayMismatch(AssertionError):
     """Recorded and reproduced public observations differ."""
 
 
 def normalize_names(value: object) -> object:
-    """Normalize only named entities in text, never map/stats/action evidence.
-
-    NetHack shopkeepers and pets can inherit process-dependent proper names.
-    A name substitution is narrowly bounded by the game's named-entity phrases.
-    """
+    """Normalize only source-listed shopkeeper names in recorded text fields."""
     if isinstance(value, str):
-        return re.sub(r"(?<=named )[A-Z][A-Za-z'-]+", "<NAME>", value)
+        return _SHOPKEEPER_NAME.sub("<SHOPKEEPER>", value)
     if isinstance(value, list):
         return [normalize_names(item) for item in value]
     if isinstance(value, dict):

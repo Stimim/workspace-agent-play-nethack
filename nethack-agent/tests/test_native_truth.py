@@ -155,6 +155,35 @@ def test_short_recorded_scripted_episode_replays_and_rejects_corruption(
         replay.replay(database, seed=1)
 
 
+def test_shopkeeper_names_normalize_in_recorded_text(native_modules):
+    _, replay = native_modules
+    actual = '"Velkommen, Agent!  Welcome to Skibbereen\'s second-hand bookstore!"'
+    recorded = '"Velkommen, Agent!  Welcome to Gweebarra\'s second-hand bookstore!"'
+
+    assert replay.normalize_names({"message": actual}) == replay.normalize_names(
+        {"message": recorded}
+    )
+    assert replay.normalize_names("Possogroenoe zaps an aluminum wand!") == (
+        "<SHOPKEEPER> zaps an aluminum wand!"
+    )
+    assert replay.normalize_names("Skibbereenly is not a shopkeeper name") == (
+        "Skibbereenly is not a shopkeeper name"
+    )
+
+
+@pytest.mark.parametrize("cmap", [2, 16])
+def test_remembered_wall_and_door_glyphs_are_not_current_evidence(native_modules, cmap):
+    native, _ = native_modules
+    glyph = nethack.GLYPH_CMAP_OFF + cmap
+    glyphs = [[glyph]]
+    vision = [bytearray(80) for _ in range(native.ROWNO)]
+
+    assert list(native.visible_cmap_cells(glyphs, vision)) == []
+
+    vision[0][1] = native.IN_SIGHT
+    assert list(native.visible_cmap_cells(glyphs, vision)) == [(0, 1, glyph)]
+
+
 @pytest.mark.parametrize(
     "flags,expected", [(1, "CLOSED"), (2, "CLOSED"), (7, "CLOSED"), (9, "LOCKED")]
 )

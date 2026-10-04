@@ -91,6 +91,35 @@ def door_state(typ: int, flags: int) -> str | None:
     return "DOORWAY"
 
 
+IN_SIGHT = 0x02  # include/vision.h: current physical sight, not map memory
+ROWNO = 21
+COLNO = 80
+
+
+def visible_cmap_cells(glyphs: object, vision: list[bytes]):
+    """Yield public cmap glyphs currently in sight, not remembered glyphs."""
+    for y, row in enumerate(glyphs):
+        for native_x, glyph in enumerate(row, 1):
+            if vision[y][native_x] & IN_SIGHT and nethack.glyph_is_cmap(int(glyph)):
+                yield y, native_x, int(glyph)
+
+
+def _native_vision_rows(reader: NativeTruth) -> list[bytes]:
+    """Copy NetHack's exact current-vision flags while its instance is alive."""
+    array = reader._pointer("viz_array")
+    if not array:
+        raise ValidationError("native visibility array is unavailable")
+    pointers = reader._heap(array, ROWNO * C.sizeof(C.c_void_p))
+    rows = []
+    for y in range(ROWNO):
+        start = y * C.sizeof(C.c_void_p)
+        row = int.from_bytes(pointers[start : start + C.sizeof(C.c_void_p)], "little")
+        if not row:
+            raise ValidationError("native visibility row is unavailable")
+        rows.append(reader._heap(row, COLNO))
+    return rows
+
+
 class NativeTruth:
     """An extra RTLD_NOLOAD handle owned until close, before the env closes.
 
@@ -236,44 +265,39 @@ class NativeTruth:
                     raise ValidationError(f"rm stride/typ disagrees with {name}")
                 checked += 1
         visible = 0
-        # Public glyph checks validate stride AND typ against independent data.
-        for y, row in enumerate(observation.glyphs):
-            for native_x, glyph in enumerate(row, 1):
-                if not nethack.glyph_is_cmap(int(glyph)):
-                    continue
-                cmap = nethack.glyph_to_cmap(int(glyph))
-                typ = grid[y][native_x - 1]["typ"]
-                if cmap in (23, 24, 25, 26):
-                    name = {
-                        23: "upstair",
-                        24: "dnstair",
-                        25: "upladder",
-                        26: "dnladder",
-                    }[cmap]
-                    positions = [s for s in (stairs[name], stairs["sstairs"]) if s]
-                    if not any(
-                        s["x"] == native_x - 1 and s["y"] == y for s in positions
-                    ):
-                        raise ValidationError(
-                            f"visible {name} disagrees with native stairs"
-                        )
-                    visible += 1
-                # wall_angle() renders junctions according to seenv; the glyph
-                # need not have the same subtype as native typ. SDOOR is a wall.
-                if 1 <= cmap <= 11 and not (1 <= typ <= 12 or typ == 14):
+        # Public glyphs persist as map memory after a tile leaves sight. Only
+        # compare them with mutable native terrain while currently in sight.
+        vision = _native_vision_rows(self)
+        for y, native_x, glyph in visible_cmap_cells(observation.glyphs, vision):
+            cmap = nethack.glyph_to_cmap(glyph)
+            typ = grid[y][native_x - 1]["typ"]
+            if cmap in (23, 24, 25, 26):
+                name = {
+                    23: "upstair",
+                    24: "dnstair",
+                    25: "upladder",
+                    26: "dnladder",
+                }[cmap]
+                positions = [s for s in (stairs[name], stairs["sstairs"]) if s]
+                if not any(s["x"] == native_x - 1 and s["y"] == y for s in positions):
                     raise ValidationError(
-                        f"visible wall ({native_x - 1},{y}) cmap={cmap} typ={typ} "
-                        "disagrees with rm size/typ offset"
+                        f"visible {name} disagrees with native stairs"
                     )
-                state = grid[y][native_x - 1]["door_state"]
-                if typ == 22 and cmap in (13, 14, 15, 16):
-                    expected_states = (
-                        ("OPEN",) if cmap in (13, 14) else ("CLOSED", "LOCKED")
-                    )
-                    if state not in expected_states:
-                        raise ValidationError(
-                            "visible door disagrees with rm flags offset"
-                        )
+                visible += 1
+            # wall_angle() renders junctions according to seenv; the glyph
+            # need not have the same subtype as native typ. SDOOR is a wall.
+            if 1 <= cmap <= 11 and not (1 <= typ <= 12 or typ == 14):
+                raise ValidationError(
+                    f"visible wall ({native_x - 1},{y}) cmap={cmap} typ={typ} "
+                    "disagrees with rm size/typ offset"
+                )
+            state = grid[y][native_x - 1]["door_state"]
+            if typ == 22 and cmap in (13, 14, 15, 16):
+                expected_states = (
+                    ("OPEN",) if cmap in (13, 14) else ("CLOSED", "LOCKED")
+                )
+                if state not in expected_states:
+                    raise ValidationError("visible door disagrees with rm flags offset")
         return {
             "rm_size": 8,
             "typ_offset": 4,
