@@ -229,6 +229,17 @@
         ]
       ],
       "note": "Frozen HEAD 9e56dd7 versus hidden corridor/doorway continuations, boulder-excluding search and committed detours around monster-blocked frontiers. Scripted Score/survival/reachD5/cap3000/survival-reviewed-v2; never fresh acceptance seeds."
+    },
+    {
+      "source": "note-0041-staircase-retreat-fresh-probes",
+      "seeds": [],
+      "ranges": [
+        [
+          61,
+          90
+        ]
+      ],
+      "note": "Note 0041 fresh 30-seed HEAD-versus-candidate comparison for the rejected staircase-retreat/RecoverySkill candidate (survival-reviewed-v2 vs survival-reviewed-v3). HEAD run completed 30/30; candidate run completed 19/30 before an unrelated tooling execution cap. Both partial and complete results are real episodes against the live engine; the seeds are consumed regardless of completion count."
     }
   ]
 }
