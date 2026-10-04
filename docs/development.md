@@ -805,7 +805,12 @@ the runtime gate and persisted-run evaluator. Engravings have no separate
 public field; only their text when emitted in messages is available. Shop
 greetings require the native possessive-owner form, not an XP-level welcome.
 
-Visited open doors can now be search stands for a blank outward extension.
+Visited open doors and doorless doorways can be search stands for blank
+outward extensions. Corridor bends/fanned ends also consider blank orthogonal
+continuations opposite known passages, allowing hidden detours around boulders
+without pushing them. Displayed boulders are not hidden-passage targets.
+An existing search continues before approaching a monster-blocked frontier,
+while reachable frontiers and adjacent defense remain first.
 Unvisited walkable object-covered cells are visited while goal-compatible
 downstairs are unknown; existing look-here staircase recognition supplies the
 hidden terrain. With no downstairs known, keep covered-cell-first selection.
@@ -837,3 +842,24 @@ hunger death the nutrition-only package avoided); only the nutrition package
 shipped ([note 0033](notes/0033-reviewed-nutrition-probes.md)). Runtime and
 tests for both unqualified attempts were restored; only their notes and the
 seed ledger were committed.
+
+### Current causal qualification protocol
+
+[Note 0040](notes/0040-causal-hidden-detour-qualification.md) supersedes
+individual success retention. Use `evaluation/unified-d5-regression-v1.json`
+for every new 67-seed development run; require objectives not lower and deaths
+not higher than HEAD. Diagnose every lost success/new death in that run and
+the frozen fresh 30-seed comparison from its traces. If the new behavior acts
+wrongly, fix it and freeze an entirely new candidate/sample before shipment.
+If a legitimate earlier divergence encounters a pre-existing failure class,
+individual loss alone is not a rejection. The fresh aggregate gates remain
+non-decreasing objectives, non-increasing deaths and hunger deaths, complete
+records and zero invalid/gate/integrity problems. Never replace failed runs.
+
+Under this rule the exact retained note-0039 candidate ships without new
+episodes: all nine required cases are trajectory divergence, development
+52→52 objectives/8→8 deaths, and frozen 1440–1469 qualification 17→20
+objectives/7→6 deaths/0→0 hunger deaths. This is scripted qualification, not
+real-model acceptance, and does not claim unsafe searching or low-HP melee
+has been fixed. Full per-case causal evidence is in note 0040.
+

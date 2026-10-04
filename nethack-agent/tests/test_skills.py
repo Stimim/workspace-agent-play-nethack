@@ -1741,18 +1741,18 @@ def test_exit_route_gate_selection_and_audit_agree(
             gate.resolve(kick.index, selection=selection, before=before, memory=memory)
 
 
+@pytest.mark.parametrize("door", ("O", "D"))
 def test_open_door_search_reaches_outward_blank_extension(
     template: ProjectedObservation,
     actions: dict[str, LegalAction],
+    door: str,
 ) -> None:
-    from nethack_agent.skills import _search_targets
-
     memory = remembered(
         template,
         (
             "            ",
             " ----       ",
-            " |..@O      ",
+            f" |..@{door}      ",
             " ----       ",
             "            ",
             "            ",
@@ -1768,10 +1768,8 @@ def test_open_door_search_reaches_outward_blank_extension(
             "            ",
         ),
     )
-    assert memory.kind((5, 2)) is CellKind.OPEN_DOOR
     # Observing the hero next to blank terrain marks it observed, but does not
     # make a concealed passage known. Search must still face that blank.
-    assert (6, 2) in _search_targets(memory, (5, 2))
     memory.search_coverage = {
         (x, y): 10 for y in range(memory.height) for x in range(memory.width)
     }
@@ -1986,3 +1984,97 @@ def test_known_branch_preserves_reachable_frontier_before_covered_exit_checks(
     assert result.intent.destination == IntentDestination(
         DestinationKind.FRONTIER, 10, 2
     )
+
+
+@pytest.mark.parametrize(
+    ("corridors", "hidden"),
+    (
+        (((4, 4), (5, 4), (5, 5), (6, 6), (6, 7), (6, 5)), (7, 5)),
+        (((5, 4), (6, 4), (7, 4), (6, 5)), (6, 6)),
+    ),
+)
+def test_search_checks_continuations_at_bends_and_fanned_corridor_ends(
+    template: ProjectedObservation,
+    actions: dict[str, LegalAction],
+    corridors: tuple[tuple[int, int], ...],
+    hidden: tuple[int, int],
+) -> None:
+    rows = [[" "] * 13 for _ in range(11)]
+    for x, y in corridors:
+        rows[y][x] = "#"
+    frames = []
+    for x, y in corridors:
+        frame = [row.copy() for row in rows]
+        frame[y][x] = "@"
+        frames.append(tuple("".join(row) for row in frame))
+    memory = remembered(template, *frames)
+    memory.search_coverage = {point: SEARCHES_PER_ROUND for point in memory.cells()}
+    memory.search_coverage[hidden] = 0
+
+    result = ExploreLevelSkill().select_action(memory, actions)
+
+    assert result.action is not None
+    assert action_name(actions, result.action.action_index) == "Command.SEARCH"
+    memory.record(result.action.record)
+    assert memory.search_coverage[hidden] == 1
+
+
+def test_known_boulder_is_not_a_hidden_passage_search_target(
+    template: ProjectedObservation, actions: dict[str, LegalAction]
+) -> None:
+    lines = ("             ",) * 5 + ("     @#0     ",) + ("             ",) * 5
+    arrived = (*lines[:5], "     #@0     ", *lines[6:])
+    memory = remembered(template, lines, arrived)
+    memory.search_coverage = {point: SEARCHES_PER_ROUND for point in memory.cells()}
+    memory.search_coverage[(7, 5)] = 0
+
+    result = ExploreLevelSkill().select_action(memory, actions)
+
+    assert result.action is None
+    assert result.stuck is StuckReason.SEARCH_EXHAUSTED
+
+
+def test_committed_search_is_not_interrupted_by_a_monster_blocked_frontier(
+    template: ProjectedObservation, actions: dict[str, LegalAction]
+) -> None:
+    lines = (
+        "                        ",
+        "                        ",
+        " -------                ",
+        " |.....|                ",
+        " |.....D#####e##        ",
+        " |.....|                ",
+        " -------                ",
+        "                        ",
+        "                        ",
+    )
+    positions = [
+        (x, y)
+        for y, row in enumerate(lines)
+        for x, char in enumerate(row)
+        if char in ".#D" and x < 13
+    ]
+    memory = LevelMemory()
+    initial = list(lines)
+    initial[3] = " |@....|                "
+    initial[4] = initial[4].replace("e", "#")
+    memory.observe(sketch(template, tuple(initial)))
+    for step, (x, y) in enumerate((*positions, (2, 3)), start=1):
+        frame = list(lines)
+        frame[y] = frame[y][:x] + "@" + frame[y][x + 1 :]
+        memory.observe(sketch(template, tuple(frame), step=step))
+    memory.search_goal = (2, 3)
+
+    result = ExploreLevelSkill().select_action(memory, actions)
+
+    assert result.action is not None
+    assert result.action.record.kind is ActionKind.SEARCH
+    assert result.action.record.search_spot == (2, 3)
+
+    # Newly reachable unexplored terrain still takes precedence over a search.
+    changed = list(frame)
+    changed[3] = changed[3][:8] + "#" + changed[3][9:]
+    memory.observe(sketch(template, tuple(changed), step=len(positions) + 2))
+    next_action = ExploreLevelSkill().select_action(memory, actions).action
+    assert next_action is not None
+    assert next_action.intent.destination.kind is DestinationKind.FRONTIER

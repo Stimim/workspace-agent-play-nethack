@@ -299,8 +299,11 @@ branch while seeking the main downstairs), these covered-cell checks remain
 available after ordinary reachable frontiers rather than diverting them.
 It then walks to the nearest reachable frontier, a known cell next to
 never-observed blank space, with doorways and corridors winning distance ties
-and a remembered but unreachable `>` biasing the choice toward it. A frontier
-reachable only past a monster is approached, fought, or waited on (bounded).
+and a remembered but unreachable `>` biasing the choice toward it.
+When a search is already in progress, reachable search continues before
+approaching a frontier blocked by a monster; actual reachable frontiers and
+adjacent-hostile defense still take precedence. Otherwise a frontier reachable
+only past a monster is approached, fought, or waited on (bounded).
 With no frontier it can force a known locked door whose outward cell is
 unexplored while no goal-compatible downstairs is known. Compatibility uses
 the same staircase identity/probe predicate as navigation; a known Mines
@@ -318,11 +321,15 @@ Kick outcomes (WHAMM, opened/shattered, Ouch, other) are learned from recorded
 messages. Model fallbacks are not offered KICK; runtime gates and evaluator
 replay share the same safety predicate, including pending direction matching.
 Otherwise exploration searches: room cells beside straight walls, corridor
-dead ends, and visited open doors facing an outward blank extension are
-candidates. Scores use never-observed cells near their targets minus twice
-travel distance; each adjacent cell counts until searched 10 times per round,
-and the chosen spot stays committed until spent. There is no global SEARCH
-cap or new corridor-priority tier ([note 0031](docs/notes/0031-exit-discovery-probes.md)).
+dead ends, and blank orthogonal continuations opposite known passages at
+bends or fanned corridor ends are candidates. Visited open doors and doorless
+doorways also face outward blank extensions. Displayed boulders are not
+concealed-passage targets: searching detours does not push or route through
+them. Scores still use never-observed cells near targets minus twice travel
+distance; each adjacent cell counts until searched 10 times per round, and
+the chosen spot stays committed until spent or unreachable. There is no
+global SEARCH cap or new corridor-priority tier
+([note 0040](docs/notes/0040-causal-hidden-detour-qualification.md)).
 Routing that dithers among at most six cells for 12 moves, or 100 routed moves
 without new knowledge, abandons the goal until the map changes. When no spot
 remains the skill reports `search_exhausted` (or `monster_blocked`).
@@ -954,6 +961,15 @@ seeds under `reach_level(0,5)`; its 67/67 target is diagnostic and does not
 block commits. Historical suites and reports retain their former task and
 profile as immutable evidence. A later fresh-draw milestone suite must gate
 both its declared success rate and zero starvation/Weak-or-worse hunger deaths.
+Development qualification uses non-decreasing objectives and non-increasing
+deaths on that 67-seed runner, not individual trajectory retention. Every
+lost success/new death on development and the frozen 30-seed sample receives
+a trace-based causal diagnosis: introduced behavior defects must be fixed
+before shipment and require a new frozen sample; pre-existing failure classes
+reached after legitimate trajectory divergence do not alone reject a change.
+The fresh comparison also requires non-increasing hunger deaths and complete,
+invalid/gate/integrity-clean records
+([note 0040](docs/notes/0040-causal-hidden-detour-qualification.md)).
 
 
 `nethack-agent eval run` drives every case/seed pair in-process through one

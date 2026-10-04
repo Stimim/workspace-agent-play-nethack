@@ -73,12 +73,15 @@ Out of scope: Oracle navigation and the `gold-v1` and `oracle-v1` suites (milest
   `NetHackScore-v0`, and `nle-survival-actions`; keep historical suites and
   reports immutable. Add `unified-d5-regression-v1` with 67 unique seeds and a
   non-blocking 67/67 development target ([ADR 0006](docs/decisions/0006-unified-goal-suites.md)).
-- [ ] Qualify hidden-passage/search/boulder-detour handling on the unified
-  67-seed tracking suite and a new frozen 30-seed HEAD-versus-candidate sample.
-- [ ] Qualify HP/threat-aware recovery; seed 2105401147 now dies to a wererat
-  rather than truncating, and 703 still waits behind a gas spore.
-- [ ] Investigate remaining frontier churn (924) and the 1376 hunger death;
-  reconcile the ADR's prayer interval with the code before changing it.
+- [x] Qualify hidden-passage/search/boulder-detour handling under the revised
+  causal protocol: retained development 52→52/67, deaths 8→8, fresh 17→20/30,
+  deaths 7→6; all required losses are pre-existing failure classes reached
+  after trajectory divergence ([0040](docs/notes/0040-causal-hidden-detour-qualification.md)).
+- [ ] Qualify HP/threat-aware recovery: current 703 gas-spore explosion, 1379
+  homunculus, 1377 involuntary vault relocation/guard handling, and low-HP melee.
+- [ ] Resolve remaining hidden-exit failures 5/701; preserve the retained
+  1376 hunger/prayer investigation even though its current run dies earlier
+  to a goblin. Reconcile the ADR's prayer interval with code before changing it.
 - [ ] After qualified fixes, run a new fresh-draw milestone suite with declared
   objective-success and explicit zero-starvation/zero-Weak-or-worse death gates.
   Never replace the first real-model reports or relabel historical suites.

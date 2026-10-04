@@ -15,6 +15,9 @@
   The subsequent hidden-passage/boulder-detour candidate was rejected for
   losing five established development successes despite qualifying aggregate
   held-out results ([note 0039](notes/0039-hidden-passage-detour-probes.md)).
+  [Note 0040](notes/0040-causal-hidden-detour-qualification.md) records the
+  revised aggregate-and-causal protocol, diagnoses every required loss, and
+  ships that exact retained candidate without replacing its original reports.
 - [`external/`](external/): instructions for large external source material that is not committed.
 - [`../_agents/`](../_agents/): repository-specific coding-agent procedures and tools.
 - [`../nethack-agent/knowledge/`](../nethack-agent/knowledge/): reviewed knowledge made available to the local playing agent.

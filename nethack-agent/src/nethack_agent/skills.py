@@ -313,6 +313,10 @@ class ExploreLevelSkill:
             action = _check_covered_exit(memory, tree, actions_by_name)
             if action is not None:
                 return ExploreResult(action, None)
+        if memory.search_goal is not None:
+            action = _search(memory, tree, actions_by_name)
+            if action is not None:
+                return ExploreResult(action, None)
 
         blocked_by_monster = False
         through = route_tree(memory, through_monsters=True)
@@ -974,8 +978,8 @@ def _search(
 ) -> SkillAction | None:
     """Search at the reachable spot facing the most unexplored space.
 
-    Spots are room cells beside straight walls (secret doors) and corridor
-    dead ends (secret corridors). Every search covers the eight adjacent
+    Spots face secret-door walls or blank corridor continuations, including
+    bends and visited doorways. Every search covers the eight adjacent
     cells; a cell stops counting once searched `SEARCHES_PER_ROUND` times per
     round, so candidates rotate as coverage grows. The chosen spot stays
     committed until it is spent or unreachable, so travel does not dither
@@ -1052,28 +1056,41 @@ def _search(
 def _search_targets(memory: LevelMemory, point: Point) -> tuple[Point, ...]:
     """Cells a search from `point` could reveal as hidden passages.
 
-    Corridor dead ends (including corridor cells whose terrain is inferred
-    from an object or a footstep) target their blank neighbours; room cells
-    target adjacent straight walls, where secret doors are generated.
+    Corridor dead ends retain their blank neighbours. Bends and junctions
+    also target blank orthogonal continuations opposite a known passage;
+    these may lead around a boulder without pushing it. Visited doorways
+    target outward blanks as well as adjacent secret-door wall candidates.
     """
     kind = memory.kind(point)
     inferred = kind is CellKind.FLOOR and memory.cmap(point) <= 0
-    if kind is CellKind.OPEN_DOOR and point in memory.visited:
+    if kind in (CellKind.OPEN_DOOR, CellKind.DOORWAY) and point in memory.visited:
         x, y = point
         return tuple(
-            (x + dx, y + dy)
-            for dx, dy in ORTHOGONAL_DELTAS
-            if memory.in_bounds((x + dx, y + dy))
-            and memory.kind((x + dx, y + dy)) is CellKind.UNKNOWN
-            and memory.passable((x - dx, y - dy))
+            near
+            for near in memory.neighbors(point)
+            if (kind is CellKind.DOORWAY and memory.straight_wall(near))
+            or (
+                memory.kind(near) is CellKind.UNKNOWN
+                and near not in memory.boulders
+                and (near[0] - x, near[1] - y) in ORTHOGONAL_DELTAS
+                and memory.passable((2 * x - near[0], 2 * y - near[1]))
+            )
         )
     if kind is CellKind.CORRIDOR or inferred:
-        if not _dead_end(memory, point):
-            return ()
+        dead_end = _dead_end(memory, point)
+        x, y = point
         return tuple(
             near
             for near in memory.neighbors(point)
             if memory.kind(near) is CellKind.UNKNOWN
+            and near not in memory.boulders
+            and (
+                dead_end
+                or (
+                    (near[0] - x, near[1] - y) in ORTHOGONAL_DELTAS
+                    and memory.passable((2 * x - near[0], 2 * y - near[1]))
+                )
+            )
         )
     if kind in (CellKind.FLOOR, CellKind.DOORWAY):
         return tuple(
