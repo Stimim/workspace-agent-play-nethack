@@ -285,5 +285,11 @@
       ],
       "note": "Final note-0042 fresh-sample run (completed, not cut short) against the fourth candidate, which fixed the hostile-adjacency, search-spot gas-spore, and model-fallback gas-spore defects found by the prior three rounds. Still rejected: dev-set objectives 50/67 versus HEAD's qualified 52/67, fresh objectives 18/30 versus HEAD's 23/30, and two remaining fresh gate rejections (seeds 190, 210) from a fourth, unfixed defect class (ordinary route-planned movement and non-fallback WAIT/SEARCH selections have no gas-spore awareness). See note 0042. Next unused range is 211-240."
     }
+    ,{
+      "source": "single-rule-3a-low-hp-prayer",
+      "seeds": [],
+      "ranges": [[211, 240]],
+      "note": "Reserved before either arm for single-rule low-HP prayer qualification under note 0040; never reused or selectively replaced."
+    }
   ]
 }
