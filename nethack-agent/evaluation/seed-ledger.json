@@ -273,6 +273,17 @@
         ]
       ],
       "note": "Third note-0042 fresh-sample run (completed, not cut short) against an intermediate candidate that fixed the ExploreLevelSkill gas-spore search-spot defect but not a third, previously latent defect: the model-fallback path (ScriptedDevelopmentModel/Ollama with no public-state awareness) could still choose a gas-spore-adjacent WAIT/SEARCH and get gate-rejected, stopping the episode (dev seed 703 and fresh seed 153; the dev set's other 4 seeds, 1370/1376/1377/1379, hit the identical fallback cause). Fixed by having the coordinator substitute the first otherwise-allowed action the same safety gate accepts whenever a MODEL_FALLBACK choice would be rejected, instead of stopping the episode. All nine previously affected seeds (703, 1370, 1376, 1377, 1379, 127, 132, 144, 146, 153) were individually re-verified gate-clean before freezing a new candidate/sample; these seeds are consumed and not reused."
+    },
+    {
+      "source": "note-0042-fresh-181-210-final-rejected-candidate",
+      "seeds": [],
+      "ranges": [
+        [
+          181,
+          210
+        ]
+      ],
+      "note": "Final note-0042 fresh-sample run (completed, not cut short) against the fourth candidate, which fixed the hostile-adjacency, search-spot gas-spore, and model-fallback gas-spore defects found by the prior three rounds. Still rejected: dev-set objectives 50/67 versus HEAD's qualified 52/67, fresh objectives 18/30 versus HEAD's 23/30, and two remaining fresh gate rejections (seeds 190, 210) from a fourth, unfixed defect class (ordinary route-planned movement and non-fallback WAIT/SEARCH selections have no gas-spore awareness). See note 0042. Next unused range is 211-240."
     }
   ]
 }
