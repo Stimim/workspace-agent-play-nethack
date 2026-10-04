@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Final
 
+from nethack_agent.burden import BurdenRecovery, burden_action_error
 from nethack_agent.corpse import (
     CorpseKill,
     eligible_corpse,
@@ -153,6 +154,7 @@ class ActionGate:
                 ActionRole.HUNGER,
                 ActionRole.PROMPT_KEY,
                 ActionRole.PRAYER,
+                ActionRole.BURDEN_DROP,
             }
             and not (
                 action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
@@ -193,6 +195,7 @@ class ActionGate:
         memory: LevelMemory | None = None,
         lycanthropy_known: bool = False,
         food_permit: FoodPermit | None = None,
+        burden: BurdenRecovery | None = None,
     ) -> LegalAction:
         if isinstance(action_index, bool) or not isinstance(action_index, int):
             raise ActionGateError("action index must be an integer")
@@ -204,6 +207,16 @@ class ActionGate:
             if selection is None or selection.intent is None
             else selection.intent.food
         )
+        drop = (
+            None
+            if selection is None or selection.intent is None
+            else selection.intent.drop
+        )
+        if drop is not None:
+            error = burden_action_error(action, selection, before, burden)
+            if error is not None:
+                raise ActionGateError(error)
+            return action
         if food is not None or food_permit is not None:
             if (
                 self._profile is not ActionProfile.NLE_SURVIVAL_ACTIONS
@@ -263,6 +276,10 @@ class ActionGate:
                 "coordinator traversal permit in that direction"
             )
         role = self._roles[action.index]
+        if role is ActionRole.BURDEN_DROP:
+            raise ActionGateError(
+                "DROP requires deterministic load-refusal authorization"
+            )
         if role is ActionRole.FOOD_PICKUP:
             raise ActionGateError(
                 "PICKUP requires reviewed non-shop food authorization"
@@ -455,6 +472,11 @@ class AgentCoordinator:
             )
             else None
         )
+        self._burden = (
+            BurdenRecovery()
+            if task.action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
+            else None
+        )
         self._prayer = (
             PrayerSkill()
             if task.action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
@@ -518,6 +540,8 @@ class AgentCoordinator:
             self._dungeon.reset()
             if self._hunger is not None:
                 self._hunger.reset()
+            if self._burden is not None:
+                self._burden = BurdenRecovery()
             self._prayer_count = 0
             self._last_prayer_turn = None
             self._prayer_kill_count = 0
@@ -641,6 +665,7 @@ class AgentCoordinator:
                         memory=self._dungeon.current,
                         lycanthropy_known=self._lycanthropy_known,
                         food_permit=food_permit,
+                        burden=self._burden,
                     )
                 except ActionGateError as error:
                     self._state = RunState.PAUSED
@@ -653,6 +678,11 @@ class AgentCoordinator:
                         transition.observation, step_index=transition.step_index
                     )
                     self._observation = after
+                    if self._burden is not None:
+                        self._burden.advance(
+                            None if selection.intent is None else selection.intent.drop,
+                            after,
+                        )
                     selection = self._commit_prayer_locked(
                         selection, action, before, after, transition
                     )
@@ -726,6 +756,20 @@ class AgentCoordinator:
                 return None
         actions = self._gate.actions_by_name
         arbiter = SkillSelectionSource.ARBITER
+        if self._burden is not None:
+            self._burden.observe(before)
+            if self._burden.pending is not None:
+                drop = self._burden.select_action(before, self._gate.actions_by_command)
+                if drop is not None:
+                    return self._skill_plan(
+                        drop,
+                        goal,
+                        Skill.BURDEN,
+                        arbiter,
+                        None,
+                        skill_model_decision,
+                        source=ActionSelectionSource.DETERMINISTIC_PROMPT,
+                    )
         if self._food is not None and self._pending_food is not None:
             food = self._food.select_action(
                 before,
@@ -815,6 +859,12 @@ class AgentCoordinator:
                     skill_model_decision,
                     source=source,
                 )
+        if self._burden is not None and not before.prompt.active:
+            drop = self._burden.select_action(before, self._gate.actions_by_command)
+            if drop is not None:
+                return self._skill_plan(
+                    drop, goal, Skill.BURDEN, arbiter, None, skill_model_decision
+                )
         if not before.prompt.active and self._corpse is not None:
             defense = _attack_adjacent_hostile(memory, actions, None)
             if defense is not None:
@@ -826,7 +876,11 @@ class AgentCoordinator:
                     None,
                     skill_model_decision,
                 )
-        if not before.prompt.active and self._hunger is not None:
+        if (
+            not before.prompt.active
+            and self._hunger is not None
+            and not (self._burden is not None and self._burden.active)
+        ):
             hunger = self._hunger.select_action(
                 before, actions, self._gate.actions_by_command
             )
@@ -834,13 +888,20 @@ class AgentCoordinator:
                 return self._skill_plan(
                     hunger, goal, Skill.HUNGER, arbiter, None, skill_model_decision
                 )
-        if self._food is not None and not before.prompt.active:
+        if (
+            self._food is not None
+            and not before.prompt.active
+            and not (self._burden is not None and self._burden.active)
+        ):
             food = self._food.select_action(
                 before,
                 memory,
                 actions,
                 self._gate.actions_by_command,
                 arrived=self._arrived_food,
+                excluded_cells=frozenset()
+                if self._burden is None
+                else self._burden.excluded_food_cells(before),
             )
             if food is not None:
                 return self._skill_plan(
@@ -851,7 +912,11 @@ class AgentCoordinator:
                     None,
                     skill_model_decision,
                 )
-        if not before.prompt.active and self._corpse is not None:
+        if (
+            not before.prompt.active
+            and self._corpse is not None
+            and not (self._burden is not None and self._burden.active)
+        ):
             corpse = self._corpse.select_action(
                 before,
                 memory,
@@ -1135,7 +1200,10 @@ class AgentCoordinator:
     ) -> HungerPermit | None:
         legal = self._environment.legal_actions
         index = selection.action_index
-        if (selection.intent is not None and selection.intent.food is not None) or (
+        if (
+            selection.intent is not None
+            and (selection.intent.food is not None or selection.intent.drop is not None)
+        ) or (
             selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
             and selection.skill is Skill.HUNGER
         ):
@@ -1222,6 +1290,8 @@ class AgentCoordinator:
     ) -> PromptPermit | None:
         legal = self._environment.legal_actions
         index = selection.action_index
+        if selection.intent is not None and selection.intent.drop is not None:
+            return None
         if selection.intent is not None and selection.intent.food is not None:
             return None
         if not 0 <= index < len(legal):

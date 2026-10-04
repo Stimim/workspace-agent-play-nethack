@@ -307,7 +307,13 @@
       "source": "note-0045-rule1-burden-surplus-food",
       "seeds": [],
       "ranges": [[301, 330]],
-      "note": "Frozen before either arm: HEAD 2b7740e versus encumbrance-refusal recovery, dropping surplus food/nonessentials but keeping one ration/main weapon/worn armor. Score/survival/reachD5/cap3000/survival-reviewed-v2, scripted model; note0040 paired aggregate and trace-causal gates. All reserved seeds consumed regardless of completion. See note0045."
+      "note": "Spoiled: full development arm found a real wiring defect (see note0045), not an accepted trapped-state limitation. Candidate fixed and refrozen; this sample consumed, never reused."
+    },
+    {
+      "source": "note-0045-rule1-burden-surplus-food-corrected",
+      "seeds": [],
+      "ranges": [[331, 360]],
+      "note": "Frozen before either arm: HEAD 2b7740e versus corrected burden candidate (coordinator.py hunger-permit fix only). Same Score/survival/reachD5/cap3000/survival-reviewed-v2 protocol and note0040 gates. All reserved seeds consumed regardless of completion. See note0045."
     }
   ]
 }

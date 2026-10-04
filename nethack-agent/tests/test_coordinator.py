@@ -28,6 +28,7 @@ from nethack_agent.decision import (
     CorpseOutcomeKind,
     DecisionMetrics,
     DestinationKind,
+    DropEvidence,
     HungerPermit,
     IntentDestination,
     MapCell,
@@ -1718,6 +1719,47 @@ def test_untracked_lichen_remains_edible_after_another_same_cell_kill(
             )
             == eat
         )
+    finally:
+        agent.stop()
+
+
+def test_hunger_permit_defers_a_burden_drop_answer_sharing_the_eat_letter(
+    tmp_path: Path,
+) -> None:
+    """Letter 'e' is both Command.EAT and the only key for an 'e' inventory
+    slot; a burden-drop answer selecting it must bypass the hunger/EAT permit
+    entirely rather than being rejected as an invalid EAT during a prompt."""
+    task = TaskSpec(
+        NleTask.SCORE,
+        ActionProfile.NLE_SURVIVAL_ACTIONS,
+        Objective((ReachLevelLeg(LevelKey(0, 5)),)),
+    )
+    agent = AgentCoordinator(
+        NleEnvironment(ScenarioConfig(seed=6, artifact_directory=tmp_path, task=task)),
+        ObservationProjector(),
+        ScriptedDevelopmentModel(),
+    )
+    initial = agent.start()
+    try:
+        before = replace(
+            initial,
+            message="What do you want to drop? [bd-j or ?*] ",
+            prompt=PromptState(True, False, False),
+            player=replace(initial.player, encumbrance=5),
+        )
+        eat = agent._gate.actions_by_name["Command.EAT"]
+        evidence = DropEvidence("e", "4 food rations", 4, 10, ord("e"))
+        selection = ActionSelection(
+            ActionSelectionSource.DETERMINISTIC_PROMPT,
+            agent.snapshot().current_goal,
+            Skill.BURDEN,
+            SkillSelectionSource.ARBITER,
+            None,
+            eat.index,
+            "Answer the offered drop-menu letter that collides with EAT.",
+            ActionIntent(None, None, None, drop=evidence),
+        )
+        assert agent._hunger_permit(selection, before) is None
     finally:
         agent.stop()
 
