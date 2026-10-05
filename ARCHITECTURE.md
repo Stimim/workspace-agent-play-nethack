@@ -62,8 +62,11 @@ id (`NleTask`: Staircase, Score, Scout, Gold, Eat, Oracle), an action profile,
 and a `traversal.Objective`. Environment, profile, and goal are independent:
 the profile describes the agent's available skills, not a task restriction.
 Staircase accepts only its single `stand_on_stairs(down, any)` leg; Score
-accepts location/traversal legs; Scout, Gold, and Eat each accept one
-`explore_dungeon` leg. Oracle remains unsupported until its goal has behavior.
+accepts location/traversal legs, including `enter_minetown_temple` and
+`find_oracle`; Scout, Gold, and Eat each accept one `explore_dungeon` leg.
+`NetHackOracle-v0` stays unsupported: its success is the bare Oracle glyph in
+the hero's 3×3 neighbourhood, without the peacefulness and no-attack evidence
+ADR 0007 requires.
 New place-reaching evaluation uses one Score/survival-policy setup:
 `NetHackScore-v0`, `nle-survival-actions`, and the location objective. NLE's
 Staircase task ends when the first qualifying downstairs is reached, so it is
@@ -172,14 +175,31 @@ every Dungeons of Doom level 1..`max_level` to be explored: it plans
 toward it otherwise (so a level skipped by a trap door is revisited by
 climbing), and retraces the branch link out of another dungeon. A level is
 explored once exploration has found it exhausted; that flag, unlike
-`exhausted`, survives later knowledge growth. A strict `find_oracle` leg
-(`{"kind": "find_oracle"}`) is parseable but has no behavior yet:
-`ObjectivePlanner` refuses any objective containing it, and `TaskSpec` rejects
-`NetHackOracle-v0` as "not supported yet". Gold takes one
-`explore_dungeon` leg. Legs are
+`exhausted`, survives later knowledge growth. Gold takes one
+`explore_dungeon` leg.
+
+The two milestone-3 place legs (`{"kind": "enter_minetown_temple"}`,
+`{"kind": "find_oracle"}`) follow [ADR 0007](docs/decisions/0007-mines-minetown-and-oracle.md).
+They turn on NLE's `screen_descriptions` key and public detectors in
+`targets.py`, which planning and evaluator replay share and which read no
+native state. **Minetown:** the planner leaves any other branch, enters the
+Mines, descends to Mines level 3, and then to level 4 once level 3 is
+explored. It plans `enter_temple`, or `occupy_altar` when an unaligned altar
+is known. The leg completes on a Mines level 3 or 4 reached through a recorded
+main-dungeon branch crossing at the matching depth (`mines_candidate`) after
+temple-entry evidence: priest speech, or, once wall/door/bar counts identify
+a town, standing on a known altar or inside its fully enclosed room. In
+Orcish Town the evidence is standing on a publicly unaligned altar.
+**Oracle:** the planner leaves any branch, descends
+main stairs to Dlvl 5-9, plans `approach_oracle` on unexplored levels or once
+an Oracle is seen, and completes only when the hero is next to a
+publicly peaceful Oracle glyph, is not hallucinating, and has never attacked
+her. `conduct.attack_evidence` counts Oracle attacks from every one-step and
+`CompassDirectionLonger` move into a monster, applied before each step and
+again during evaluator replay. Legs are
 checked after every step whose NLE episode continues (NLE zeroes the
 bottom-line statistics of a terminal
-observation). On `NetHackStaircase-v0` (and later Oracle) NLE's success
+observation). On `NetHackStaircase-v0` NLE's success
 state ends the run; on other tasks, completing the last leg ends it with
 `objective_complete` and closes NLE. The coordinator snapshot reports the
 current leg (`objective_leg`) and the last live `level`.

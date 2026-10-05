@@ -23,3 +23,19 @@ Note 0048 reported 5/67 and 1/67, respectively, which directly contradicted the 
 ### Detector Audit
 
 Detector audits timed out while verifying cross-checks with native_truth, but the static analysis confirms the False Positive risk for the Oracle detector.
+
+## Correction (2026-10-06)
+
+Two statements above are wrong:
+
+- `/tmp/phase1-candidate.patch` contained **no fixes**. Applied to its base
+  `0f4c439`, its source is byte-identical to the reverted `1a25d9b`;
+  `conduct.py` still ignored `CompassDirectionLonger` and `_corpse_route_error`
+  was unchanged. Both fixes, with regression tests, were written afresh on
+  branch `phase1-redo`. That work is recorded in
+  [note 0050](0050-phase1-objectives-baselines-detector-audit.md).
+- The 19/67 and 9/67 baselines used `scripted-development`, the deterministic
+  development model of every earlier qualification, not a "fallback model".
+
+The original note 0048, whose 5/67 and 1/67 baselines are contradicted above,
+was removed by the revert and is not restored.

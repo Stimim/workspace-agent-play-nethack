@@ -18,6 +18,10 @@
   [Note 0040](notes/0040-causal-hidden-detour-qualification.md) records the
   revised aggregate-and-causal protocol, diagnoses every required loss, and
   ships that exact retained candidate without replacing its original reports.
+- Milestone 3 Phase 1: the reverted first attempt and its audit are in
+  [note 0049](notes/0049-phase1-audit.md). The shipped objectives, baselines,
+  native-truth detector audit, and ground-truth failure classification are
+  in [note 0050](notes/0050-phase1-objectives-baselines-detector-audit.md).
 - [`external/`](external/): instructions for large external source material that is not committed.
 - [`../_agents/`](../_agents/): repository-specific coding-agent procedures and tools.
 - [`../nethack-agent/knowledge/`](../nethack-agent/knowledge/): reviewed knowledge made available to the local playing agent.

@@ -135,13 +135,23 @@ Phase 1 — objectives and measurement
   standing on its confirmed unaligned altar. Validate the detector
   against native special-level identity and room type on every Mines level
   a probe set visits; detector errors are measured, not assumed.
-- [x] Enable `find_oracle` in the planner: identify the Oracle level
+  Audit: 19/19 claims true, no misses ([0050](docs/notes/0050-phase1-objectives-baselines-detector-audit.md)).
+- [ ] Enable `find_oracle` in the planner: identify the Oracle level
   (centaur statues, fountains, peaceful Oracle glyph, level sounds),
   approach to adjacency, never attack; avoid the Sokoban up-branch on the
   level below the Oracle (Dlvl 6-10).
-- [x] Development suites (ADR 0006: Score, survival profile): a 67-seed
+  - [x] Planner, peaceful-adjacency detector and attack conduct ship
+    ([0050](docs/notes/0050-phase1-objectives-baselines-detector-audit.md));
+    the level is recognized only once the Oracle herself is seen.
+  - [ ] Level cues (centaur statues, fountains, sounds) and Sokoban
+    up-branch avoidance.
+- [ ] Development suites (ADR 0006: Score, survival profile): a 67-seed
   regression per target from the historical seeds, plus held-out probes
   that fix each step cap (likely above 3,000; NLE limit noted).
+  - [x] `minetown-regression-v1` and `oracle-regression-v1` at a
+    provisional 10,000-step cap.
+  - [ ] ADR 0007 §4.2 held-out cap probes (30 reserved seeds per target,
+    30,000-step ceiling, frozen policy).
 - [x] Baseline both targets with the current policy and classify every
   failure with ground truth: deaths by cause and hunger, stalls by true
   blocker, branch confusion, peaceful-monster incidents.

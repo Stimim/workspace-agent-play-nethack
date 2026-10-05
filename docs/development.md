@@ -84,9 +84,10 @@ all three profiles (`nle-task-actions`, `nle-hunger-actions`, and
 `nle-survival-actions`) remain valid for supported environments so historical
 TaskSpecs still load, while active place-reaching evaluations use the survival
 profile. `NetHackStaircase-v0` accepts only its single
-`stand_on_stairs(down, any)` leg; Score accepts 1-8 traversal/location legs;
-Scout, Gold, and Eat each accept one `explore_dungeon` leg. Oracle is rejected
-until its objective has behavior. Unknown or duplicate keys and invalid values
+`stand_on_stairs(down, any)` leg; Score accepts 1-8 traversal/location legs,
+including `enter_minetown_temple` and `find_oracle`; Scout, Gold, and Eat each
+accept one `explore_dungeon` leg. `NetHackOracle-v0` is rejected (ADR 0007
+uses Score). Unknown or duplicate keys and invalid values
 fail before the service is contacted.
 The run record stores the spec in `runs.task` and returns it as `run.task`; runs
 stored before tasks existed return `null`. The coordinator's objective planner turns
