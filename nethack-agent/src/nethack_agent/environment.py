@@ -18,6 +18,7 @@ from numpy.typing import NDArray
 from nethack_agent.contracts import integer_value, object_value, string_value
 from nethack_agent.menus import pickup_menu_from_tty
 from nethack_agent.tasks import STAIRCASE_TASK, ActionProfile, NleTask, TaskSpec
+from nethack_agent.traversal import EnterMinetownTempleLeg, FindOracleLeg
 
 CHARACTER: Final = "val-dwa-law"
 PUBLIC_OBSERVATION_KEYS: Final = (
@@ -143,6 +144,7 @@ class NleObservation:
     tty_colors: NleArray
     tty_cursor: NleArray
     misc: NleArray
+    screen_descriptions: NleArray | None = None
 
     @classmethod
     def from_nle(cls, observation: Mapping[str, NleArray]) -> Self:
@@ -162,6 +164,7 @@ class NleObservation:
             tty_colors=observation["tty_colors"],
             tty_cursor=observation["tty_cursor"],
             misc=observation["misc"],
+            screen_descriptions=observation.get("screen_descriptions"),
         )
 
 
@@ -186,6 +189,7 @@ def make_nle_environment(
     *,
     max_episode_steps: int,
     savedir: Path,
+    screen_descriptions: bool = False,
 ) -> gym.Env[Any, Any]:
     """Build one NLE task with the profile's actions and the run's step cap.
 
@@ -205,7 +209,8 @@ def make_nle_environment(
         max_episode_steps=max_episode_steps,
         character=CHARACTER,
         actions=actions,
-        observation_keys=PUBLIC_OBSERVATION_KEYS,
+        observation_keys=PUBLIC_OBSERVATION_KEYS
+        + (("screen_descriptions",) if screen_descriptions else ()),
         options=task.options,
         save_ttyrec_every=1,
         savedir=str(savedir),
@@ -236,6 +241,10 @@ class NleEnvironment:
             config.task.action_profile,
             max_episode_steps=config.max_episode_steps,
             savedir=self._artifact_directory,
+            screen_descriptions=any(
+                isinstance(leg, EnterMinetownTempleLeg | FindOracleLeg)
+                for leg in config.task.objective.legs
+            ),
         )
         raw_environment = environment.unwrapped
         self._config = config
@@ -348,9 +357,9 @@ class NleEnvironment:
         )
         allow_all_modes = self._raw_environment._allow_all_modes
         if pickup or drop or look:
-            # Preserve only reviewed pickup/drop/look interactions, not
-            # unrelated yes/no or text questions normally auto-dismissed by
-            # NLE.
+            # Preserve reviewed pickup/drop/look pages. Other actions remain
+            # atomic until public blstats are refreshed; ttyrec retains every
+            # intermediate message/page, including temple-entry speech.
             self._raw_environment._allow_all_modes = True
         try:
             observation, reward, terminated, truncated, information = (

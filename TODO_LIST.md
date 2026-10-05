@@ -129,20 +129,20 @@ Phase 0 — tooling
   run is cut short by a tool deadline.
 
 Phase 1 — objectives and measurement
-- [ ] `enter_minetown_temple` objective leg. Success evidence follows
+- [x] `enter_minetown_temple` objective leg. Success evidence follows
   [ADR 0007 §1](docs/decisions/0007-mines-minetown-and-oracle.md#1-targets-and-public-success-evidence):
   public temple-entry evidence on Mines level 3 or 4, or, in Orcish Town,
   standing on its confirmed unaligned altar. Validate the detector
   against native special-level identity and room type on every Mines level
   a probe set visits; detector errors are measured, not assumed.
-- [ ] Enable `find_oracle` in the planner: identify the Oracle level
+- [x] Enable `find_oracle` in the planner: identify the Oracle level
   (centaur statues, fountains, peaceful Oracle glyph, level sounds),
   approach to adjacency, never attack; avoid the Sokoban up-branch on the
   level below the Oracle (Dlvl 6-10).
-- [ ] Development suites (ADR 0006: Score, survival profile): a 67-seed
+- [x] Development suites (ADR 0006: Score, survival profile): a 67-seed
   regression per target from the historical seeds, plus held-out probes
   that fix each step cap (likely above 3,000; NLE limit noted).
-- [ ] Baseline both targets with the current policy and classify every
+- [x] Baseline both targets with the current policy and classify every
   failure with ground truth: deaths by cause and hunger, stalls by true
   blocker, branch confusion, peaceful-monster incidents.
 
