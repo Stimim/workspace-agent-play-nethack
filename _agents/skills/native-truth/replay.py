@@ -37,16 +37,39 @@ class ReplayMismatch(AssertionError):
     """Recorded and reproduced public observations differ."""
 
 
+_UNIDENTIFIED_GEM_PRICE = re.compile(
+    r"(\b(?:(?:a|an|\d+)\s+)?(?:white|blue|red|yellowish brown|orange|yellow|black|green|violet)\s+gems?\b[^.\n\r]*?"
+    r"\(\s*for sale,\s*)\d+(\s*zorkmids\s*\))"
+)
+_UNIDENTIFIED_GEM_QUOTE = re.compile(
+    r"(\b(?:(?:a|an|\d+)\s+)?(?:white|blue|red|yellowish brown|orange|yellow|black|green|violet)\s+gems?\b[^.\n\r]*?"
+    r"\bwill cost you\s+)\d+(\s+zorkmids\b)"
+)
+_UNIDENTIFIED_GEM_QUOTE_FOR_YOU = re.compile(
+    r"(\"For you,[^\"\n\r]*?\bonly\s+)\d+(\s+zorkmids\s+(?:per|for this)\b[^\"\n\r]*?"
+    r"\b(?:white|blue|red|yellowish brown|orange|yellow|black|green|violet)\s+gems?\b)"
+)
+_UNIDENTIFIED_GEM_LIST_PRICE = re.compile(
+    r"(\blist price of\s+[^.\n\r]*?"
+    r"\b(?:white|blue|red|yellowish brown|orange|yellow|black|green|violet)\s+gems?\b[^.\n\r]*?"
+    r"\bis\s+)\d+(\s+zorkmids\b)"
+)
+
+
 def normalize_names(value: object) -> object:
-    """Normalize only source-listed shopkeeper names in recorded text fields."""
+    """Normalize source-listed shopkeeper names and unidentified gem prices in recorded text."""
     if isinstance(value, str):
-        return _SHOPKEEPER_NAME.sub("<SHOPKEEPER>", value)
+        s = _SHOPKEEPER_NAME.sub("<SHOPKEEPER>", value)
+        s = _UNIDENTIFIED_GEM_PRICE.sub(r"\g<1><PRICE>\g<2>", s)
+        s = _UNIDENTIFIED_GEM_QUOTE.sub(r"\g<1><PRICE>\g<2>", s)
+        s = _UNIDENTIFIED_GEM_QUOTE_FOR_YOU.sub(r"\g<1><PRICE>\g<2>", s)
+        s = _UNIDENTIFIED_GEM_LIST_PRICE.sub(r"\g<1><PRICE>\g<2>", s)
+        return s
     if isinstance(value, list):
         return [normalize_names(item) for item in value]
     if isinstance(value, dict):
         return {key: normalize_names(item) for key, item in value.items()}
     return value
-
 
 def assert_observation(actual: dict, expected: dict, step: int) -> None:
     left, right = normalize_names(actual), normalize_names(expected)
