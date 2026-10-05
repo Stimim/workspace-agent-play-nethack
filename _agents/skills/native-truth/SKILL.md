@@ -37,11 +37,40 @@ reset plus every projected observation, including maps, changed cells,
 inventory, prompts and statistics. Text normalization covers only values NetHack
 derives from `ubirthday`, the wall-clock game start: shopkeeper names from the
 NetHack 3.6.7 `shknam.c` fixed lists wherever they occur in text fields, and the
-quoted price of unidentified gems (`shk.c` `get_cost()`). Any other mismatch
+quoted price of unidentified gems (`shk.c` `get_cost()`) and of containers,
+whose quote adds their contents (`contained_cost()`). Any other mismatch
 aborts without publishing snapshots. Terminal booleans must also agree. Run
 against the adapter version
 that recorded the run if historical transport/options changed; do not weaken
 comparison to make a divergent replay pass.
+
+## Audit Minetown and Oracle detectors
+
+```bash
+uv run --project nethack-agent python _agents/skills/native-truth/detector_audit.py \
+  /path/to/minetown-or-oracle/runs.sqlite3 --workers 6 --output audit.json
+```
+
+Every run in the database must have exactly one `enter_minetown_temple` or
+`find_oracle` leg. Each run that reached an audited level (any Mines level, or
+main-dungeon Dlvl 5-9) is replayed with the same per-step observation checks
+as `replay.py`. The public detector state is rebuilt exactly as the evaluator's
+completion replay rebuilds it. A native snapshot is then read on every audited
+step, and on any step the detector claims success elsewhere. Native success:
+
+- **Minetown:** on a `minetn` level, the hero's `rm.roomno` names a room whose
+  current type is TEMPLE and the hero's cell is not its doorway; in Orcish
+  Town (no TEMPLE room), the hero stands on the ALTAR.
+- **Oracle:** a live, peaceful Oracle in the hero's eight neighbours.
+
+A run is a true or false positive by native truth at the detector's first
+claim step. With no claim, it is a false negative if native success ever held,
+otherwise a true negative. The summary also cross-tabulates native `minetn`
+identity against the detector's `town_identified` on every audited Mines level,
+lists Minetown variant candidates, and counts levels where native temple entry
+had no temple message. A replay mismatch fails that run, and the failure is
+listed separately. A snapshot validation error is recorded per step and that
+step is skipped.
 
 ## Snapshot API
 

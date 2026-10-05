@@ -7,6 +7,8 @@ import json
 import re
 import sqlite3
 import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from analysis import analyze, render
@@ -38,35 +40,37 @@ class ReplayMismatch(AssertionError):
 
 
 # shk.c get_cost() prices unidentified glass from ubirthday, the wall-clock
-# game start, so replays of the same seed quote different prices for these gems.
-_GEM = (
-    r"\b(?:white|blue|red|yellowish brown|orange|yellow|black|green|violet)"
-    r"\s+gems?\b"
+# game start, so replays of the same seed quote different prices for these
+# gems. A container's quote adds its contents' get_cost() (contained_cost()),
+# so a box or bag holding such glass differs too.
+_UBIRTHDAY_PRICED = (
+    r"\b(?:(?:white|blue|red|yellowish brown|orange|yellow|black|green|violet)"
+    r"\s+gems?|large box(?:es)?|chests?|ice box(?:es)?|bags?|(?:oilskin )?sacks?)\b"
 )
-_COUNTED_GEM = r"\b(?:(?:a|an|\d+)\s+)?" + _GEM
-_UNIDENTIFIED_GEM_PRICE = re.compile(
-    r"(" + _COUNTED_GEM + r"[^.\n\r]*?\(\s*for sale,\s*)\d+(\s*zorkmids\s*\))"
+_COUNTED = r"\b(?:(?:a|an|\d+)\s+)?" + _UBIRTHDAY_PRICED
+_FOR_SALE_PRICE = re.compile(
+    r"(" + _COUNTED + r"[^.\n\r]*?\(\s*for sale,\s*)\d+(\s*zorkmids\s*\))"
 )
-_UNIDENTIFIED_GEM_QUOTE = re.compile(
-    r"(" + _COUNTED_GEM + r"[^.\n\r]*?\bwill cost you\s+)\d+(\s+zorkmids\b)"
+_COST_QUOTE = re.compile(
+    r"(" + _COUNTED + r"[^.\n\r]*?\bwill cost you\s+)\d+(\s+zorkmids\b)"
 )
-_UNIDENTIFIED_GEM_QUOTE_FOR_YOU = re.compile(
+_FOR_YOU_QUOTE = re.compile(
     r"(\"For you,[^\"\n\r]*?\bonly\s+)\d+"
-    r"(\s+zorkmids\s+(?:per|for this)\b[^\"\n\r]*?" + _GEM + r")"
+    r"(\s+zorkmids\s+(?:per|for this)\b[^\"\n\r]*?" + _UBIRTHDAY_PRICED + r")"
 )
-_UNIDENTIFIED_GEM_LIST_PRICE = re.compile(
-    r"(\blist price of\s+[^.\n\r]*?" + _GEM + r"[^.\n\r]*?\bis\s+)\d+(\s+zorkmids\b)"
+_LIST_PRICE = re.compile(
+    r"(\blist price of\s+[^.\n\r]*?"
+    + _UBIRTHDAY_PRICED
+    + r"[^.\n\r]*?\bis\s+)\d+(\s+zorkmids\b)"
 )
 
 
 def normalize_names(value: object) -> object:
-    """Normalize ubirthday-derived text: shopkeeper names and glass-gem prices."""
+    """Normalize ubirthday-derived text: shopkeeper names, glass/container prices."""
     if isinstance(value, str):
         s = _SHOPKEEPER_NAME.sub("<SHOPKEEPER>", value)
-        s = _UNIDENTIFIED_GEM_PRICE.sub(r"\g<1><PRICE>\g<2>", s)
-        s = _UNIDENTIFIED_GEM_QUOTE.sub(r"\g<1><PRICE>\g<2>", s)
-        s = _UNIDENTIFIED_GEM_QUOTE_FOR_YOU.sub(r"\g<1><PRICE>\g<2>", s)
-        s = _UNIDENTIFIED_GEM_LIST_PRICE.sub(r"\g<1><PRICE>\g<2>", s)
+        for pattern in (_FOR_SALE_PRICE, _COST_QUOTE, _FOR_YOU_QUOTE, _LIST_PRICE):
+            s = pattern.sub(r"\g<1><PRICE>\g<2>", s)
         return s
     if isinstance(value, list):
         return [normalize_names(item) for item in value]
@@ -85,20 +89,10 @@ def assert_observation(actual: dict, expected: dict, step: int) -> None:
         )
 
 
-def replay(
-    database: Path,
-    *,
-    run_id: str | None = None,
-    seed: int | None = None,
-    at: tuple[str, ...] = ("end",),
-    every_level_entry: bool = False,
-) -> dict:
-    """Rebuild an entire episode; never publish snapshots from divergent replay.
-
-    STEP is the projected observation step_index (0 is reset), and
-    first-on-final-level means the first visit to the last recorded level.
-    SEARCH coverage uses the before-action hero positions on that level.
-    """
+def load_run(
+    database: Path, *, run_id: str | None = None, seed: int | None = None
+) -> tuple[dict, dict, list[dict]]:
+    """Read one recorded run: metadata row, run_started payload, step payloads."""
     if (run_id is None) == (seed is None):
         raise ValueError("select exactly one run id or seed")
     with sqlite3.connect(
@@ -125,10 +119,81 @@ def replay(
     steps = [payload for kind, payload in records if kind == "step"]
     if len(started) != 1:
         raise ValueError("run must have exactly one run_started event")
-    initial = started[0]
-    task = TaskSpec.from_json(json.loads(metadata["task"]))
     if metadata["nle_version"] != "1.3.0" or metadata["character"] != "val-dwa-law":
         raise ValidationError("recorded engine/character differs from supported replay")
+    return metadata, started[0], steps
+
+
+@contextmanager
+def replay_environment(
+    metadata: dict, initial: dict
+) -> Iterator[tuple[NleEnvironment, object, dict, ObservationProjector]]:
+    """Open the recorded scenario and verify seeds, action table, and reset."""
+    with (
+        tempfile.TemporaryDirectory(prefix="native-truth-replay-") as artifacts,
+        NleEnvironment(
+            ScenarioConfig(
+                metadata["suite_seed"],
+                Path(artifacts),
+                metadata["max_episode_steps"],
+                TaskSpec.from_json(json.loads(metadata["task"])),
+            )
+        ) as env,
+    ):
+        seeds = env.seed_set
+        for key, actual in (
+            ("core_seed", seeds.core),
+            ("display_seed", seeds.display),
+            ("level_seed", seeds.level),
+        ):
+            if metadata[key] != actual:
+                raise ReplayMismatch(f"{key} derivation differs from recorded seed")
+        if [action.to_json() for action in env.legal_actions] != initial[
+            "legal_actions"
+        ]:
+            raise ReplayMismatch("recorded action table differs")
+        raw = env.reset()
+        projector = ObservationProjector()
+        public = projector.project(raw, step_index=0).to_json()
+        assert_observation(public, initial["observation"], 0)
+        yield env, raw, public, projector
+
+
+def replay_step(
+    env: NleEnvironment, projector: ObservationProjector, record: dict
+) -> tuple[object, dict]:
+    """Reissue one recorded action; abort unless its observation reproduces."""
+    index = record["observation"]["step_index"]
+    if record["action"] != env.legal_actions[record["action"]["index"]].to_json():
+        raise ReplayMismatch(f"action mismatch at step {index}")
+    transition = env.step(record["action"]["index"])
+    public = projector.project(
+        transition.observation, step_index=transition.step_index
+    ).to_json()
+    assert_observation(public, record["observation"], index)
+    if (transition.terminated, transition.truncated) != (
+        record["terminated"],
+        record["truncated"],
+    ):
+        raise ReplayMismatch(f"terminal state mismatch at step {index}")
+    return transition.observation, public
+
+
+def replay(
+    database: Path,
+    *,
+    run_id: str | None = None,
+    seed: int | None = None,
+    at: tuple[str, ...] = ("end",),
+    every_level_entry: bool = False,
+) -> dict:
+    """Rebuild an entire episode; never publish snapshots from divergent replay.
+
+    STEP is the projected observation step_index (0 is reset), and
+    first-on-final-level means the first visit to the last recorded level.
+    SEARCH coverage uses the before-action hero positions on that level.
+    """
+    metadata, initial, steps = load_run(database, run_id=run_id, seed=seed)
     final = steps[-1]["observation"] if steps else initial["observation"]
     observations = [initial["observation"], *(step["observation"] for step in steps)]
     # Death observations may zero stats/map; identify the final actual level
@@ -159,33 +224,7 @@ def replay(
     snapshots = []
     searches = []
     comparisons = 0
-    with (
-        tempfile.TemporaryDirectory(prefix="native-truth-replay-") as artifacts,
-        NleEnvironment(
-            ScenarioConfig(
-                metadata["suite_seed"],
-                Path(artifacts),
-                metadata["max_episode_steps"],
-                task,
-            )
-        ) as env,
-    ):
-        seeds = env.seed_set
-        for key, actual in (
-            ("core_seed", seeds.core),
-            ("display_seed", seeds.display),
-            ("level_seed", seeds.level),
-        ):
-            if metadata[key] != actual:
-                raise ReplayMismatch(f"{key} derivation differs from recorded seed")
-        if [action.to_json() for action in env.legal_actions] != initial[
-            "legal_actions"
-        ]:
-            raise ReplayMismatch("recorded action table differs")
-        raw = env.reset()
-        projector = ObservationProjector()
-        public = projector.project(raw, step_index=0).to_json()
-        assert_observation(public, initial["observation"], 0)
+    with replay_environment(metadata, initial) as (env, raw, public, projector):
         comparisons += 1
         with NativeTruth(env, raw) as truth:
             previous_level = None
@@ -217,28 +256,13 @@ def replay(
             capture()
             for record in steps:
                 index = record["observation"]["step_index"]
-                if (
-                    record["action"]
-                    != env.legal_actions[record["action"]["index"]].to_json()
-                ):
-                    raise ReplayMismatch(f"action mismatch at step {index}")
                 if record["action"]["name"] == "Command.SEARCH":
                     searches.append({"step": index, **public["player"]})
                 if record["terminated"] or record["truncated"]:
                     before_terminal = truth.snapshot(raw)
                     before_terminal_map = public["map"]["rows"]
-                transition = env.step(record["action"]["index"])
-                raw = transition.observation
-                public = projector.project(
-                    raw, step_index=transition.step_index
-                ).to_json()
-                assert_observation(public, record["observation"], index)
+                raw, public = replay_step(env, projector, record)
                 comparisons += 1
-                if (transition.terminated, transition.truncated) != (
-                    record["terminated"],
-                    record["truncated"],
-                ):
-                    raise ReplayMismatch(f"terminal state mismatch at step {index}")
                 capture()
     for snapshot in snapshots:
         diagnosis = analyze(snapshot)

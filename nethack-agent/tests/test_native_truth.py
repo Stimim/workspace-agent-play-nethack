@@ -171,7 +171,7 @@ def test_shopkeeper_names_normalize_in_recorded_text(native_modules):
     )
 
 
-def test_unidentified_gem_prices_normalize_in_recorded_text(native_modules):
+def test_ubirthday_shop_prices_normalize_in_recorded_text(native_modules):
     _, replay = native_modules
     normalize = replay.normalize_names
     assert normalize("You see here a violet gem (for sale, 800 zorkmids).") == (
@@ -183,6 +183,10 @@ def test_unidentified_gem_prices_normalize_in_recorded_text(native_modules):
     quote = 'The shopkeeper says "For you, good customer; only {} zorkmids for {}."'
     assert normalize(quote.format(400, "this violet gem")) == normalize(
         quote.format(600, "this violet gem")
+    )
+    # contained_cost() adds glass contents to a container's quote.
+    assert normalize("You see here a large box (for sale, 3662 zorkmids).") == (
+        normalize("You see here a large box (for sale, 5912 zorkmids).")
     )
 
 
