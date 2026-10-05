@@ -108,8 +108,8 @@ to the peaceful Oracle** without attacking her. Orcish Town counts as
 Minetown; in NetHack 3.6.7 (`dat/mines.des`, `minetn-1`) its altar lies in
 an ordinary region, not a temple room, so its success is standing on that
 unaligned altar (confirmed in [ADR 0007](docs/decisions/0007-mines-minetown-and-oracle.md),
-proposed). Scope: capability areas A (survive), B (food), F (navigation)
-below. ADR 0007 defines the proposed objectives, detectors, suites, and gates.
+accepted). Scope: capability areas A (survive), B (food), F (navigation)
+below. ADR 0007 defines the accepted objectives, detectors, suites, and gates.
 
 Process rules (lessons from milestone 2, notes 0037-0046):
 one rule per worker session; every product change ships only with its
@@ -156,6 +156,8 @@ Phase 2 — F: navigation (expected largest class)
   narrow diagonals, boulders; branch identity on the way down and back up.
 - [ ] Minetown conduct: never anger the watch (no door kicking, no
   fountain quaffing or dipping, no shop theft); avoid temple priest anger.
+- [ ] Digging: acquire and use a pick-axe/mattock or wand of digging under
+  conduct gates (ADR 0007).
 - [ ] Requalify ranged clearing of gas spores and floating eyes (rule 3
   patch in `/tmp`; note 0045) under a fresh sample.
 
@@ -228,7 +230,7 @@ attack: A, B, F (survive and explore), then C, D, E (power), then G
 - [ ] Robust exit discovery: search, kick, dig, unlock (now: partial; the main open weakness).
 - [ ] Branches: Gnomish Mines and Minetown, Sokoban rules, Oracle, Big Room, Fort Ludios.
 - [ ] Special levels: Medusa, the Castle (wand of wishing, drawbridge), Valley of the Dead, Gehennom mazes, Vlad's Tower, the Wizard's Tower.
-- [ ] Movement tools: levitation, water walking, digging, controlled teleport.
+- [ ] Movement tools: acquire and use a pick-axe/mattock/wand of digging, levitation, water walking, controlled teleport.
 
 ### G. Endgame (mandatory for ascension)
 - [ ] Use wishes well.

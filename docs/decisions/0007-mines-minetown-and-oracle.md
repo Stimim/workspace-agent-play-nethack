@@ -1,6 +1,6 @@
 # ADR 0007: Mines, Minetown temple, and peaceful Oracle
 
-- Status: proposed
+- Status: accepted (2026-10-05)
 - Date: 2026-10-05
 - Refines: [ADR 0004](0004-traversal-goals-and-task-progression.md), [ADR 0005](0005-early-survival-and-seed-evaluation.md), and [ADR 0006](0006-unified-goal-suites.md)
 
@@ -166,10 +166,13 @@ Public `gets angry!`, arrest/warning text, and newly hostile Watch/priest/shop
 attitudes become conduct incidents and invalidate a claimed clean run,
 not evidence of a kill by themselves ([door conduct][src-kick],
 [fountains][src-fountain], [Watch wiki][wiki-town]). Orcish Town's iron bars
-are a real navigation blocker: qualification must cover a publicly justified,
-reviewed digging/bar-breaching capability with target/tool/direction permits,
-or report inability to enter as failure. Do not award success for seeing the
-altar through bars or substitute temple-building proximity.
+are a real navigation blocker. Digging is an approved ascension skill for entering Orcish Town and general navigation, subject to these constraints:
+- **Tool acquisition:** Acquire a pick-axe or dwarvish mattock from dwarves in the Mines, or use a wand of digging.
+- **Minetown restrictions:** Never dig in Minetown shops or temples or through shop walls, which angers the shopkeeper or priest (`src/dig.c:406-419`, `src/dig.c:351`).
+- **Sokoban restriction:** Digging is forbidden in Sokoban.
+- **Watch reaction:** Instantly destroying walls/doors with a wand angers the Watch immediately; using a pick-axe triggers a warning, then anger if continued (`src/dig.c:1221-1237`). Thus, digging in Minetown's inhabited variants is forbidden, but it is permitted in the ruined Orcish Town where the Watch and shopkeepers are dead.
+
+Do not award success for seeing the altar through bars or substitute temple-building proximity.
 
 ### 4. Suites, caps, and acceptance
 
@@ -270,16 +273,11 @@ Keep existing report rendering unchanged.
 - Continue kicking until warned, or exempt Orcish Town after guessing no Watch: unnecessary conduct risk and conflicting gate behavior.
 - Reuse 3,000 by habit, tune thresholds on acceptance seeds, rerun losses, or forgive a Fainting death because the rate passes: repeats milestone-2 failure modes.
 
-## Open questions for the user
+## Resolved questions
 
-- Approve the proposed **0.50 minimum**, per-target rate formula, 20 fresh
-  acceptance seeds, and 30,000-step probe ceiling, or require a higher floor/sample?
-- Does “zero peaceful kills” also forbid **autonomous pet/NPC kills**? Proposed
-  gate counts hero-attributed kills and forbids deliberate pet-assisted harm;
-  broaden attribution explicitly if all deaths must count.
-- Approve reviewed digging/bar-breaching navigation for barricaded Orcish
-  Town, or accept unavoidable target failures until an already-permitted
-  public route appears? The success rule itself must not be weakened.
+- **0.50 minimum, 20 fresh seeds, 30,000-step probe ceiling:** Approved.
+- **Peaceful kills:** Counts hero-attributed kills only (as proposed), plus the existing ban on deliberate pet-assisted harm. Autonomous pet/NPC kills do not count.
+- **Digging:** Approved for Orcish Town and general navigation under strict conduct gates. Constraints added to §3: acquire pick-axe/mattock or wand; never dig in Minetown (Watch/shopkeeper anger) or Sokoban.
 
 [src-mines]: https://github.com/NetHack/NetHack/blob/NetHack-3.6.7_Released/dat/mines.des#L55-L128
 [src-special]: https://github.com/NetHack/NetHack/blob/NetHack-3.6.7_Released/src/sp_lev.c#L2073-L2127
