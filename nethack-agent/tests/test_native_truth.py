@@ -173,23 +173,18 @@ def test_shopkeeper_names_normalize_in_recorded_text(native_modules):
 
 def test_unidentified_gem_prices_normalize_in_recorded_text(native_modules):
     _, replay = native_modules
-    actual_701 = "You see here a violet gem (for sale, 800 zorkmids)."
-    recorded_701 = "You see here a violet gem (for sale, 533 zorkmids)."
-    assert replay.normalize_names({"message": actual_701}) == replay.normalize_names(
-        {"message": recorded_701}
+    normalize = replay.normalize_names
+    assert normalize("You see here a violet gem (for sale, 800 zorkmids).") == (
+        normalize("You see here a violet gem (for sale, 533 zorkmids).")
+    )
+    assert normalize("You see here a tripe ration (for sale, 20 zorkmids).") != (
+        normalize("You see here a tripe ration (for sale, 23 zorkmids).")
+    )
+    quote = 'The shopkeeper says "For you, good customer; only {} zorkmids for {}."'
+    assert normalize(quote.format(400, "this violet gem")) == normalize(
+        quote.format(600, "this violet gem")
     )
 
-    non_gem_actual = "You see here a tripe ration (for sale, 20 zorkmids)."
-    non_gem_recorded = "You see here a tripe ration (for sale, 23 zorkmids)."
-    assert replay.normalize_names({"message": non_gem_actual}) != replay.normalize_names(
-        {"message": non_gem_recorded}
-    )
-
-    quote_actual = 'The shopkeeper says "For you, good customer; only 400 zorkmids for this violet gem."'
-    quote_recorded = 'The shopkeeper says "For you, good customer; only 600 zorkmids for this violet gem."'
-    assert replay.normalize_names({"message": quote_actual}) == replay.normalize_names(
-        {"message": quote_recorded}
-    )
 
 @pytest.mark.parametrize("cmap", [2, 16])
 def test_remembered_wall_and_door_glyphs_are_not_current_evidence(native_modules, cmap):

@@ -34,10 +34,12 @@ derivation, NLE/character identity, and the complete legal-action table. This
 reuses the adapter's task options, disabled reseeding, fixed moon phase, and
 pickup/drop/look pagination. It reissues **every** recorded action and compares
 reset plus every projected observation, including maps, changed cells,
-inventory, prompts and statistics. Text normalization is restricted to
-shopkeeper names from the NetHack 3.6.7 `shknam.c` fixed lists, wherever those
-names occur in text fields. Any other mismatch aborts without publishing
-snapshots. Terminal booleans must also agree. Run against the adapter version
+inventory, prompts and statistics. Text normalization covers only values NetHack
+derives from `ubirthday`, the wall-clock game start: shopkeeper names from the
+NetHack 3.6.7 `shknam.c` fixed lists wherever they occur in text fields, and the
+quoted price of unidentified gems (`shk.c` `get_cost()`). Any other mismatch
+aborts without publishing snapshots. Terminal booleans must also agree. Run
+against the adapter version
 that recorded the run if historical transport/options changed; do not weaken
 comparison to make a divergent replay pass.
 
