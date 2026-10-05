@@ -280,16 +280,6 @@ def test_explore_dungeon_completes_when_every_required_level_is_explored(
         plan(objective, walk)
 
 
-def test_oracle_searches_each_candidate_level_before_descending(
-    template: ProjectedObservation,
-) -> None:
-    objective = Objective((FindOracleLeg(),))
-    walk = Walk(template).at(LevelKey(0, 4), "|@>|")
-    assert plan(objective, walk) == PlannedGoal(main_stairs(DOWN))
-    walk.use_stairs(LevelKey(0, 5), "|<@>|")
-    from nethack_agent.traversal import ApproachOracleGoal
-
-    assert plan(objective, walk) == PlannedGoal(ApproachOracleGoal(LevelKey(0, 5)))
-    walk.exhaust()
-    assert plan(objective, walk) == PlannedGoal(main_stairs(DOWN))
-    assert not leg_complete(FindOracleLeg(), walk.dungeon)
+def test_planner_refuses_find_oracle_objectives_until_they_have_behavior() -> None:
+    with pytest.raises(ObjectivePlanningError, match="find_oracle.*not supported yet"):
+        ObjectivePlanner(Objective((FindOracleLeg(),)))

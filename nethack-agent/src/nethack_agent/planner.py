@@ -13,11 +13,8 @@ from nethack_agent.navigation import DungeonMemory, LevelMemory
 from nethack_agent.traversal import (
     BRANCH_STAIRS,
     DUNGEONS_OF_DOOM,
-    ApproachOracleGoal,
     BranchStairs,
     EnterDungeonLeg,
-    EnterMinetownTempleLeg,
-    EnterTempleGoal,
     ExploreDungeonLeg,
     ExploreLevelGoal,
     FindOracleLeg,
@@ -25,7 +22,6 @@ from nethack_agent.traversal import (
     LevelKey,
     Objective,
     ObjectiveLeg,
-    OccupyAltarGoal,
     ReachLevelLeg,
     StairConnection,
     StairDirection,
@@ -70,7 +66,13 @@ class ObjectivePlanner:
     """Derive each step's goal from the objective's current leg and memory."""
 
     def __init__(self, objective: Objective) -> None:
-        # Construction validates the strict objective contracts.
+        # Objective construction already rejects dungeons without a known
+        # staircase branch.
+        for leg in objective.legs:
+            if isinstance(leg, FindOracleLeg):
+                raise ObjectivePlanningError(
+                    f"{leg.kind.value} objective legs are not supported yet"
+                )
         self.objective = objective
 
     @property
@@ -86,55 +88,11 @@ class ObjectivePlanner:
     def plan(self, index: int, dungeon: DungeonMemory) -> PlannedGoal:
         """The goal for the current leg; the last leg's goal once all are met."""
         leg = self.legs[min(index, len(self.legs) - 1)]
-        dungeon.current.target_conduct = any(
-            isinstance(item, FindOracleLeg | EnterMinetownTempleLeg)
-            for item in self.legs
-        )
-        dungeon.current.oracle_navigation = any(
-            isinstance(item, FindOracleLeg) for item in self.legs
-        )
         if isinstance(leg, StandOnStairsLeg):
             return PlannedGoal(StandOnStairsGoal(leg.target))
         here = _level(dungeon.current)
         if isinstance(leg, ExploreDungeonLeg):
             return PlannedGoal(_explore_dungeon(leg, dungeon, here))
-        if isinstance(leg, EnterMinetownTempleLeg):
-            if here.dungeon_number != 2:
-                return (
-                    PlannedGoal(_leave_branch(dungeon, here))
-                    if here.dungeon_number != DUNGEONS_OF_DOOM
-                    else _enter_branch(dungeon, here, 2)
-                )
-            memory = dungeon.current
-            if memory.town_identified:
-                goal_type = (
-                    OccupyAltarGoal
-                    if any("unaligned altar" in text for text in memory.altars.values())
-                    else EnterTempleGoal
-                )
-                return PlannedGoal(goal_type(here))
-            if here.dungeon_level < 3:
-                return PlannedGoal(main_stairs(StairDirection.DOWN))
-            if here.dungeon_level > 4:
-                return PlannedGoal(main_stairs(StairDirection.UP))
-            if here.dungeon_level == 3 and memory.explored:
-                return PlannedGoal(main_stairs(StairDirection.DOWN))
-            return PlannedGoal(EnterTempleGoal(here))
-        if isinstance(leg, FindOracleLeg):
-            if here.dungeon_number != DUNGEONS_OF_DOOM:
-                return PlannedGoal(_leave_branch(dungeon, here))
-            memory = dungeon.current
-            if any(monster.name == "Oracle" for monster in memory.monsters.values()):
-                return PlannedGoal(ApproachOracleGoal(here))
-            if here.dungeon_level < 5:
-                return PlannedGoal(main_stairs(StairDirection.DOWN))
-            if here.dungeon_level > 9:
-                return PlannedGoal(main_stairs(StairDirection.UP))
-            if not memory.explored:
-                return PlannedGoal(ApproachOracleGoal(here))
-            if here.dungeon_level < 9:
-                return PlannedGoal(main_stairs(StairDirection.DOWN))
-            return PlannedGoal(main_stairs(StairDirection.UP))
         target_dungeon = (
             leg.level.dungeon_number
             if isinstance(leg, ReachLevelLeg)
@@ -193,17 +151,6 @@ def leg_complete(leg: ObjectiveLeg, dungeon: DungeonMemory) -> bool:
         return here.dungeon_number == leg.dungeon_number
     if isinstance(leg, ExploreDungeonLeg):
         return unexplored_level(leg, dungeon) is None
-    if isinstance(leg, EnterMinetownTempleLeg):
-        from nethack_agent.targets import mines_candidate
-
-        return mines_candidate(dungeon) and memory.temple_entry is not None
-    if isinstance(leg, FindOracleLeg):
-        from nethack_agent.targets import oracle_adjacent
-
-        observation = memory.live_observation
-        return observation is not None and oracle_adjacent(
-            observation, sum(level.oracle_attacks for level in dungeon.levels.values())
-        )
     position = memory.position
     direction = memory.stair_direction(position)
     return direction is leg.target.direction and (

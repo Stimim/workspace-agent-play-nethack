@@ -271,12 +271,9 @@ class NativeTruth:
                         ("OPEN",) if cmap in (13, 14) else ("CLOSED", "LOCKED")
                     )
                     if state not in expected_states:
-                        # Hero memory can retain a door glyph after a monster alters it.
-                        stale = ("OPEN", "BROKEN", "DOORWAY") if cmap in (15, 16) else ("CLOSED", "LOCKED", "BROKEN", "DOORWAY")
-                        if state not in stale:
-                            raise ValidationError(
-                                f"visible door cmap {cmap} typ {typ} state {state} disagrees with rm flags offset"
-                            )
+                        raise ValidationError(
+                            "visible door disagrees with rm flags offset"
+                        )
         return {
             "rm_size": 8,
             "typ_offset": 4,

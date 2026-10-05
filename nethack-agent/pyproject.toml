@@ -41,5 +41,4 @@ target-version = "py312"
 line-length = 88
 
 [tool.ruff.lint]
-ignore = ["E501"]
 select = ["E", "F", "I", "UP", "B", "SIM"]

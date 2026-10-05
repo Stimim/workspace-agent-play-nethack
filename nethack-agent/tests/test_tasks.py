@@ -160,7 +160,9 @@ def test_explore_dungeon_legs_are_rejected_on_other_tasks(task: NleTask) -> None
         TaskSpec(task, ActionProfile.NLE_TASK_ACTIONS, EXPLORE_THREE)
 
 
-@pytest.mark.parametrize("task", [NleTask.SCOUT, NleTask.GOLD, NleTask.EAT])
+@pytest.mark.parametrize(
+    "task", [NleTask.SCORE, NleTask.SCOUT, NleTask.GOLD, NleTask.EAT]
+)
 def test_find_oracle_legs_are_rejected_on_other_tasks(task: NleTask) -> None:
     with pytest.raises(ContractError, match="find_oracle|explore_dungeon"):
         TaskSpec(task, ActionProfile.NLE_TASK_ACTIONS, Objective((FindOracleLeg(),)))

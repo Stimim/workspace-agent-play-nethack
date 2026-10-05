@@ -24,7 +24,6 @@ from nethack_agent.traversal import (
     DUNGEON_EXIT_LEVEL,
     GOAL_TYPES,
     ApproachOracleGoal,
-    EnterTempleGoal,
     ExploreLevelGoal,
     Goal,
     LevelKey,
@@ -96,8 +95,10 @@ def model_selectable_skills(goal: Goal) -> tuple[Skill, ...]:
     Staircase navigation serves only stair goals. Deterministic specialists
     such as hunger and gold navigation are never offered.
     """
-    if isinstance(goal, ExploreLevelGoal | ApproachOracleGoal | EnterTempleGoal):
+    if isinstance(goal, ExploreLevelGoal):
         return (Skill.EXPLORE_LEVEL,)
+    if isinstance(goal, ApproachOracleGoal):
+        raise ValueError(f"{goal.kind.value} goals have no skills yet")
     return (Skill.STAIRCASE_NAVIGATION, Skill.EXPLORE_LEVEL)
 
 
@@ -135,9 +136,6 @@ class DestinationKind(Enum):
     GOLD = "gold"
     CORPSE = "corpse"
     FOOD = "food"
-    ORACLE_NEIGHBOR = "oracle_neighbor"
-    ALTAR = "altar"
-    ORACLE_HINT = "oracle_hint"
 
 
 STAIR_DESTINATIONS: Final = {

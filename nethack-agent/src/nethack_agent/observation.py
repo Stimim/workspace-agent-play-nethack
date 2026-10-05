@@ -194,25 +194,6 @@ class InventoryItem:
 
 
 @dataclass(frozen=True, slots=True)
-class CellDescription:
-    """Current ordinary look evidence, never remembered monster attitude."""
-
-    x: int
-    y: int
-    text: str
-
-    def __post_init__(self) -> None:
-        integer_value(self.x, "description x", minimum=0)
-        integer_value(self.y, "description y", minimum=0)
-        string_value(self.text, "cell description", minimum=1, maximum=80)
-
-    @classmethod
-    def from_json(cls, value: object) -> Self:
-        payload = object_value(value, "cell description", {"x", "y", "text"})
-        return cls(payload["x"], payload["y"], payload["text"])
-
-
-@dataclass(frozen=True, slots=True)
 class ProjectedObservation:
     step_index: int
     map: MapView
@@ -223,7 +204,6 @@ class ProjectedObservation:
     inventory: tuple[InventoryItem, ...]
     pickup_menu: PickupMenu | None = None
     look_stair: str | None = None
-    cell_descriptions: tuple[CellDescription, ...] | None = None
 
     def __post_init__(self) -> None:
         integer_value(self.step_index, "observation step_index", minimum=0)
@@ -268,18 +248,6 @@ class ProjectedObservation:
             string_value(
                 self.look_stair, "observation look_stair", minimum=1, maximum=40
             )
-        if self.cell_descriptions is not None:
-            if not isinstance(self.cell_descriptions, tuple) or not all(
-                isinstance(cell, CellDescription) for cell in self.cell_descriptions
-            ):
-                raise TypeError("cell_descriptions must contain CellDescription values")
-            coordinates = [(cell.x, cell.y) for cell in self.cell_descriptions]
-            if len(set(coordinates)) != len(coordinates) or any(
-                not (0 <= x < width and 0 <= y < height) for x, y in coordinates
-            ):
-                raise ContractError(
-                    "cell description coordinates invalid or duplicated"
-                )
         for cell in self.changed_cells:
             if not 0 <= cell.x < width or not 0 <= cell.y < height:
                 raise ContractError("changed cell coordinates are outside the map")
@@ -318,11 +286,6 @@ class ProjectedObservation:
             if self.pickup_menu is None
             else self.pickup_menu.to_json(),
             "look_stair": self.look_stair,
-            "cell_descriptions": (
-                None
-                if self.cell_descriptions is None
-                else [asdict(cell) for cell in self.cell_descriptions]
-            ),
         }
 
     @classmethod
@@ -339,7 +302,7 @@ class ProjectedObservation:
                 "prompt",
                 "inventory",
             },
-            optional={"pickup_menu", "look_stair", "cell_descriptions"},
+            optional={"pickup_menu", "look_stair"},
         )
         return cls(
             step_index=integer_value(
@@ -374,16 +337,6 @@ class ProjectedObservation:
                     "observation look_stair",
                     minimum=1,
                     maximum=40,
-                )
-            ),
-            cell_descriptions=(
-                None
-                if payload.get("cell_descriptions") is None
-                else tuple(
-                    CellDescription.from_json(cell)
-                    for cell in array_value(
-                        payload["cell_descriptions"], "cell_descriptions"
-                    )
                 )
             ),
         )
@@ -538,36 +491,6 @@ def _inventory_item_from_json(value: object) -> InventoryItem:
     )
 
 
-def _cell_descriptions(
-    observation: NleObservation, player: PlayerStats
-) -> tuple[CellDescription, ...] | None:
-    descriptions = observation.screen_descriptions
-    if descriptions is None:
-        return None
-    # Decode only monsters, visible altar terrain and the hero's square.
-    # The hero glyph hides terrain; ordinary look-here text can identify it.
-    cells = []
-    for y, row in enumerate(observation.glyphs):
-        for x, value in enumerate(row):
-            glyph = int(value)
-            if (
-                (x, y) == (player.x, player.y)
-                or nethack.glyph_is_monster(glyph)
-                or (nethack.glyph_is_cmap(glyph) and nethack.glyph_to_cmap(glyph) == 27)
-            ):
-                text = _decode_c_string(descriptions[y, x])
-                if text:
-                    cells.append(CellDescription(x, y, text))
-    match = re.search(
-        r"There is an? (?:high )?altar to [^\n]+ \((lawful|neutral|chaotic|unaligned)\) here\.",
-        _decode_c_string(observation.message),
-    )
-    if match is not None and "hallucinating" not in player.conditions:
-        cells = [cell for cell in cells if (cell.x, cell.y) != (player.x, player.y)]
-        cells.append(CellDescription(player.x, player.y, f"{match.group(1)} altar"))
-    return tuple(cells)
-
-
 class ObservationProjector:
     """Copies compact public state before NLE reuses its observation buffers."""
 
@@ -617,7 +540,6 @@ class ObservationProjector:
             inventory=self._inventory(observation),
             pickup_menu=pickup_menu_from_tty(observation.tty_chars),
             look_stair=stair_here_from_tty(observation.tty_chars),
-            cell_descriptions=_cell_descriptions(observation, player),
         )
 
     def _changed_cells(self, current: MapView) -> tuple[MapCellChange, ...]:

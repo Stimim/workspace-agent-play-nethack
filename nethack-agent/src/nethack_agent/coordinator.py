@@ -88,8 +88,6 @@ from nethack_agent.tasks import ActionProfile, ActionRole, NleTask
 from nethack_agent.traversal import (
     STAIR_GOAL_TYPES,
     STAND_ON_DOWNSTAIRS,
-    ApproachOracleGoal,
-    EnterTempleGoal,
     ExploreLevelGoal,
     Goal,
     LevelKey,
@@ -205,11 +203,6 @@ class ActionGate:
         if not 0 <= action_index < len(self._legal_actions):
             raise ActionGateError(f"action index {action_index} is not legal")
         action = self._legal_actions[action_index]
-        from nethack_agent.conduct import conduct_error
-
-        error = conduct_error(action, before, memory)
-        if error is not None:
-            raise ActionGateError(error)
         food = (
             None
             if selection is None or selection.intent is None
@@ -955,7 +948,7 @@ class AgentCoordinator:
         navigation = None if before.prompt.active else self._navigate(memory, goal)
         arbiter_skill = (
             Skill.STAIRCASE_NAVIGATION
-            if navigation is not None and isinstance(goal, STAIR_GOAL_TYPES)
+            if navigation is not None
             else Skill.EXPLORE_LEVEL
         )
         if prompt is not None:
@@ -1131,10 +1124,6 @@ class AgentCoordinator:
         return planned.goal
 
     def _navigate(self, memory: LevelMemory, goal: Goal) -> SkillAction | None:
-        if isinstance(goal, ApproachOracleGoal | EnterTempleGoal):
-            from nethack_agent.skills import navigate_target
-
-            return navigate_target(memory, self._gate.actions_by_name, goal)
         if not isinstance(goal, STAIR_GOAL_TYPES):
             return None
         level_change = (
@@ -1657,11 +1646,6 @@ class AgentCoordinator:
         ):
             memory.stuck_consult_step = None
         memory.record(plan.record)
-        from nethack_agent.conduct import attack_evidence
-
-        action = self._environment.legal_actions[selection.action_index]
-        name, _ = attack_evidence(action, before)
-        memory.oracle_attacks += name == "Oracle"
         # The committed step records this decision's exhaustion marker.
         self._exhaustion_undo = None
 

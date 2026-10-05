@@ -52,8 +52,6 @@ from nethack_agent.observation import (
 )
 from nethack_agent.traversal import (
     STAND_ON_DOWNSTAIRS,
-    ApproachOracleGoal,
-    EnterTempleGoal,
     LevelKey,
     StairDirection,
     StairGoal,
@@ -123,13 +121,6 @@ def stair_candidates(memory: LevelMemory, target: StairTarget) -> dict[Point, in
     pair_known = memory.pair_known(target.direction)
     candidates: dict[Point, int] = {}
     for stair in memory.stairs(target.direction):
-        from nethack_agent.conduct import oracle_ascent_error
-
-        if (
-            target.direction is StairDirection.UP
-            and oracle_ascent_error(memory, stair) is not None
-        ):
-            continue
         tier = candidate_tier(target, memory.identity(stair), pair_known=pair_known)
         if tier is not None:
             candidates[stair] = tier
@@ -873,83 +864,6 @@ def discover_ambiguous_pile(
         "Look here to resolve the ambiguous object pile underfoot.",
         ActionRecord(ActionKind.OTHER, origin),
         None,
-    )
-
-
-def navigate_target(
-    memory: LevelMemory,
-    actions: dict[str, LegalAction],
-    goal: ApproachOracleGoal | EnterTempleGoal,
-) -> SkillAction | None:
-    """Use ordinary route geometry without ever routing through the Oracle."""
-    if (
-        isinstance(goal, EnterTempleGoal)
-        and memory.position in memory.altars
-        and "unaligned altar" in memory.altars[memory.position]
-    ):
-        look = actions.get("Command.LOOK")
-        if look is not None:
-            return SkillAction(
-                look.index,
-                "Look here to confirm the altar alignment under the hero.",
-                ActionRecord(ActionKind.OTHER, memory.position),
-                None,
-            )
-    tree = route_tree(memory)
-    if isinstance(goal, ApproachOracleGoal):
-        oracle_cells = [
-            p for p, monster in memory.monsters.items() if monster.name == "Oracle"
-        ]
-        candidates = {
-            p
-            for oracle in oracle_cells
-            for p in memory.neighbors(oracle)
-            if p in tree.distances and p != memory.position
-        }
-        kind = DestinationKind.ORACLE_NEIGHBOR
-        if not oracle_cells:
-            kind = DestinationKind.ORACLE_HINT
-            observation = memory.live_observation
-            hints = {
-                (x, y)
-                for y in range(memory.height)
-                for x in range(memory.width)
-                if memory.cmap((x, y)) == 31
-            }
-            if observation is not None:
-                from nle import nethack
-
-                hints.update(
-                    (x, y)
-                    for y, row in enumerate(observation.map.glyph_rows)
-                    for x, glyph in enumerate(row)
-                    if nethack.glyph_is_statue(glyph)
-                    and "centaur"
-                    in nethack.permonst(glyph - nethack.GLYPH_STATUE_OFF).mname
-                )
-            candidates = {
-                p
-                for hint in hints
-                for p in memory.neighbors(hint)
-                if p in tree.distances and p not in memory.visited
-            }
-    else:
-        candidates = {
-            p for p in memory.altars if p in tree.distances and p != memory.position
-        }
-        kind = DestinationKind.ALTAR
-    if not candidates:
-        return None
-    destination = min(candidates, key=lambda p: (tree.distances[p], p[1], p[0]))
-    route = tree.route(destination)
-    if route is None:
-        return None
-    return _route_step(
-        memory,
-        route,
-        actions,
-        "Approach the publicly observed location target.",
-        IntentDestination(kind, *destination),
     )
 
 
