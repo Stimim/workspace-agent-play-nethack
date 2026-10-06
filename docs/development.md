@@ -337,7 +337,7 @@ relabel their reports as later-policy evidence. Policy
 the cases, seeds, caps, and thresholds above under new suite ids; they, and the
 `scout-v1` and `eat-v1` baselines, are in turn refused by earlier policies.
 
-Policy `hierarchical-survival-exit-v1` runs its own regression suites, `staircase-v4`, `traversal-v3`, `scout-v2`, and `eat-v2`, plus a schema-3 `descend-d5-v1` suite. To run them with the real model, use `uv run nethack-agent eval run --suite evaluation/<suite>.json --data-dir <dir>`.
+Policy `hierarchical-survival-exit-v1` runs its own regression suites, `staircase-v4`, `traversal-v3`, `scout-v2`, and `eat-v2`, plus a schema-3 `descend-d5-v1` suite. To run them with the real model, use `uv run nethack-agent eval run --suite evaluation/<suite>.json --data-dir <dir> --workers 10` (or whichever worker count fits your machine).
 
 New evaluation follows [ADR 0006](decisions/0006-unified-goal-suites.md):
 place-reaching goals run on `NetHackScore-v0` with `nle-survival-actions` and
@@ -347,7 +347,7 @@ development-only `evaluation/unified-d5-regression-v4.json` runs the 67 unique
 historical/probe seeds as `reach_level(0,5)` with a 3,000-step cap. Its
 67/67 goal tracks remediation but does not block commits; historical suites
 and reports remain immutable. Run all cases with the scripted model using
-`uv run nethack-agent eval run --suite evaluation/unified-d5-regression-v4.json --data-dir /tmp/unified-d5-scripted --report-dir /tmp/unified-d5-scripted/reports --development-scripted-model`; omit `--development-scripted-model` and choose separate data/report directories to run with the configured real model. Version 4 pins the qualified look-here staircase-discovery policy; v3, v2, and v1 stay immutable. The next milestone's fresh-draw suite must declare its objective-success rate and explicit zero-starvation/zero-Weak-or-worse hunger-death gates before execution.
+`uv run nethack-agent eval run --suite evaluation/unified-d5-regression-v4.json --data-dir /tmp/unified-d5-scripted --report-dir /tmp/unified-d5-scripted/reports --development-scripted-model --workers 10`; omit `--development-scripted-model` and choose separate data/report directories to run with the configured real model. Version 4 pins the qualified look-here staircase-discovery policy; v3, v2, and v1 stay immutable. The next milestone's fresh-draw suite must declare its objective-success rate and explicit zero-staircase tolerance.
 
 Coding-agent workflow: use the [_agents/skills/omp-commit/SKILL.md](../_agents/skills/omp-commit/SKILL.md) commit guard for product changes, and launch every evaluation through the [_agents/skills/detached-eval/SKILL.md](../_agents/skills/detached-eval/SKILL.md) detached runner; wait with no tool deadline or poll status so suites cannot be cut short.
 

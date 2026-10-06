@@ -136,12 +136,22 @@ Phase 0 — tooling
   ([0047](docs/notes/0047-native-truth-reader.md)).
 - [x] Long-run harness: detached suite runs with a completion marker, so no
   run is cut short by a tool deadline.
-- [ ] Parallel evaluation: run a suite's episodes in parallel processes,
+- [x] Parallel evaluation: run a suite's episodes in parallel processes,
   verified to give per-seed results identical to a sequential run.
-- [ ] Evidence records: raw run data under a directory outside the tree,
+  Measured on `unified-d5-regression-v4`: 1,449 s sequential vs 395 s at
+  10 workers, with identical per-seed results and action sequences on
+  67/67 seeds. The speedup is limited by CPU contention and SQLite
+  connection churn.
+- [x] Evidence records: raw run data under a directory outside the tree,
   and a compact committed per-seed record per evaluated suite (case, seed,
   outcome, steps, turns, death cause, hunger, deepest level, failure class,
-  plus commit, suite, model and command). Backfill note 0050.
+  plus commit, suite, model and command). Backfill note 0050. Tool:
+  `_agents/skills/evidence-record/`; records in
+  `docs/notes/evidence/0050/`; raw data in `~/nethack-evidence/0050/`.
+- [ ] RunStore connection reuse, thread-safe, to cut SQLite contention
+  under parallel evaluation.
+- [ ] detached-eval `stop` subcommand that signals the whole process
+  group.
 
 Phase 1 — objectives and measurement
 - [x] `enter_minetown_temple` objective leg. Success evidence follows

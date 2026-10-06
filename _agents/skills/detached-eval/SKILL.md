@@ -5,7 +5,7 @@ Use this skill for every evaluation suite. Tool deadlines must never cut an eval
 From the repository root:
 
 ```bash
-_agents/skills/detached-eval/scripts/detached_eval.py start --name RUN --cwd nethack-agent -- uv run nethack-agent eval run --suite evaluation/SUITE.json --data-dir /tmp/RUN --report-dir /tmp/RUN/reports --development-scripted-model
+_agents/skills/detached-eval/scripts/detached_eval.py start --name RUN --cwd nethack-agent -- uv run nethack-agent eval run --suite evaluation/SUITE.json --data-dir /tmp/RUN --report-dir /tmp/RUN/reports --workers 10 --development-scripted-model
 _agents/skills/detached-eval/scripts/detached_eval.py wait RUN
 ```
 

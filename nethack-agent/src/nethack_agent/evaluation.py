@@ -1,17 +1,22 @@
 from __future__ import annotations
 
 import hashlib
+import itertools
 import json
 import math
 import os
 import random
 import re
 import secrets
+import signal
 import sys
 import tempfile
 import time
 from collections import Counter
 from collections.abc import Callable, Sequence
+from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor
+from concurrent.futures import wait as wait_futures
+from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from enum import Enum
@@ -5575,6 +5580,7 @@ class EvaluationOptions:
     seeds: tuple[int, ...] | None = None
     draw_seed: int | None = None
     compare_report: Path | None = None
+    workers: int = 1
     development_scripted_model: bool = False
     progress_interval_seconds: float = 30.0
     poll_interval_seconds: float = 0.25
@@ -5849,28 +5855,137 @@ def run_evaluation(
     ]
     try:
         writer.write(report)
-        for position, (case, seed) in enumerate(episodes, start=1):
-            label = f"{case.case_id} seed {seed}"
-            log(f"{label} ({position}/{len(episodes)}) starting")
-            result, interrupted = _evaluate_seed(manager, options, case, seed, log)
-            report.results.append(result)
-            writer.write(report)
-            stats = result.decision_stats
-            log(
-                f"{label} ({position}/{len(episodes)}) "
-                f"{result.outcome.value if result.outcome else 'no outcome'} "
-                f"after {result.steps} steps in {result.wall_seconds:.1f}s; "
-                f"{stats.decisions} model decisions, p50 "
-                f"{_cell(stats.p50_ms)} ms; integrity "
-                f"{'ok' if result.integrity_ok else 'FAILED'}"
-            )
-            if interrupted:
-                break
+        if options.workers == 1:
+            for position, (case, seed) in enumerate(episodes, start=1):
+                label = f"{case.case_id} seed {seed}"
+                log(f"{label} ({position}/{len(episodes)}) starting")
+                result, interrupted = _evaluate_seed(manager, options, case, seed, log)
+                report.results.append(result)
+                writer.write(report)
+                stats = result.decision_stats
+                log(
+                    f"{label} ({position}/{len(episodes)}) "
+                    f"{result.outcome.value if result.outcome else 'no outcome'} "
+                    f"after {result.steps} steps in {result.wall_seconds:.1f}s; "
+                    f"{stats.decisions} model decisions, p50 "
+                    f"{_cell(stats.p50_ms)} ms; integrity "
+                    f"{'ok' if result.integrity_ok else 'FAILED'}"
+                )
+                if interrupted:
+                    break
+        else:
+            manager.close()
+            manager = None
+            total = len(episodes)
+            results_dict: dict[tuple[str, int], SeedResult] = {}
+            # Episodes are dispatched one-at-a-time as workers free up (never
+            # more than options.workers in flight) instead of submitting the
+            # whole suite upfront. ProcessPoolExecutor looks ahead and keeps
+            # its internal call queue topped up regardless of
+            # shutdown(cancel_futures=True); submitting only what we intend
+            # to run right now is what actually stops new episodes from
+            # starting once interrupted.
+            # Dispatch order is round-robin across cases (one seed per case
+            # per pass) so a long-running case's seeds do not all queue at
+            # the end and starve worker occupancy near suite completion.
+            # Report order stays deterministic case-then-requested-seed via
+            # `_rebuild_results`, which replays `episodes`, not dispatch
+            # order.
+            case_groups: dict[str, list[tuple[int, tuple[EvaluationCase, int]]]] = {}
+            for position, (case, seed) in enumerate(episodes, start=1):
+                case_groups.setdefault(case.case_id, []).append(
+                    (position, (case, seed))
+                )
+
+            pending_episodes: list[tuple[int, tuple[EvaluationCase, int]]] = [
+                item
+                for group in itertools.zip_longest(*case_groups.values())
+                for item in group
+                if item is not None
+            ]
+
+            def _rebuild_results() -> None:
+                report.results = [
+                    results_dict[(c.case_id, s)]
+                    for c, s in episodes
+                    if (c.case_id, s) in results_dict
+                ]
+
+            with ProcessPoolExecutor(max_workers=options.workers) as executor:
+                futures: dict[
+                    Future[tuple[SeedResult, bool]], tuple[EvaluationCase, int, int]
+                ] = {}
+
+                def _dispatch_next() -> bool:
+                    if not pending_episodes:
+                        return False
+                    position, (case, seed) = pending_episodes.pop(0)
+                    future = executor.submit(
+                        _evaluate_seed_process,
+                        options,
+                        config,
+                        mode,
+                        knowledge_bundle,
+                        case,
+                        seed,
+                        position,
+                        total,
+                    )
+                    futures[future] = (case, seed, position)
+                    return True
+
+                for _ in range(options.workers):
+                    _dispatch_next()
+
+                def _drain_remaining() -> None:
+                    pending_episodes.clear()
+                    _interrupt_workers(executor)
+                    for remaining in list(futures):
+                        with suppress(Exception):
+                            finished_result, _ = remaining.result()
+                            finished_case, finished_seed, _ = futures[remaining]
+                            results_dict.setdefault(
+                                (finished_case.case_id, finished_seed), finished_result
+                            )
+
+                try:
+                    while futures:
+                        done, _pending_futures = wait_futures(
+                            list(futures), return_when=FIRST_COMPLETED
+                        )
+                        for future in done:
+                            case, seed, position = futures.pop(future)
+                            label = f"{case.case_id} seed {seed}"
+                            result, interrupted = future.result()
+                            results_dict[(case.case_id, seed)] = result
+                            _rebuild_results()
+                            writer.write(report)
+                            stats = result.decision_stats
+                            log(
+                                f"{label} ({position}/{total}) "
+                                f"{result.outcome.value if result.outcome else 'no outcome'} "
+                                f"after {result.steps} steps in {result.wall_seconds:.1f}s; "
+                                f"{stats.decisions} model decisions, p50 "
+                                f"{_cell(stats.p50_ms)} ms; integrity "
+                                f"{'ok' if result.integrity_ok else 'FAILED'}"
+                            )
+                            if interrupted:
+                                _drain_remaining()
+                                break
+                            _dispatch_next()
+                        if interrupted:
+                            break
+                except KeyboardInterrupt:
+                    interrupted = True
+                    _drain_remaining()
+                _rebuild_results()
+                writer.write(report)
     except KeyboardInterrupt:
         interrupted = True
     finally:
         try:
-            manager.close()
+            if manager is not None:
+                manager.close()
         finally:
             report.inputs_unchanged = _inputs_unchanged(report)
             report.finished_at = _utc_now()
@@ -5891,6 +6006,49 @@ def run_evaluation(
         f"report {report.status.value}: {writer.paths.json} and {writer.paths.markdown}"
     )
     return EvaluationRun(report, writer.paths, interrupted)
+
+
+def _interrupt_workers(executor: ProcessPoolExecutor) -> None:
+    """Forward SIGINT to live worker processes.
+
+    A signal sent only to the parent pid (not its process group) never
+    reaches these children on its own; ``_processes`` is private API but is
+    the only way to reach the live ``multiprocessing.Process`` objects so an
+    in-flight episode can stop itself the same way ``_evaluate_seed``
+    already handles a direct KeyboardInterrupt. Queued-but-unstarted work is
+    handled separately via ``executor.shutdown(cancel_futures=True)``.
+    """
+    processes = getattr(executor, "_processes", None) or {}
+    for process in list(processes.values()):
+        if process.is_alive():
+            with suppress(ProcessLookupError):
+                os.kill(process.pid, signal.SIGINT)
+
+
+def _evaluate_seed_process(
+    options: EvaluationOptions,
+    config: OllamaConfig,
+    model_mode: str,
+    knowledge_bundle: KnowledgeBundle,
+    case: EvaluationCase,
+    seed: int,
+    position: int,
+    total: int,
+) -> tuple[SeedResult, bool]:
+    log = _Progress(sys.stderr)
+    log(f"{case.case_id} seed {seed} ({position}/{total}) starting")
+    model_factory = _development_model if model_mode == "development_scripted" else None
+
+    manager = RunManager(
+        options.data_directory,
+        config,
+        model_factory=model_factory,
+        knowledge_bundle=knowledge_bundle,
+    )
+    try:
+        return _evaluate_seed(manager, options, case, seed, log)
+    finally:
+        manager.close()
 
 
 def _evaluate_seed(

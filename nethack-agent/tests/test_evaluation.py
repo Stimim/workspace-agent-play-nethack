@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
+import signal
 import sqlite3
 import stat
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import replace
@@ -3663,3 +3666,96 @@ def test_corpse_route_accepts_untracked_lichen_despite_consumed_kill_same_cell()
         consumed_corpses={(level, 1, 0, 2)},
         dungeon_memory=memory,
     )
+
+
+def _mock_evaluate_seed_process_ordering(
+    *args: object, **kwargs: object
+) -> tuple[SeedResult, bool]:
+    seed = args[5]
+    if seed == 3:
+        time.sleep(0.5)
+    return result(seed, RunOutcome.TASK_SUCCESS), False
+
+
+@pytest.mark.usefixtures("bound_policy")
+def test_parallel_eval_returns_results_in_case_and_seed_order_regardless_of_completion_order(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    suite = load_suite(SUITE_PATH)
+    monkeypatch.setattr(
+        evaluation, "_evaluate_seed_process", _mock_evaluate_seed_process_ordering
+    )
+
+    options = EvaluationOptions(
+        suite=suite,
+        data_directory=tmp_path / "data",
+        report_directory=tmp_path / "reports",
+        workers=4,
+        development_scripted_model=True,
+    )
+    run = evaluation.run_evaluation(options)
+
+    assert run.report.status == ReportStatus.COMPLETE
+    ordered_seeds = [row.seed for row in run.report.results]
+    assert ordered_seeds == list(range(1, 11))
+
+
+def _mock_evaluate_seed_process_long_running(
+    options: object,
+    config: object,
+    model_mode: object,
+    knowledge_bundle: object,
+    case: object,
+    seed: int,
+    position: int,
+    total: int,
+) -> tuple[SeedResult, bool]:
+    marker = Path(options.data_directory) / f"started-{seed}"  # type: ignore[attr-defined]
+    marker.write_text("1", encoding="utf-8")
+    try:
+        time.sleep(5.0)
+    except KeyboardInterrupt:
+        return result(seed, RunOutcome.TRUNCATED), True
+    return result(seed, RunOutcome.TASK_SUCCESS), False
+
+
+@pytest.mark.usefixtures("bound_policy")
+def test_parallel_eval_interrupt_while_waiting_cancels_queued_episodes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A signal delivered to the parent while it blocks in as_completed (not
+    while unwinding a future's own exception) must cancel every episode that
+    has not yet started and must not wait for the full suite to run."""
+    suite = load_suite(SUITE_PATH)
+    monkeypatch.setattr(
+        evaluation, "_evaluate_seed_process", _mock_evaluate_seed_process_long_running
+    )
+    data_directory = tmp_path / "data"
+    data_directory.mkdir()
+
+    options = EvaluationOptions(
+        suite=suite,
+        data_directory=data_directory,
+        report_directory=tmp_path / "reports",
+        workers=2,
+        development_scripted_model=True,
+    )
+
+    timer = threading.Timer(0.4, lambda: os.kill(os.getpid(), signal.SIGINT))
+    timer.start()
+    started = time.monotonic()
+    try:
+        run = evaluation.run_evaluation(options)
+    finally:
+        timer.cancel()
+    elapsed = time.monotonic() - started
+
+    assert run.interrupted is True
+    assert run.report.status == ReportStatus.INTERRUPTED
+    started_markers = list(data_directory.glob("started-*"))
+    # 10 seeds are in the suite; only the first wave (bounded by workers)
+    # should ever have started before the queued remainder was cancelled.
+    assert 0 < len(started_markers) < 10
+    # Had cancellation not worked, every queued episode would have run its
+    # full 5s mock sleep serially/concurrently; bound well under that.
+    assert elapsed < 4.0

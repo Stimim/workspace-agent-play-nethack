@@ -317,6 +317,12 @@ def _build_parser() -> argparse.ArgumentParser:
     eval_run_parser.add_argument(
         "--progress-interval", type=_positive_float, default=30.0
     )
+    eval_run_parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help="number of concurrent evaluation workers (default: 1)",
+    )
     eval_run_parser.add_argument("--json", action="store_true")
     eval_run_parser.add_argument(
         "--development-scripted-model",
@@ -474,6 +480,7 @@ def _run_evaluation_command(arguments: argparse.Namespace) -> int:
             compare_report=arguments.compare_report,
             development_scripted_model=arguments.development_scripted_model,
             progress_interval_seconds=arguments.progress_interval,
+            workers=arguments.workers,
         )
         run = run_evaluation(options)
     except KeyboardInterrupt:

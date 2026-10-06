@@ -1013,6 +1013,11 @@ invalid/gate/integrity-clean records
 `RunManager` with `create_run(auto_start=True)`: the same coordinator, worker
 loop, action gate, SQLite store, and ttyrec capture as the HTTP service, without
 HTTP or child-process failure modes. The manager, Ollama configuration,
+By default, episodes run sequentially. Adding `--workers N` runs `N` episodes
+concurrently using a `ProcessPoolExecutor`. Each worker instantiates its own
+`RunManager` instance pointing to the same SQLite WAL database. The evaluation
+harness reconstructs deterministic episode ordering in the report, maintaining
+transparent layout and artifacts.
 knowledge bundle, and policy version are created once for the suite; each case
 supplies only its declared task and cap. The evaluator never resumes or steers
 an episode. A run that pauses after a decision failure or gate rejection is
