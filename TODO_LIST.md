@@ -59,7 +59,7 @@ Work, in order:
 
 Out of scope: Oracle navigation and the `gold-v1` and `oracle-v1` suites (milestone 3 candidates), retreat, rest, or HP-based prayer unless probes show HP deaths, and model-owned choices.
 
-## Now: milestone 2 acceptance remediation
+## Done: milestone 2 acceptance remediation
 
 - [x] Diagnose every existing milestone-2 seed under one Score/survival/
   reach-D5/cap-3000 setup: 50/67 objectives before remediation.
@@ -99,7 +99,7 @@ Out of scope: Oracle navigation and the `gold-v1` and `oracle-v1` suites (milest
   (exit-discovery stalls, combat without prayer, rule 3, prayer interval)
   are milestone-3 work items.
 
-## Next: milestone 3 — Mines to Minetown, and the Oracle
+## Now: milestone 3 — Mines to Minetown, and the Oracle
 
 Goal: the same single agent, in two separate suites, (1) reaches
 **Minetown** (Gnomish Mines level 3 or 4, Dlvl 5-8) and **enters its
@@ -111,11 +111,20 @@ unaligned altar (confirmed in [ADR 0007](docs/decisions/0007-mines-minetown-and-
 accepted). Scope: capability areas A (survive), B (food), F (navigation)
 below. ADR 0007 defines the accepted objectives, detectors, suites, and gates.
 
-Process rules (lessons from milestone 2, notes 0037-0046):
+Process rules (lessons from milestone 2, notes 0037-0046, and the
+2026-10-06 decisions in [ADR 0007](docs/decisions/0007-mines-minetown-and-oracle.md#process-decisions-2026-10-06)):
 one rule per worker session; every product change ships only with its
-qualification note (note 0040 protocol, frozen fresh sample); evaluations
-run with `timeout: 0` or detached; native-memory ground truth is
-diagnosis-only, never a policy input.
+qualification note (note 0040 protocol, frozen fresh sample), gated on both
+target suites plus `unified-d5-regression-v4`; evaluations run with
+`timeout: 0` or detached; native-memory ground truth is diagnosis-only, never
+a policy input; raw evaluation data stays outside git, and each note commits a
+compact per-seed record; only the orchestrating session commits
+([AGENTS.md](AGENTS.md)).
+
+Order of work (2026-10-06, from the note 0050 baselines, where hunger is the
+largest failure class): parallel evaluation and evidence records (Phase 0),
+then the hunger live-lock and food reserve (Phase 4), then branch staircase
+identity on the way down and the stall breaker (Phase 2), then the rest.
 
 Phase 0 — tooling
 - [x] Commit guard in `omp_commit.py`: refuse staged `nethack-agent/src`
@@ -127,6 +136,12 @@ Phase 0 — tooling
   ([0047](docs/notes/0047-native-truth-reader.md)).
 - [x] Long-run harness: detached suite runs with a completion marker, so no
   run is cut short by a tool deadline.
+- [ ] Parallel evaluation: run a suite's episodes in parallel processes,
+  verified to give per-seed results identical to a sequential run.
+- [ ] Evidence records: raw run data under a directory outside the tree,
+  and a compact committed per-seed record per evaluated suite (case, seed,
+  outcome, steps, turns, death cause, hunger, deepest level, failure class,
+  plus commit, suite, model and command). Backfill note 0050.
 
 Phase 1 — objectives and measurement
 - [x] `enter_minetown_temple` objective leg. Success evidence follows
@@ -145,18 +160,18 @@ Phase 1 — objectives and measurement
     the level is recognized only once the Oracle herself is seen.
   - [ ] Level cues (centaur statues, fountains, sounds) and Sokoban
     up-branch avoidance.
-- [ ] Development suites (ADR 0006: Score, survival profile): a 67-seed
-  regression per target from the historical seeds, plus held-out probes
-  that fix each step cap (likely above 3,000; NLE limit noted).
-  - [x] `minetown-regression-v1` and `oracle-regression-v1` at a
-    provisional 10,000-step cap.
-  - [ ] ADR 0007 §4.2 held-out cap probes (30 reserved seeds per target,
-    30,000-step ceiling, frozen policy).
+- [x] Development suites (ADR 0006: Score, survival profile): a 67-seed
+  regression per target from the historical seeds, at a provisional
+  10,000-step cap. The held-out cap probes moved to Phase 5, because ADR 0007
+  §4.2 needs a frozen policy; no baseline success needed more than 7,387
+  steps ([0050](docs/notes/0050-phase1-objectives-baselines-detector-audit.md)).
 - [x] Baseline both targets with the current policy and classify every
   failure with ground truth: deaths by cause and hunger, stalls by true
   blocker, branch confusion, peaceful-monster incidents.
 
-Phase 2 — F: navigation (expected largest class)
+Phase 2 — F: navigation
+- [ ] Branch staircase identity on the way down: 26 Oracle baseline runs took
+  the Mines `>` for the main `>` ([0050](docs/notes/0050-phase1-objectives-baselines-detector-audit.md)).
 - [ ] Exit discovery from true-map evidence on every stalled level
   (milestone-2 seeds plus 2064852799 and 249447619).
 - [ ] Stall breaker: when a level has consumed a fixed turn budget with the
@@ -185,15 +200,20 @@ Phase 3 — A: survival in a crowded, deeper dungeon
 - [ ] Vault-guard compliance after involuntary relocation (seed 1377).
 
 Phase 4 — B: food and prayer over a longer horizon
+- [ ] Fix the hunger-skill `EAT`/`ESC` live-lock (Minetown seed 1362, Oracle
+  seed 6; [0050](docs/notes/0050-phase1-objectives-baselines-detector-audit.md)).
 - [ ] Reconcile the prayer interval (code 1,229 versus ADR 1,029) from wiki
   evidence; change it only with evidence.
 - [ ] Carry a food reserve (non-shop floor food while unburdened), and
   eat before long stalls; measure turns-per-level against the food horizon.
 
 Phase 5 — acceptance
-- [ ] Frozen policy, then one real-model run of fresh-draw `minetown-v1`
-  and `oracle-v1` suites: declared success rates from probes, zero
-  starvation and zero Weak-or-worse deaths, zero peaceful kills, zero
+- [ ] Freeze the policy, then run the ADR 0007 §4.2 held-out cap probes
+  (30 reserved seeds per target, 30,000-step ceiling) to fix each target's
+  cap and declared success rate.
+- [ ] One real-model run of fresh-draw `minetown-v1` and `oracle-v1`
+  suites with that frozen policy and cap: declared success rates from probes,
+  zero starvation and zero Weak-or-worse deaths, zero peaceful kills, zero
   invalid actions and gate rejections.
 
 ## Capability roadmap to ascension

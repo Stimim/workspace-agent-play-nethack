@@ -279,6 +279,30 @@ Keep existing report rendering unchanged.
 - **Peaceful kills:** Counts hero-attributed kills only (as proposed), plus the existing ban on deliberate pet-assisted harm. Autonomous pet/NPC kills do not count.
 - **Digging:** Approved for Orcish Town and general navigation under strict conduct gates. Constraints added to §3: acquire pick-axe/mattock or wand; never dig in Minetown (Watch/shopkeeper anger) or Sokoban.
 
+## Process decisions (2026-10-06)
+
+Taken after the Phase 1 baselines
+([note 0050](../notes/0050-phase1-objectives-baselines-detector-audit.md)).
+They refine §4 and do not change targets, detectors, or acceptance gates.
+
+- **Cap probes come after the policy freeze.** §4.2 probes run at the start
+  of acceptance, on the frozen policy. Probes run earlier would be invalidated
+  by later rules. Development suites keep a provisional 10,000-step cap. No
+  baseline success needed more than 7,387 steps, and all 12 truncations were
+  single-level loops of 7,900 steps or more, not slow progress.
+- **Every rule is gated by both targets.** Each product rule qualifies on
+  `minetown-regression-v1` and `oracle-regression-v1` plus its frozen fresh
+  samples, with `unified-d5-regression-v4` as a no-regression check.
+- **Parallel evaluation.** Episodes may run in parallel processes once a
+  parallel run has reproduced a sequential run's per-seed results exactly.
+- **Evidence.** Raw run data stays outside the repository. Each note commits
+  a compact per-seed record ([AGENTS.md](../../AGENTS.md) rule 11).
+- **Order of work.** Hunger and food first, then branch staircase identity on
+  the way down, then the stall breaker, then the remaining phases. Hunger
+  caused 39 of 94 baseline deaths.
+- **Model role.** This milestone stays deterministic (ADR 0002). Model-owned
+  choices are revisited after it.
+
 [src-mines]: https://github.com/NetHack/NetHack/blob/NetHack-3.6.7_Released/dat/mines.des#L55-L128
 [src-special]: https://github.com/NetHack/NetHack/blob/NetHack-3.6.7_Released/src/sp_lev.c#L2073-L2127
 [src-hack]: https://github.com/NetHack/NetHack/blob/NetHack-3.6.7_Released/src/hack.c#L2523-L2524

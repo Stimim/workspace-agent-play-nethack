@@ -40,6 +40,14 @@ Before changing behavior, read:
    conversation UUID from process/session evidence, and writes exactly one
    `OMP-Conversation: <conversation-uuid>` Git trailer. Never invent or
    manually substitute an identifier.
+10. Only the orchestrating session commits. Subagents and worker sessions
+    hand over a branch or patch file and never commit. Before committing,
+    re-check every number or claim a worker reports against the actual
+    report, database, or diff.
+11. Raw evaluation data (`runs.sqlite3`, ttyrecs, full reports) stays
+    outside the tree. A note that cites an evaluation commits a compact
+    per-seed record of it, with the commit, suite, model, and command needed
+    to rerun any seed.
 
 ## Knowledge boundaries
 

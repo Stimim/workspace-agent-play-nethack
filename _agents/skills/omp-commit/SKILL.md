@@ -2,6 +2,8 @@
 
 Use this skill whenever a coding agent creates a Git commit in this repository. The script obtains the conversation UUID from active OMP process and session evidence; never type, copy, or invent the trailer value yourself.
 
+Only the orchestrating session commits. A subagent or worker session must not run this script or `git commit`; it hands over a branch or patch file, and the orchestrator re-checks every worker-reported number or claim against the actual report or diff before committing.
+
 ## Commit procedure
 
 1. Write the intended commit message to a file outside the repository worktree.
