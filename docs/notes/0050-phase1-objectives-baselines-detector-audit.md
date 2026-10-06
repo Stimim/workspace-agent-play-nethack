@@ -123,6 +123,12 @@ peaceful monster (seed 824).
 
 ## Evidence
 
-Development databases are `/tmp/redo-{mt,or,d5}/runs.sqlite3` (not committed).
-Reports, audit JSON and stall replays were copied outside `/tmp` for this
-session only. The suites, seeds, code and this note reproduce them.
+Compact per-seed evidence records (committed under `docs/notes/evidence/0050/`):
+- [`minetown-regression-v1-development-20261005T122330Z.json`](evidence/0050/minetown-regression-v1-development-20261005T122330Z.json)
+- [`oracle-regression-v1-development-20261005T122330Z.json`](evidence/0050/oracle-regression-v1-development-20261005T122330Z.json)
+- [`unified-d5-regression-v4-development-20261005T120301Z.json`](evidence/0050/unified-d5-regression-v4-development-20261005T120301Z.json)
+- [`unified-d5-regression-v4-development-20261004T135521Z.json`](evidence/0050/unified-d5-regression-v4-development-20261004T135521Z.json)
+
+Raw development databases and run artifacts are preserved outside the repository in `~/nethack-evidence/0050/`:
+- Databases: `~/nethack-evidence/0050/redo-mt/`, `~/nethack-evidence/0050/redo-or/`, `~/nethack-evidence/0050/redo-d5/`
+- Full reports, detector audit JSON, and stall replays: `~/nethack-evidence/0050/reports/`
