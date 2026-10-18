@@ -8,14 +8,16 @@ Build a local, autonomous NetHack agent whose long-term success criterion is asc
 
 The deterministic NLE adapter, immutable observation projector, typed traversal planner, per-level dungeon memory, deterministic staircase-navigation, exploration, gold-navigation, bounded hunger, prayer, burden-recovery, look-here discovery, and safe-corpse skills, contextual action gate, structured Ollama decision model, reviewed local knowledge, typed SQLite event log, loopback control service and browser UI, scenario orchestrator, network-boundary verifier, exhaustion-marker replay, and policy-pinned evaluation harness with typed metric thresholds are implemented. Milestone 1, traversal-policy, and survival-policy evidence remain accepted or recorded as they were.
 
-The active policy is `hierarchical-survival-hp-prayer-burden-look-v1`. Low-HP
-prayer qualified under note 0043; observed-load-refusal recovery qualified
-under note 0045 rule 1; bounded look-here staircase discovery under an
-ambiguous object pile (preserving the native multi-page screen NLE otherwise
-silently discards) qualified under note 0045 rule 2 with zero fresh changes
-and one traced starvation-to-truncation improvement; `unified-d5-regression-v4`
-pins the new policy while all old suite definitions and reports stay
-unchanged.
+The active policy is `hierarchical-survival-hp-prayer-burden-look-ration-v1`.
+Low-HP prayer qualified under note 0043; observed-load-refusal recovery
+qualified under note 0045 rule 1; bounded look-here staircase discovery under
+an ambiguous object pile (preserving the native multi-page screen NLE
+otherwise silently discards) qualified under note 0045 rule 2; and the hunger
+skill answers its item prompt when several inventory stacks are the same
+verified ration instead of cancelling and reopening `EAT` at zero game turns
+(note 0051). `unified-d5-regression-v5`, `minetown-regression-v2`, and
+`oracle-regression-v2` pin the active policy while all old suite definitions
+and reports stay unchanged.
 
 ## System context
 ```mermaid

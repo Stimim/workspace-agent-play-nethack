@@ -115,7 +115,7 @@ Process rules (lessons from milestone 2, notes 0037-0046, and the
 2026-10-06 decisions in [ADR 0007](docs/decisions/0007-mines-minetown-and-oracle.md#process-decisions-2026-10-06)):
 one rule per worker session; every product change ships only with its
 qualification note (note 0040 protocol, frozen fresh sample), gated on both
-target suites plus `unified-d5-regression-v4`; evaluations run with
+target suites plus `unified-d5-regression-v5`; evaluations run with
 `timeout: 0` or detached; native-memory ground truth is diagnosis-only, never
 a policy input; raw evaluation data stays outside git, and each note commits a
 compact per-seed record; only the orchestrating session commits
@@ -161,6 +161,11 @@ Phase 1 — objectives and measurement
   against native special-level identity and room type on every Mines level
   a probe set visits; detector errors are measured, not assumed.
   Audit: 19/19 claims true, no misses ([0050](docs/notes/0050-phase1-objectives-baselines-detector-audit.md)).
+- [ ] Replace the wall/door/bar Minetown counter with altar evidence: a
+  Mines level 3 or 4 reached through the recorded branch crossing is
+  Minetown once an altar is seen or a priest's temple greeting is heard
+  (`mines.des`: every minetn variant has an altar, filler and Mines' End
+  levels have none). Qualify as one rule after the hunger live-lock fix.
 - [ ] Enable `find_oracle` in the planner: identify the Oracle level
   (centaur statues, fountains, peaceful Oracle glyph, level sounds),
   approach to adjacency, never attack; avoid the Sokoban up-branch on the
@@ -210,8 +215,12 @@ Phase 3 — A: survival in a crowded, deeper dungeon
 - [ ] Vault-guard compliance after involuntary relocation (seed 1377).
 
 Phase 4 — B: food and prayer over a longer horizon
-- [ ] Fix the hunger-skill `EAT`/`ESC` live-lock (Minetown seed 1362, Oracle
-  seed 6; [0050](docs/notes/0050-phase1-objectives-baselines-detector-audit.md)).
+- [x] Fix the hunger-skill `EAT`/`ESC` live-lock (Minetown seed 1362, Oracle
+  seed 6): identical verified rations no longer cancel the prompt. All sets
+  matched baseline except Oracle seed 6, a post-divergence blindness death
+  ([0051](docs/notes/0051-ration-livelock-qualification.md)). Seed 1362 now
+  stalls on Dlvl 2 (Phase 2 stall breaker); seed 6 needs Phase 3 blindness
+  handling.
 - [ ] Reconcile the prayer interval (code 1,229 versus ADR 1,029) from wiki
   evidence; change it only with evidence.
 - [ ] Carry a food reserve (non-shop floor food while unburdened), and

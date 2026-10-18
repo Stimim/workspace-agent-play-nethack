@@ -515,8 +515,13 @@ class HungerSkill:
                     for item in safe_inventory_food(observation)
                     if _same_ration(pending, item)
                 )
-                if len(matches) == 1:
-                    letter = matches[0].letter
+                if matches:
+                    best_match = matches[0]
+                    for item in matches:
+                        if item.letter == pending.letter:
+                            best_match = item
+                            break
+                    letter = best_match.letter
                     action = actions_by_command.get(ord(letter))
                     if ord(letter) in offered and action is not None:
                         return SkillAction(

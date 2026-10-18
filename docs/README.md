@@ -22,6 +22,9 @@
   [note 0049](notes/0049-phase1-audit.md). The shipped objectives, baselines,
   native-truth detector audit, and ground-truth failure classification are
   in [note 0050](notes/0050-phase1-objectives-baselines-detector-audit.md).
+- Milestone 3 Phase 4: the qualified hunger-skill ration live-lock fix,
+  policy `hierarchical-survival-hp-prayer-burden-look-ration-v1`, and its
+  per-seed evidence are in [note 0051](notes/0051-ration-livelock-qualification.md).
 - [`external/`](external/): instructions for large external source material that is not committed.
 - [`../_agents/`](../_agents/): repository-specific coding-agent procedures and tools.
 - [`../nethack-agent/knowledge/`](../nethack-agent/knowledge/): reviewed knowledge made available to the local playing agent.

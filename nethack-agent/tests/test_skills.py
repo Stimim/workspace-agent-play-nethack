@@ -1267,6 +1267,102 @@ def test_hunger_skill_answers_with_the_rations_current_offered_letter(
     assert answer.action_index == _HUNGER_BY_NAME[action_name].index
 
 
+def test_hunger_skill_with_multiple_identical_rations_resolves_prompt(
+    template: ProjectedObservation,
+) -> None:
+    from nethack_agent.decision import (
+        ActionSelection,
+        ActionSelectionSource,
+        SkillSelectionSource,
+        prompt_response_error,
+    )
+    from nethack_agent.evaluation import _action_is_valid
+    from nethack_agent.events import StepPayload
+    from nethack_agent.tasks import ActionProfile
+    from nethack_agent.traversal import STAND_ON_DOWNSTAIRS
+
+    skill = HungerSkill()
+    initial = replace(
+        template,
+        player=replace(template.player, hunger=2),
+        inventory=(
+            _ration(
+                template,
+                letter="d",
+                description="a partly eaten food ration",
+                buc=BucStatus.UNKNOWN,
+            ),
+            _ration(
+                template,
+                letter="h",
+                description="a partly eaten food ration",
+                buc=BucStatus.UNKNOWN,
+            ),
+        ),
+    )
+    eat = skill.select_action(initial, _HUNGER_BY_NAME, _HUNGER_BY_COMMAND)
+    assert eat is not None
+    assert eat.action_index == _HUNGER_BY_NAME["Command.EAT"].index
+
+    prompt = replace(
+        initial,
+        step_index=1,
+        message="What do you want to eat? [dh or ?*]",
+        prompt=PromptState(True, False, False),
+    )
+
+    answer = skill.select_action(prompt, _HUNGER_BY_NAME, _HUNGER_BY_COMMAND)
+    assert answer is not None
+    assert answer.action_index == _HUNGER_BY_COMMAND[ord("d")].index
+
+    selection = ActionSelection(
+        ActionSelectionSource.DETERMINISTIC_PROMPT,
+        STAND_ON_DOWNSTAIRS,
+        Skill.HUNGER,
+        SkillSelectionSource.ARBITER,
+        None,
+        answer.action_index,
+        answer.rationale,
+        answer.intent,
+    )
+
+    # Gate permits it
+    gate_error = prompt_response_error(
+        "d",
+        ord("d"),
+        selection,
+        prompt_active=True,
+        item_selection=True,
+        offered_commands=frozenset([ord("d"), ord("h")]),
+    )
+    assert gate_error is None
+
+    # Evaluator's validity check accepts it
+    payload = StepPayload(
+        selection=selection,
+        skill_decision=None,
+        skill_metrics=None,
+        action_decision=None,
+        action_metrics=None,
+        action=_HUNGER_BY_COMMAND[ord("d")],
+        reward=0.0,
+        terminated=False,
+        truncated=False,
+        end_status=0,
+        is_ascended=False,
+        outcome=None,
+        observation=prompt,
+    )
+    valid = _action_is_valid(
+        payload,
+        tuple(_HUNGER_ACTION_TABLE),
+        decided_on=prompt,
+        level_changes_allowed=True,
+        action_profile=ActionProfile.NLE_SURVIVAL_ACTIONS,
+    )
+    assert valid is True
+
+
 def test_hunger_skill_cancels_mismatched_item_prompt_and_clears_sequence(
     template: ProjectedObservation,
 ) -> None:

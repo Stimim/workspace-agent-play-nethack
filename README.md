@@ -34,7 +34,10 @@ uv run nethack-agent doctor
 ```
 
 `doctor` performs a real NLE reset/step and a short local Ollama generation.
-See [`docs/development.md`](docs/development.md) for configuration and isolated
+`uv run nethack-agent serve --data-dir data` then serves the browser UI at
+<http://127.0.0.1:8000/>; `--goal` picks the objective for new runs
+(`staircase`, `reach-d5`, `minetown`, or the default `oracle`). See
+[`docs/development.md`](docs/development.md) for configuration and isolated
 checks.
 
 ## Project status
@@ -122,7 +125,7 @@ key collision, and burden preempting combat defense) are documented, not
 shipped unfixed; the qualified candidate matched baseline on every one of 97
 combined development and fresh episodes with zero invalid actions, gate
 rejections, or integrity failures ([note 0045](docs/notes/0045-three-single-rule-qualification.md)).
-The current policy, `hierarchical-survival-hp-prayer-burden-look-v1`, pins
+Policy `hierarchical-survival-hp-prayer-burden-look-v1` pinned
 `survival-reviewed-v2` and development runner `unified-d5-regression-v4`. It
 adds bounded look-here discovery: when an arrival message is an ambiguous
 "several/many objects" pile, press the native look command once and preserve
@@ -132,6 +135,14 @@ Fresh seeds matched baseline exactly (18/30 both); the one development-set
 change traced to the feature firing is a gain, not a loss (a starvation
 death on seed 5 became a truncation once LOOK kept exploration moving); zero
 invalid actions, gate rejections, or integrity failures on either set.
+The current policy, `hierarchical-survival-hp-prayer-burden-look-ration-v1`,
+pins `survival-reviewed-v2` and development suites `unified-d5-regression-v5`,
+`minetown-regression-v2`, and `oracle-regression-v2`. It fixes a hunger-skill
+live-lock: with two identical verified rations in inventory the skill
+cancelled its own `EAT` prompt and reopened it forever at zero game turns.
+Every development and fresh set matched baseline except one Oracle seed whose
+live-lock truncation became a death traced to blindness after divergence
+([note 0051](docs/notes/0051-ration-livelock-qualification.md)).
 The checkout refuses
 older policy-pinned suites before creating an episode; they must not be
 relabeled or rerun as later-policy evidence. The task-progression policy's

@@ -1,0 +1,67 @@
+{
+  "schema_version": 2,
+  "suite_id": "oracle-fresh-v1",
+  "character": "val-dwa-law",
+  "policy_version": "hierarchical-survival-hp-prayer-burden-look-v1",
+  "knowledge_bundle_id": "survival-reviewed-v2",
+  "seed_selection": "Development-only frozen fresh sample for note 0051: seeds 511-540, reserved in the used-seed ledger. No held-out or acceptance claim.",
+  "step_cap_rationale": "Provisional 10000 action steps, matching the regression suites; ADR 0007 section 4 probes fix the acceptance cap later.",
+  "cases": [
+    {
+      "case_id": "fresh-sample",
+      "task": {
+        "environment": "NetHackScore-v0",
+        "action_profile": "nle-survival-actions",
+        "objective": {
+          "legs": [
+            {
+              "kind": "find_oracle"
+            }
+          ]
+        }
+      },
+      "seeds": [
+        511,
+        512,
+        513,
+        514,
+        515,
+        516,
+        517,
+        518,
+        519,
+        520,
+        521,
+        522,
+        523,
+        524,
+        525,
+        526,
+        527,
+        528,
+        529,
+        530,
+        531,
+        532,
+        533,
+        534,
+        535,
+        536,
+        537,
+        538,
+        539,
+        540
+      ],
+      "max_episode_steps": 10000,
+      "acceptance": {
+        "min_successes": 1,
+        "required_success_seeds": []
+      }
+    }
+  ],
+  "acceptance": {
+    "max_invalid_actions": 0,
+    "max_gate_rejections": 0,
+    "require_complete_records": true
+  }
+}
