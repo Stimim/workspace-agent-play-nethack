@@ -22,7 +22,7 @@ from nethack_agent.storage import (
     MAX_EVENT_PAGE_LIMIT,
     RunNotFoundError,
 )
-from nethack_agent.tasks import STAIRCASE_TASK, TaskSpec
+from nethack_agent.tasks import DEFAULT_GOAL, GOAL_PRESETS, TaskSpec
 
 _TERMINAL_STATES = {"terminal", "stopped", "error"}
 _UI_ASSETS: Final = {
@@ -57,7 +57,11 @@ class CreateRunRequest(BaseModel):
     task: dict[str, Any] | None = None
 
 
-def create_app(manager: RunManager) -> FastAPI:
+def create_app(
+    manager: RunManager, default_task: TaskSpec = GOAL_PRESETS[DEFAULT_GOAL]
+) -> FastAPI:
+    """`default_task` is used for start requests that omit `task`."""
+
     @asynccontextmanager
     async def lifespan(_: FastAPI):  # type: ignore[no-untyped-def]
         try:
@@ -103,7 +107,7 @@ def create_app(manager: RunManager) -> FastAPI:
     def create_run(request: CreateRunRequest) -> dict[str, object]:
         try:
             task = (
-                STAIRCASE_TASK
+                default_task
                 if request.task is None
                 else TaskSpec.from_json(request.task)
             )

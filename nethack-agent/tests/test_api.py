@@ -23,7 +23,7 @@ from nethack_agent.decision import (
 from nethack_agent.model import DecisionFailure
 from nethack_agent.ollama import OllamaConfig
 from nethack_agent.run_manager import RunManager
-from nethack_agent.tasks import STAIRCASE_TASK
+from nethack_agent.tasks import GOAL_PRESETS, STAIRCASE_TASK, TaskSpec
 from nethack_agent.traversal import STAND_ON_DOWNSTAIRS
 
 _DESCEND_TASK = {
@@ -76,17 +76,19 @@ class InvariantFailureModel(EastModel):
         raise CoordinatorInvariantError("internal invariant failed")
 
 
-def client(tmp_path: Path) -> TestClient:
+def client(tmp_path: Path, *, default_task: TaskSpec | None = None) -> TestClient:
     manager = RunManager(
         tmp_path,
         OllamaConfig(model="test-model"),
         model_factory=lambda _: EastModel(),
     )
-    return TestClient(create_app(manager))
+    if default_task is None:
+        return TestClient(create_app(manager))
+    return TestClient(create_app(manager, default_task))
 
 
 def test_api_controls_run_and_persists_step_and_ttyrec(tmp_path: Path) -> None:
-    api = client(tmp_path)
+    api = client(tmp_path, default_task=STAIRCASE_TASK)
     created = api.post(
         "/api/runs",
         json={"seed": 6, "max_episode_steps": 20, "auto_start": False},
@@ -158,7 +160,7 @@ def test_api_rejects_second_active_run(tmp_path: Path) -> None:
     api.post(f"/api/runs/{first.json()['run']['id']}/stop")
 
 
-def test_runs_record_the_requested_task_or_the_staircase_default(
+def test_runs_record_the_requested_task_or_the_service_default_goal(
     tmp_path: Path,
 ) -> None:
     api = client(tmp_path)
@@ -168,11 +170,25 @@ def test_runs_record_the_requested_task_or_the_staircase_default(
     run = created.json()["run"]
     api.post(f"/api/runs/{run['id']}/stop")
 
-    assert default["task"] == STAIRCASE_TASK.to_json()
-    assert default["environment"] == "NetHackStaircase-v0"
+    assert default["task"] == GOAL_PRESETS["oracle"].to_json()
+    assert default["environment"] == "NetHackScore-v0"
     assert created.status_code == 201
     assert run["task"] == _DESCEND_TASK
     assert run["environment"] == "NetHackScore-v0"
+
+
+def test_service_goal_replaces_the_default_but_not_a_requested_task(
+    tmp_path: Path,
+) -> None:
+    api = client(tmp_path, default_task=STAIRCASE_TASK)
+    default = api.post("/api/runs", json={"seed": 6}).json()["run"]
+    api.post(f"/api/runs/{default['id']}/stop")
+    created = api.post("/api/runs", json={"seed": 6, "task": _DESCEND_TASK})
+    run = created.json()["run"]
+    api.post(f"/api/runs/{run['id']}/stop")
+
+    assert default["task"] == STAIRCASE_TASK.to_json()
+    assert run["task"] == _DESCEND_TASK
 
 
 @pytest.mark.parametrize(
@@ -282,7 +298,7 @@ def test_model_failure_is_503_but_internal_coordinator_failure_is_500(
 def test_events_stored_in_the_milestone_1_shape_remain_readable(
     tmp_path: Path, to_milestone_1_shape: Callable[[Path], int]
 ) -> None:
-    api = client(tmp_path)
+    api = client(tmp_path, default_task=STAIRCASE_TASK)
     run_id = api.post("/api/runs", json={"seed": 6}).json()["run"]["id"]
     api.post(f"/api/runs/{run_id}/step")
     api.post(f"/api/runs/{run_id}/stop")
@@ -322,7 +338,7 @@ def test_events_stored_in_the_milestone_1_shape_remain_readable(
 def test_intents_stored_without_a_path_are_served_with_an_unknown_path(
     tmp_path: Path, to_pathless_intent_shape: Callable[[Path], int]
 ) -> None:
-    api = client(tmp_path)
+    api = client(tmp_path, default_task=STAIRCASE_TASK)
     run_id = api.post("/api/runs", json={"seed": 6}).json()["run"]["id"]
     api.post(f"/api/runs/{run_id}/step")
     api.post(f"/api/runs/{run_id}/stop")

@@ -45,6 +45,15 @@ uv run nethack-agent serve --data-dir data
 `--host` and `--port`. It accepts only loopback hosts. It stores `runs.sqlite3`
 and per-run artifacts under the data directory (`nethack-agent/data/` is
 ignored by Git).
+
+`--goal` sets the task for runs started without one (the browser UI, and
+`run start` without `--task`). It takes a preset name or a `TaskSpec` JSON file
+path. Presets, least to most ambitious: `staircase` (milestone 1 task),
+`reach-d5` (`reach_level(0, 5)`), `minetown` (`enter_minetown_temple`), and
+`oracle` (`find_oracle`, the default). The place-reaching presets use
+`NetHackScore-v0` with `nle-survival-actions`. For example,
+`uv run nethack-agent serve --data-dir data --goal minetown`.
+
 From another shell:
 
 ```bash
@@ -62,7 +71,8 @@ and exit nonzero on HTTP or connection errors. The service allows one active
 run per process; runs cannot be controlled after a service restart. The API
 and WebSocket endpoints are listed in `ARCHITECTURE.md`.
 
-Without `--task`, a run executes the staircase task. `run start --task FILE`
+Without `--task`, a run executes the service's `--goal`; `scenario run`
+launches its service with the default goal. `run start --task FILE`
 and `scenario run --task FILE` instead send the strict `TaskSpec` JSON object
 in `FILE` ([ADR 0004](decisions/0004-traversal-goals-and-task-progression.md)):
 

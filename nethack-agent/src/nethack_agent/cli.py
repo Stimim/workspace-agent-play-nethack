@@ -36,7 +36,13 @@ from nethack_agent.seed_catalog import (
     render_catalog_markdown,
     run_catalog_check,
 )
-from nethack_agent.tasks import TaskSpec, load_task_file
+from nethack_agent.tasks import (
+    DEFAULT_GOAL,
+    GOAL_PRESETS,
+    TaskSpec,
+    goal_task,
+    load_task_file,
+)
 from nethack_agent.verification import verify_network_boundary
 
 
@@ -205,6 +211,13 @@ def _task_file(value: str) -> TaskSpec:
         raise argparse.ArgumentTypeError(str(error)) from error
 
 
+def _goal(value: str) -> TaskSpec:
+    try:
+        return goal_task(value)
+    except (OSError, ContractError) as error:
+        raise argparse.ArgumentTypeError(str(error)) from error
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="nethack-agent", description="NetHack agent developer diagnostics"
@@ -225,6 +238,16 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="use the deterministic no-Ollama model for explicit development",
     )
+    serve_parser.add_argument(
+        "--goal",
+        type=_goal,
+        default=DEFAULT_GOAL,
+        help=(
+            "task for runs started without one: a preset "
+            f"({', '.join(GOAL_PRESETS)}) or a TaskSpec JSON file "
+            f"(default: {DEFAULT_GOAL})"
+        ),
+    )
 
     run_parser = subparsers.add_parser("run", help="control a running local service")
     run_commands = run_parser.add_subparsers(dest="run_command", required=True)
@@ -235,7 +258,7 @@ def _build_parser() -> argparse.ArgumentParser:
     start_parser.add_argument(
         "--task",
         type=_task_file,
-        help="TaskSpec JSON file (default: the staircase task)",
+        help="TaskSpec JSON file (default: the service's --goal)",
     )
     for operation in ("status", "pause", "resume", "step", "stop", "events"):
         operation_parser = run_commands.add_parser(operation)
@@ -268,7 +291,7 @@ def _build_parser() -> argparse.ArgumentParser:
     scenario_run_parser.add_argument(
         "--task",
         type=_task_file,
-        help="TaskSpec JSON file (default: the staircase task)",
+        help="TaskSpec JSON file (default: the service's default goal)",
     )
     scenario_run_parser.add_argument(
         "--development-scripted-model",
@@ -644,7 +667,11 @@ def main(argv: list[str] | None = None) -> int:
             else None
         )
         manager = RunManager(arguments.data_dir, config, model_factory=model_factory)
-        uvicorn.run(create_app(manager), host=arguments.host, port=arguments.port)
+        uvicorn.run(
+            create_app(manager, arguments.goal),
+            host=arguments.host,
+            port=arguments.port,
+        )
         return 0
     if arguments.command == "smoke":
         checks = {

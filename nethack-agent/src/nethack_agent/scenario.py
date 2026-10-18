@@ -37,7 +37,7 @@ class ScenarioRunConfig:
     auto_run: bool = False
     steps: int | None = None
     development_scripted_model: bool = False
-    # None lets the service default to the staircase task.
+    # None lets the service use its default goal.
     task: TaskSpec | None = None
 
     def __post_init__(self) -> None:

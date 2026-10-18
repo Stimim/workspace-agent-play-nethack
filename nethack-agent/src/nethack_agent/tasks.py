@@ -24,10 +24,15 @@ from nethack_agent.contracts import (
     object_value,
 )
 from nethack_agent.traversal import (
+    DUNGEONS_OF_DOOM,
     STAIRCASE_OBJECTIVE,
+    EnterMinetownTempleLeg,
     ExploreDungeonLeg,
     FindOracleLeg,
+    LevelKey,
     Objective,
+    ObjectiveLeg,
+    ReachLevelLeg,
 )
 
 
@@ -248,6 +253,39 @@ class TaskSpec:
 STAIRCASE_TASK: Final = TaskSpec(
     NleTask.STAIRCASE, ActionProfile.NLE_TASK_ACTIONS, STAIRCASE_OBJECTIVE
 )
+
+
+def _survival_score_task(*legs: ObjectiveLeg) -> TaskSpec:
+    return TaskSpec(
+        NleTask.SCORE, ActionProfile.NLE_SURVIVAL_ACTIONS, Objective(tuple(legs))
+    )
+
+
+# Named goals for a service's runs that omit a task, least to most ambitious.
+# The place-reaching goals use the ADR 0006 Score/survival setup of their
+# development suites.
+GOAL_PRESETS: Final[dict[str, TaskSpec]] = {
+    "staircase": STAIRCASE_TASK,
+    "reach-d5": _survival_score_task(ReachLevelLeg(LevelKey(DUNGEONS_OF_DOOM, 5))),
+    "minetown": _survival_score_task(EnterMinetownTempleLeg()),
+    "oracle": _survival_score_task(FindOracleLeg()),
+}
+# The deepest shipped objective: the Oracle lies on Dlvl 5-9 (ADR 0007).
+DEFAULT_GOAL: Final = "oracle"
+
+
+def goal_task(value: str) -> TaskSpec:
+    """A `GOAL_PRESETS` name, or the path of a TaskSpec JSON file."""
+    preset = GOAL_PRESETS.get(value)
+    if preset is not None:
+        return preset
+    path = Path(value)
+    if not path.is_file():
+        names = ", ".join(GOAL_PRESETS)
+        raise ContractError(
+            f"goal {value!r} is neither a preset ({names}) nor a task file"
+        )
+    return load_task_file(path)
 
 
 def load_task_file(path: Path) -> TaskSpec:
