@@ -74,6 +74,7 @@ class ActionRole(Enum):
     PRAYER = "prayer"
     FOOD_PICKUP = "food_pickup"
     BURDEN_DROP = "burden_drop"
+    RANGED_THROW = "ranged_throw"
 
 
 class ActionProfile(Enum):
@@ -96,6 +97,10 @@ class ActionProfile(Enum):
             nethack.Command.DROP
         ):
             return ActionRole.BURDEN_DROP
+        if self is ActionProfile.NLE_SURVIVAL_ACTIONS and command == int(
+            nethack.Command.THROW
+        ):
+            return ActionRole.RANGED_THROW
         if command in _PROFILE_PROMPT_KEY_COMMANDS[self]:
             return ActionRole.PROMPT_KEY
         if command == int(nethack.Command.EAT):

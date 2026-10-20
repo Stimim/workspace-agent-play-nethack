@@ -254,6 +254,8 @@ class NleEnvironment:
         self._step_index = 0
         self._pickup_menu_open = False
         self._drop_prompt_open = False
+        self._throw_prompt_open = False
+        self._input_prompt_open = False
         self._look_menu_open = False
         self._seed_set = SeedSet.derive(config.seed)
         self._legal_actions = tuple(
@@ -308,6 +310,8 @@ class NleEnvironment:
         self._step_index = 0
         self._pickup_menu_open = False
         self._drop_prompt_open = False
+        self._throw_prompt_open = False
+        self._input_prompt_open = bool(any(observation["misc"]))
         self._look_menu_open = False
         self._state = EnvironmentState.RUNNING
         return NleObservation.from_nle(observation)
@@ -324,8 +328,20 @@ class NleEnvironment:
                 f"action_index must be between 0 and {len(self._legal_actions) - 1}"
             )
 
+        throw = (
+            self._config.task.action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
+            and (
+                self._throw_prompt_open
+                or (
+                    not self._input_prompt_open
+                    and self._legal_actions[action_index].command
+                    == int(nethack.Command.THROW)
+                )
+            )
+        )
         pickup = (
             self._config.task.action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
+            and not throw
             and (
                 self._legal_actions[action_index].command == int(nethack.Command.PICKUP)
                 or self._pickup_menu_open
@@ -333,6 +349,7 @@ class NleEnvironment:
         )
         drop = (
             self._config.task.action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
+            and not throw
             and (
                 self._drop_prompt_open
                 or (
@@ -349,6 +366,7 @@ class NleEnvironment:
         )
         look = (
             self._config.task.action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
+            and not throw
             and (
                 self._look_menu_open
                 or self._legal_actions[action_index].command
@@ -356,10 +374,10 @@ class NleEnvironment:
             )
         )
         allow_all_modes = self._raw_environment._allow_all_modes
-        if pickup or drop or look:
-            # Preserve reviewed pickup/drop/look pages. Other actions remain
-            # atomic until public blstats are refreshed; ttyrec retains every
-            # intermediate message/page, including temple-entry speech.
+        if pickup or drop or look or throw:
+            # Preserve reviewed pickup/drop/look pages and the complete THROW
+            # exchange (item, direction, cancellation, and MORE). Other actions
+            # remain atomic until public blstats are refreshed.
             self._raw_environment._allow_all_modes = True
         try:
             observation, reward, terminated, truncated, information = (
@@ -374,6 +392,8 @@ class NleEnvironment:
             b"What do you want to drop?"
         )
         self._look_menu_open = look and bool(observation["misc"][2])
+        self._input_prompt_open = bool(any(observation["misc"]))
+        self._throw_prompt_open = throw and self._input_prompt_open
         self._step_index += 1
         if terminated or truncated:
             self._state = EnvironmentState.TERMINAL

@@ -152,6 +152,12 @@ single real-model runs:
 no completed objective, because exhaustive search outlasts the hunger horizon
 ([note 0017](docs/notes/0017-scout-and-eat-task-suites.md)).
 
+The isolated rule-0053 candidate implements bounded, public-evidence dagger
+throws at hostile floating-eye/gas-spore route blockers. It remains
+**unqualified and unshipped**: no fresh seeds or qualification arms are
+reserved/run for it. Its complete-ray, species-specific blast, owned-prompt
+and persistent-budget safeguards are described in `ARCHITECTURE.md`.
+
 Milestone 2's design ([ADR 0005](docs/decisions/0005-early-survival-and-seed-evaluation.md))
 is accepted as implemented and evaluated. Its first real-model `descend-d5-v1`
 report passed (18/20 fresh objectives, no fresh hunger deaths, no must-pass

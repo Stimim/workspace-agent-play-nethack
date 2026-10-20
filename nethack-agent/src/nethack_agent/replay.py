@@ -106,6 +106,16 @@ def derive_action_record(
     if action_name in LEVEL_CHANGE_ACTIONS:
         return ActionRecord(ActionKind.TRAVERSE, origin)
     intent = selection.intent
+    if (
+        intent is not None
+        and intent.throw is not None
+        and selection.source
+        in (
+            ActionSelectionSource.DETERMINISTIC_SKILL,
+            ActionSelectionSource.DETERMINISTIC_PROMPT,
+        )
+    ):
+        return ActionRecord(ActionKind.OTHER, origin, throw=intent.throw)
     if selection.source is not ActionSelectionSource.DETERMINISTIC_SKILL or (
         intent is None
     ):

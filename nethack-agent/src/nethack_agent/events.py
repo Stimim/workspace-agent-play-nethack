@@ -255,7 +255,7 @@ class StepPayload:
             ):
                 raise ContractError("step intent cell is outside the observation map")
         survival_error = survival_action_selection_error(
-            self.action.name, self.selection
+            self.action.name, self.selection, command=self.action.command
         )
         prayer = None if intent is None else intent.prayer
         if self.action.name == PRAY_ACTION_NAME:

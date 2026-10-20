@@ -26,7 +26,7 @@ from collections import deque
 from collections.abc import Iterator
 from dataclasses import dataclass
 from enum import Enum
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 from nle import nethack
 
@@ -44,6 +44,9 @@ from nethack_agent.traversal import (
     StairTarget,
     candidate_tier,
 )
+
+if TYPE_CHECKING:
+    from nethack_agent.decision import ThrowEvidence
 
 type Point = tuple[int, int]
 type Edge = tuple[Point, Point]
@@ -225,6 +228,7 @@ class ActionRecord:
     target_glyph: int | None = None
     goal: Point | None = None
     search_spot: Point | None = None
+    throw: ThrowEvidence | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -302,6 +306,13 @@ class LevelMemory:
         self.explored = False
         # One extra search round was granted to find a branch staircase here.
         self.branch_rearmed = False
+        # Ranged budgets persist across model re-arms and revisits.
+        self.ranged_waits = 0
+        self.ranged_attempts: dict[tuple[int, int, int], int] = {}
+        self.ranged_last_turn: dict[tuple[int, int, int], int] = {}
+        self.ranged_total_attempts = 0
+        self.pending_throw: ThrowEvidence | None = None
+        self.throw_stage: str | None = None
         self.enter()
 
     def enter(self) -> None:
@@ -358,6 +369,12 @@ class LevelMemory:
         self.position = (player.x, player.y)
         self.hit_points = player.hit_points
         self.hunger = player.hunger
+        self.ranged_turn = player.turn
+        if self.pending_throw is not None and not observation.prompt.active:
+            # A native refusal may end the transaction before an item question.
+            # Retain the consumed attempt/cooldown, but not stale prompt ownership.
+            self.pending_throw = None
+            self.throw_stage = None
         self._update_cells(observation)
         record, self._pending = self._pending, None
         if record is not None:
@@ -464,11 +481,16 @@ class LevelMemory:
     def record(self, record: ActionRecord) -> None:
         """Remember the executed action so the next observation can explain it."""
         self._pending = record
+        if record.throw is not None:
+            from nethack_agent.hazard import record_throw
+
+            record_throw(self, record.throw)
         if record.kind in (ActionKind.MOVE, ActionKind.OPEN_DOOR, ActionKind.SEARCH):
             self.search_goal = record.search_spot
         if record.kind in (ActionKind.SEARCH, ActionKind.WAIT):
             if record.kind is ActionKind.WAIT:
                 self.monster_waits += 1
+                self.ranged_waits += 1
             x, y = record.origin
             for dx, dy in DELTAS:
                 point = (x + dx, y + dy)

@@ -21,6 +21,20 @@ uv run nethack-agent doctor
 
 `doctor` performs real checks: it creates and steps a deterministic NLE Staircase environment, queries Ollama, verifies the configured model, and requests a short local generation. It exits nonzero if either path fails.
 
+Rule-0053's ranged-clearance candidate is not qualification evidence. Exercise
+`tests/test_throw_transport.py` against native NLE, and
+`tests/test_ranged_contracts.py` / `tests/test_ranged_clearance.py` for the
+shared permit, projectile overshoot, species safety and persistent budgets.
+The proposed budgets are eight accumulated monster waits, two initiations per
+target cell/species, four per level, and twenty game turns between initiations
+at the same target. Cancellation consumes the initiation budget; model re-arms
+and revisits do not replenish it. Only currently carried, unwielded real
+daggers are considered: typed cursed items are excluded, typed uncursed items
+are accepted, and unknown BUC does not imply a welded unwielded item.
+No ammo retrieval, model-owned throwing, melee exceptions or generic
+gas-spore adjacency avoidance is introduced. Keep light development probes
+outside the tree; schedule frozen qualification separately after note 0052.
+
 Run one check in isolation:
 
 ```bash

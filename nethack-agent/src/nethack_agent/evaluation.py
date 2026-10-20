@@ -2581,6 +2581,24 @@ def _action_is_valid(
     ):
         return False
     selection = payload.selection
+    from nethack_agent.hazard import throw_action_error
+
+    if (
+        throw_action_error(
+            action,
+            selection,
+            decided_on,
+            None if dungeon_memory is None else dungeon_memory.current,
+        )
+        is not None
+    ):
+        return False
+    if selection.intent is not None and selection.intent.throw is not None:
+        return (
+            action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
+            and decided_on is not None
+            and dungeon_memory is not None
+        )
     drop = None if selection.intent is None else selection.intent.drop
     if drop is not None:
         return (

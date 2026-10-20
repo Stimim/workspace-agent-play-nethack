@@ -19,6 +19,20 @@ verified ration instead of cancelling and reopening `EAT` at zero game turns
 `oracle-regression-v2` pin the active policy while all old suite definitions
 and reports stay unchanged.
 
+The isolated rule-0053 candidate adds bounded ranged clearance of a publicly
+hostile floating eye or gas spore blocking a goal route. It is **not qualified
+or shipped**; the policy pin and historical suites remain unchanged pending
+the scheduled qualification. Existing melee exclusions are unchanged.
+The deterministic THROW transaction owns its item and direction prompts,
+shares typed evidence across the runtime gate, stored-event validation and
+evaluator, and checks the entire observed projectile ray including overshoot.
+Gas spores additionally require distance outside their radius-one explosion,
+known blast terrain and no other creature in the blast. Unknown attitude,
+adverse targeting conditions, uncertain ray terrain or protected collateral
+veto the action. Per-level memory retains wait, attempt and cooldown budgets
+across exploration re-arms and level revisits; rejected/cancelled attempts
+consume the initiation budget rather than reopening at zero game turns.
+
 ## System context
 ```mermaid
 flowchart LR

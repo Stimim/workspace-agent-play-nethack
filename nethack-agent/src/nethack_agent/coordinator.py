@@ -60,6 +60,7 @@ from nethack_agent.food import (
     safe_inventory_food,
 )
 from nethack_agent.foraging import FoodPermit, FoodSkill, food_action_error
+from nethack_agent.hazard import throw_action_error, throw_at_blocker
 from nethack_agent.model import DecisionFailure, HierarchicalDecisionModel
 from nethack_agent.navigation import (
     ActionKind,
@@ -158,6 +159,7 @@ class ActionGate:
                 ActionRole.PROMPT_KEY,
                 ActionRole.PRAYER,
                 ActionRole.BURDEN_DROP,
+                ActionRole.RANGED_THROW,
             }
             and not (
                 action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
@@ -210,6 +212,28 @@ class ActionGate:
         error = conduct_error(action, before, memory)
         if error is not None:
             raise ActionGateError(error)
+        throw = (
+            None
+            if selection is None or selection.intent is None
+            else selection.intent.throw
+        )
+        if throw is not None:
+            if (
+                self._profile is not ActionProfile.NLE_SURVIVAL_ACTIONS
+                or before is None
+                or memory is None
+            ):
+                raise ActionGateError(
+                    "THROW requires survival profile and public state"
+                )
+            error = throw_action_error(action, selection, before, memory)
+            if error is not None:
+                raise ActionGateError(error)
+            return action
+        if action.name == "Command.THROW":
+            error = throw_action_error(action, selection)
+            if error is not None:
+                raise ActionGateError(error)
         food = (
             None
             if selection is None or selection.intent is None
@@ -764,6 +788,20 @@ class AgentCoordinator:
                 return None
         actions = self._gate.actions_by_name
         arbiter = SkillSelectionSource.ARBITER
+        if memory.pending_throw is not None:
+            ranged = throw_at_blocker(
+                before, memory, self._gate.actions_by_command, goal
+            )
+            if ranged is not None:
+                return self._skill_plan(
+                    ranged,
+                    goal,
+                    Skill.RANGED_THROW,
+                    arbiter,
+                    None,
+                    skill_model_decision,
+                    source=ActionSelectionSource.DETERMINISTIC_PROMPT,
+                )
         if self._burden is not None:
             self._burden.observe(before)
             if self._burden.pending is not None:
@@ -937,6 +975,23 @@ class AgentCoordinator:
             if corpse is not None:
                 return self._skill_plan(
                     corpse, goal, Skill.CORPSE, arbiter, None, skill_model_decision
+                )
+        if (
+            not before.prompt.active
+            and self._environment.task.action_profile
+            is ActionProfile.NLE_SURVIVAL_ACTIONS
+        ):
+            ranged = throw_at_blocker(
+                before, memory, self._gate.actions_by_command, goal
+            )
+            if ranged is not None:
+                return self._skill_plan(
+                    ranged,
+                    goal,
+                    Skill.RANGED_THROW,
+                    arbiter,
+                    None,
+                    skill_model_decision,
                 )
         pile = discover_ambiguous_pile(before, actions)
         if pile is not None:
@@ -1219,7 +1274,11 @@ class AgentCoordinator:
         index = selection.action_index
         if (
             selection.intent is not None
-            and (selection.intent.food is not None or selection.intent.drop is not None)
+            and (
+                selection.intent.food is not None
+                or selection.intent.drop is not None
+                or selection.intent.throw is not None
+            )
         ) or (
             selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
             and selection.skill is Skill.HUNGER
@@ -1307,6 +1366,8 @@ class AgentCoordinator:
     ) -> PromptPermit | None:
         legal = self._environment.legal_actions
         index = selection.action_index
+        if selection.intent is not None and selection.intent.throw is not None:
+            return None
         if selection.intent is not None and selection.intent.drop is not None:
             return None
         if selection.intent is not None and selection.intent.food is not None:
