@@ -46,13 +46,16 @@ Status and working notes for the next coding agent (for example Claude Code,
    (`TODO_LIST.md` order item 3) or a different roadmap item.
 2. **Commit provenance for Claude Code.** AGENTS.md rule 9 requires
    `_agents/skills/omp-commit/scripts/omp_commit.py`. It finds the conversation
-   UUID from a running OMP client and refuses to commit without one. It cannot
-   work from Claude Code as written. The owner must choose a replacement rule,
-   for example extending the script to a Claude Code session identity, or
-   committing manually. Until then, do not invent a trailer and do not bypass
-   the script's checks (ruff, plus the commit guard that requires a staged
-   qualification note or a `Qualification-Exempt:` trailer for
-   `nethack-agent/src/` changes).
+   UUID of a running OMP client; if it is not run from inside OMP, it uses the
+   single live OMP session it can find. Commit `5892159` (the 0055 evidence
+   record, made by Claude Code) therefore carries the OMP orchestrator's
+   `OMP-Conversation` trailer, although no OMP session created it. While an
+   OMP session is open, the script will attribute Claude Code's commits to it;
+   when none is open, it refuses. The owner must choose a replacement rule,
+   for example a Claude Code session trailer or manual commits. Until then,
+   do not invent a trailer and keep the script's checks: ruff, plus the commit
+   guard requiring a staged qualification note or a `Qualification-Exempt:`
+   trailer for `nethack-agent/src/` changes.
 3. **Optional cleanups:** fix Markdown list formatting in 18 older docs (ADR
    0004, notes 0044/0049/0050, ...); trim README "Project status" history.
 
@@ -70,9 +73,9 @@ before deleting directories or reinstalling the machine.
 | `~/nethack-evidence/0052/candidate` | `qualify-0052-slime-mold` | rejected | note 0052 |
 | `~/nethack-evidence/0052/baseline` | detached at `22d0a5f` | shipped baseline with its own `.venv` | reused by 0057 |
 
-In the main checkout: `docs/notes/evidence/0055/` and a one-line edit to note
-0056 are uncommitted output of the death-analysis evidence task. Verify them
-against that task's report before committing.
+The death-analysis evidence record is committed (`5892159`,
+`docs/notes/evidence/0055/`). Its recount gave 18 of 21 mid-fight prayers
+healing the hero, not the 17 first reported; note 0056 is corrected.
 `docs/feedback-2026-10-18-1138.md` is the owner's file; never edit, stage or
 delete it.
 

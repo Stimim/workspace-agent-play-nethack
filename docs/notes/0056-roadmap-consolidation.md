@@ -36,7 +36,7 @@ The proposed replacement for the wall/door/bar Minetown counter is public altar 
 
 The 2026-10-19 analysis covered **148 baseline deaths** plus the unqualified stall-budget candidate. This is diagnosis only; scripts/data are at `~/nethack-evidence/0055-death-analysis/`. Deeper levels expose a weak hero (median XL 3-5, AC 6) still meleeing at low HP while prayer is on cooldown; late stall escapes deliver it there starving.
 
-- **34/95** non-hunger deaths had a last decision at **14-33% HP**; **17/21** mid-fight prayers fully healed the hero, who re-engaged and died **4-34 turns** later; **12** entered the fatal fight below **50% HP**.
+- **34/95** non-hunger deaths had a last decision at **14-33% HP**; **18/21** mid-fight prayers healed the hero ("You feel much better."), who re-engaged and died **4-34 turns** later (recounted from `evidence/0055/scripts/prayers.py`; first reported as 17/21); **12** entered the fatal fight below **50% HP**.
 - **65/75** named killers respect Elbereth. Stair flight alone rarely helps: **30/71** healthy-entry deaths had a faster hostile nearby; **13** had a known upstairs within **10 steps**.
 - Proposed rule: below about one-third HP with prayer unavailable, or immediately after prayer with the same attackers present, stop meleeing; engrave Elbereth through a new gated action/text-input contract and rest to about **70-80% HP**. Against Elbereth-ignoring attackers (`@` humans, minotaurs), retreat toward a corridor or known stairs. Without a visible threat, rest before wandering below **50% HP**. Verify 3.6.7 Elbereth source rules before design.
 - Healing costs about **170 turns** per heal (`allmain.c:505`); food remains a constraint until stalls stop consuming it.
