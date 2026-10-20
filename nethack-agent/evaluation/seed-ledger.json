@@ -368,6 +368,12 @@
       "seeds": [],
       "ranges": [[541, 570]],
       "note": "Consumed by rejected slime-mold qualification (note 0052): paired minetown-fresh-v2 and oracle-fresh-v2. Candidate code, knowledge v3 and suites not merged. Development-only; never reuse as fresh or acceptance seeds."
+    },
+    {
+      "source": "note-0057-elbereth-disengage-qualification",
+      "seeds": [],
+      "ranges": [[605, 634]],
+      "note": "Consumed by rejected Elbereth disengage qualification (note 0057): paired minetown-fresh-v3 and oracle-fresh-v3. Candidate code and suites not merged. Development-only; never reuse as fresh or acceptance seeds."
     }
   ]
 }
