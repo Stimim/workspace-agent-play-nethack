@@ -84,6 +84,7 @@ from nethack_agent.observation import ObservationProjector, ProjectedObservation
 from nethack_agent.planner import ObjectivePlanner, leg_complete
 from nethack_agent.replay import (
     kick_action_error,
+    legacy_rearm,
     routine_actions,
     stair_target,
     stuck_consult_due,
@@ -1170,7 +1171,7 @@ class AgentCoordinator:
             if model_skill.skill is Skill.EXPLORE_LEVEL:
                 # The re-arm is kept even if a later pause discards this step;
                 # it only widens the deterministic search budget.
-                memory.rearm(legacy=isinstance(goal, ExploreLevelGoal))
+                memory.rearm(legacy=legacy_rearm(goal))
                 rearmed = self._exploration.select_action(
                     memory, actions, stair_target(goal)
                 )

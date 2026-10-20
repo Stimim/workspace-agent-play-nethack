@@ -32,6 +32,7 @@ from nethack_agent.navigation_budget import (
     wait_evidence,
 )
 from nethack_agent.planner import ObjectivePlanner, leg_complete
+from nethack_agent.replay import legacy_rearm
 from nethack_agent.skills import (
     ExploreLevelSkill,
     StaircaseNavigationSkill,
@@ -42,9 +43,13 @@ from nethack_agent.traversal import (
     STAND_ON_DOWNSTAIRS,
     ApproachOracleGoal,
     EnterMinetownTempleLeg,
+    EnterTempleGoal,
     ExploreDungeonLeg,
+    ExploreLevelGoal,
     FindOracleLeg,
+    LevelKey,
     Objective,
+    OccupyAltarGoal,
     StairDirection,
     TraverseStairsGoal,
 )
@@ -111,11 +116,9 @@ def test_rearm_and_revisit_preserve_spent_allowances(template):
     memory.monster_waits = MONSTER_WAIT_LIMIT
     memory.navigation_turns = NO_PROGRESS_TURN_LIMIT
     memory.navigation_progress_turns = 0
-    memory.abandoned_goals.add(point)
     memory.rearm()
     assert memory.search_coverage[point] == SEARCH_CANDIDATE_CAP
     assert memory.monster_waits == MONSTER_WAIT_LIMIT
-    assert point in memory.abandoned_goals
     dungeon.observe(sketch(template, ("|@.|",), dungeon_level=2))
     restored = dungeon.observe(observation)
     assert restored is memory
@@ -123,6 +126,42 @@ def test_rearm_and_revisit_preserve_spent_allowances(template):
     assert restored.search_coverage[point] == SEARCH_CANDIDATE_CAP
     assert restored.monster_waits == MONSTER_WAIT_LIMIT
     assert search_evidence(restored) is None
+
+
+def test_rearm_forgives_failed_moves_from_a_trap(template, actions):
+    # 0059 development pass, seed 1360: moves that fail while the hero is
+    # held by a bear trap quarantine every exit. A place objective's stuck
+    # re-arm must forgive them, or the hero waits until truncation.
+    lines = ("       ", "  @##  ", "       ")
+    memory = remembered(template, lines)
+    origin = memory.position
+    for step in range(1, 4):
+        memory.record(ActionRecord(ActionKind.MOVE, origin, (origin[0] + 1, origin[1])))
+        memory.observe(sketch(template, lines, step=step))
+    memory.navigation_turns = memory.navigation_progress_turns + NO_PROGRESS_TURN_LIMIT
+    skill = ExploreLevelSkill()
+    stuck = skill.select_action(memory, actions, STAND_ON_DOWNSTAIRS.target)
+    assert stuck.action is None
+    assert stuck.stuck is StuckReason.NAVIGATION_BUDGET_EXHAUSTED
+    memory.rearm()
+    resumed = skill.select_action(memory, actions, STAND_ON_DOWNSTAIRS.target)
+    assert resumed.action is not None
+    assert resumed.action.record.kind is ActionKind.MOVE
+
+
+def test_goals_without_stair_targets_rearm_like_the_legacy_search():
+    # 0059 development pass, Minetown 901 and 1367: temple and altar goals
+    # explore with the round-based legacy search, so a stuck re-arm must
+    # start another round for them, not only for explore_dungeon legs.
+    minetown = LevelKey(2, 3)
+    for goal in (
+        ExploreLevelGoal(minetown),
+        EnterTempleGoal(minetown),
+        OccupyAltarGoal(minetown),
+        ApproachOracleGoal(LevelKey(0, 6)),
+    ):
+        assert legacy_rearm(goal)
+    assert not legacy_rearm(STAND_ON_DOWNSTAIRS)
 
 
 def test_frontier_precedes_search_even_after_time_budget(template, actions):

@@ -907,7 +907,7 @@ def test_learned_edges_and_oscillation_abandon_goals(
         generic.observe(sketch(template, lines, step=step))
     assert not generic.step_allowed((1, 1), (2, 1))
     generic.rearm()
-    assert not generic.step_allowed((1, 1), (2, 1))
+    assert generic.step_allowed((1, 1), (2, 1))
 
     wobble = LevelMemory()
     frames = (("-----", "|@..|", "-----"), ("-----", "|.@.|", "-----"))

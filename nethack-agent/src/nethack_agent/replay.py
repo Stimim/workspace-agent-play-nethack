@@ -49,7 +49,6 @@ from nethack_agent.skills import ExploreLevelSkill
 from nethack_agent.tasks import TaskSpec
 from nethack_agent.traversal import (
     STAIR_GOAL_TYPES,
-    ExploreLevelGoal,
     Goal,
     LevelKey,
     StairTarget,
@@ -69,6 +68,16 @@ class ReplayError(ValueError):
 def stair_target(goal: Goal) -> StairTarget | None:
     """The staircase a goal biases exploration toward; None for explore goals."""
     return goal.target if isinstance(goal, STAIR_GOAL_TYPES) else None
+
+
+def legacy_rearm(goal: Goal) -> bool:
+    """Whether a stuck re-arm starts another legacy search round.
+
+    It matches the exploration skill's own dispatch: a goal without a stair
+    target (explore, temple, altar and Oracle goals) explores with the
+    round-based legacy search, which only a new round can widen.
+    """
+    return stair_target(goal) is None
 
 
 def routine_actions(legal_actions: Iterable[LegalAction]) -> dict[str, LegalAction]:
@@ -307,13 +316,8 @@ class ExplorationReplay:
                 "model reconsulted within the stuck re-consultation interval"
             )
         if decision is not None:
-            if (
-                stuck_consulted
-                and decision.skill is Skill.EXPLORE_LEVEL
-                and payload.selection.stuck_reason
-                is not StuckReason.NAVIGATION_BUDGET_EXHAUSTED
-            ):
-                memory.rearm(legacy=isinstance(goal, ExploreLevelGoal))
+            if stuck_consulted and decision.skill is Skill.EXPLORE_LEVEL:
+                memory.rearm(legacy=legacy_rearm(goal))
             self._skill_selected = True
         if problem is None:
             problem = kick_action_error(payload.action.name, payload.selection, memory)

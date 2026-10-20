@@ -465,23 +465,27 @@ class LevelMemory:
         return self.navigation_turns - self.navigation_progress_turns
 
     def rearm(self, *, legacy: bool = False) -> None:
-        """Reconsider a destination; `legacy` also starts another bounded round.
+        """Forgive suspected routes; `legacy` also starts another bounded round.
 
-        Only an explicit explore_dungeon leg (`ExploreLevelGoal`) passes
-        `legacy=True`: it alone gets another finite search round and a full
-        quarantine/wait reset, exactly as it always has. Place-objective
-        travel (reach_level, find_oracle, enter_minetown_temple) never
-        refills its persistent, non-growing navigation budget this way.
+        Every re-arm forgives generic move failures and abandoned goals: they
+        are only suspected, and a trapped or briefly blocked hero records
+        them on every exit (0059 development pass, seed 1360's bear trap).
+        Only a goal without a stair target (`replay.legacy_rearm`), which
+        explores with the round-based legacy search, passes `legacy=True`
+        and also gets another search round and blocker waits. Stair-seeking
+        travel (reach_level, and find_oracle or enter_minetown_temple while
+        they look for stairs) never refills its search coverage, waits or
+        no-progress clock this way.
         """
         self.search_goal = None
+        self.edge_failures.clear()
+        self.suspect_edges.clear()
+        self.abandoned_goals.clear()
+        self.history.clear()
+        self.stale_moves = 0
         if legacy:
             self.search_round += 1
-            self.edge_failures.clear()
-            self.suspect_edges.clear()
-            self.abandoned_goals.clear()
             self.monster_waits = 0
-            self.history.clear()
-            self.stale_moves = 0
 
     def _correct_terrain_here(self, message: str) -> None:
         """Fix the remembered terrain under the hero from the look-here message.

@@ -682,7 +682,9 @@ def test_replay_delayed_initial_selection_and_reconsultation_interval(context):
     memory.search_goal = (1, 1)
     assert replay.step(event(3, True)) is None
     assert memory.stuck_consult_step == 2
-    assert memory.search_goal == (1, 1)  # budget exhaustion never re-arms
+    # Replay re-arms exactly as the coordinator does after every stuck
+    # EXPLORE_LEVEL consultation; the re-arm refills no budget.
+    assert memory.search_goal is None
     assert "interval" in replay.step(event(4, True))
 
 
