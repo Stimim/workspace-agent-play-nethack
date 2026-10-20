@@ -379,6 +379,10 @@ def _parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("resolve")
     subparsers.add_parser("checks")
+    guard = subparsers.add_parser(
+        "guard", help="run the qualification guard and checks without OMP"
+    )
+    guard.add_argument("--message-file", required=True, type=Path)
     commit = subparsers.add_parser("commit")
     commit.add_argument("--message-file", required=True, type=Path)
     commit.add_argument("--dry-run", action="store_true")
@@ -392,6 +396,14 @@ def main(argv: list[str] | None = None) -> int:
         repository = arguments.repo.resolve(strict=True)
         if arguments.command == "checks":
             _run_checks(repository)
+            return 0
+        if arguments.command == "guard":
+            # For sessions outside OMP (e.g. Claude Code): same staged-source
+            # guard and checks as `commit`, but no conversation trailer.
+            message = arguments.message_file.read_text(encoding="utf-8")
+            _qualification_guard(repository, message)
+            _run_checks(repository)
+            print("guard and checks passed")
             return 0
         conversation = active_conversation_uuid(
             repository, arguments.omp_root, arguments.proc_root

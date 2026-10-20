@@ -30,3 +30,14 @@ _agents/skills/omp-commit/scripts/omp_commit.py checks
 ```
 
 Use `commit --dry-run` to run the checks and print the normalized message without changing Git history. The `--omp-root` and `--proc-root` options exist for deterministic tests with isolated evidence; normal use must retain their defaults.
+
+## Sessions outside OMP (Claude Code)
+
+A session not running inside OMP must not use `commit`: outside an OMP ancestor the script falls back to the single live OMP client and would attribute the commit to that unrelated session. Instead, stage the intended changes, write the message to a file outside the worktree, then run:
+
+```bash
+_agents/skills/omp-commit/scripts/omp_commit.py guard --message-file /path/to/message
+git commit -F /path/to/message
+```
+
+`guard` applies the same staged-source qualification guard and ruff checks as `commit`, without resolving or writing an `OMP-Conversation` trailer. Keep Claude Code's `Co-Authored-By:` trailer. The orchestrating-session and worker-verification rules above still apply.

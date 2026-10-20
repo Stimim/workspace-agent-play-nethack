@@ -38,10 +38,15 @@ Before changing behavior, read:
    verification that actually ran.
 9. Commits created by a coding agent must follow
    [`_agents/skills/omp-commit/SKILL.md`](_agents/skills/omp-commit/SKILL.md).
-   Its deterministic script runs the repository checks, obtains the active OMP
-   conversation UUID from process/session evidence, and writes exactly one
-   `OMP-Conversation: <conversation-uuid>` Git trailer. Never invent or
-   manually substitute an identifier.
+   - OMP sessions commit with `omp_commit.py commit`, which runs the checks
+     and writes exactly one `OMP-Conversation: <conversation-uuid>` trailer
+     from process/session evidence.
+   - Claude Code sessions commit directly with `git commit` after
+     `omp_commit.py guard --message-file FILE` passes on the staged index.
+     They must not use `omp_commit.py commit` (it would attribute the commit
+     to whatever OMP session is open) and keep Claude Code's
+     `Co-Authored-By:` trailer.
+   Never invent or manually substitute an identifier.
 10. Only the orchestrating session commits. Subagents and worker sessions
     hand over a branch or patch file and never commit. Before committing,
     re-check every number or claim a worker reports against the actual
