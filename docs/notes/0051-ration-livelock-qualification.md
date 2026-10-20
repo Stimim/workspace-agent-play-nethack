@@ -65,9 +65,11 @@ spoiled. All ten arms then ran to completion through the detached runner,
 | minetown-fresh-v1, 511-540 | 6 objective, 20 death, 4 truncated | identical | 0 |
 | oracle-fresh-v1, 511-540 | 6 objective, 23 death, 1 truncated | identical | 0 |
 
-Weak-or-worse deaths are unchanged on every set (0, 20, 20, 7, 3). Every arm
-has zero invalid actions, gate rejections and integrity failures, and
-complete records.
+Weak-or-worse deaths by set (baseline/candidate) are unchanged:
+unified-d5-regression-v4 0/0, minetown-regression-v1 20/20,
+oracle-regression-v1 19/19, minetown-fresh-v1 7/7, oracle-fresh-v1 3/3.
+Every arm has zero invalid actions, gate rejections and integrity failures,
+and complete records.
 
 Oracle seed 6, traced from stored public events: the arms diverge at step
 4269, the first ration prompt. The baseline live-locks there until the cap.

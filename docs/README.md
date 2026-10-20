@@ -25,6 +25,8 @@
 - Milestone 3 Phase 4: the qualified hunger-skill ration live-lock fix,
   policy `hierarchical-survival-hp-prayer-burden-look-ration-v1`, and its
   per-seed evidence are in [note 0051](notes/0051-ration-livelock-qualification.md).
+- Milestone 3 Phase 4: the rejected canonical slime-mold reserve rule and its consumed fresh sample are recorded in [note 0052](notes/0052-canonical-slime-mold-qualification.md).
+- Roadmap consolidation and preserved roadmap-only facts, diagnosis, and deferred-work dispositions: [note 0056](notes/0056-roadmap-consolidation.md).
 - [`external/`](external/): instructions for large external source material that is not committed.
 - [`../_agents/`](../_agents/): repository-specific coding-agent procedures and tools.
 - [`../nethack-agent/knowledge/`](../nethack-agent/knowledge/): reviewed knowledge made available to the local playing agent.
