@@ -8,8 +8,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from nethack_agent.api import UI_CONTENT_SECURITY_POLICY, create_app
+from nethack_agent.model import ScriptedDevelopmentModel
 from nethack_agent.ollama import OllamaConfig
 from nethack_agent.run_manager import RunManager
+from nethack_agent.tasks import STAIRCASE_TASK
 from nethack_agent.traversal import (
     STAND_ON_DOWNSTAIRS,
     ExploreLevelGoal,
@@ -51,6 +53,52 @@ def _assert_ui_headers(response, suffix: str) -> None:  # type: ignore[no-untype
     assert response.headers["content-type"] == CONTENT_TYPES[suffix]
     assert response.headers["content-security-policy"] == UI_CONTENT_SECURITY_POLICY
     assert response.headers["x-content-type-options"] == "nosniff"
+
+
+def test_historical_steps_are_self_contained_after_service_restart(
+    tmp_path: Path,
+) -> None:
+    manager = RunManager(
+        tmp_path,
+        OllamaConfig(model="scripted-development"),
+        model_factory=lambda _: ScriptedDevelopmentModel(),
+    )
+    observations = []
+    with TestClient(create_app(manager, STAIRCASE_TASK)) as running:
+        created = running.post("/api/runs", json={"seed": 6, "max_episode_steps": 20})
+        assert created.status_code == 201
+        run_id = created.json()["run"]["id"]
+        for _ in range(3):
+            response = running.post(f"/api/runs/{run_id}/step")
+            assert response.status_code == 200
+            observations.append(response.json()["coordinator"]["observation"])
+        assert running.post(f"/api/runs/{run_id}/stop").status_code == 200
+        events = running.get(f"/api/runs/{run_id}/events").json()["events"]
+        steps = [event for event in events if event["kind"] == "step"]
+
+    with TestClient(
+        create_app(RunManager(tmp_path, OllamaConfig(model="test")))
+    ) as restarted:
+        assert restarted.get(f"/api/runs/{run_id}").json()["coordinator"] is None
+        for step, observation in zip(steps, observations, strict=True):
+            # A trailing event page need not include the initial map or any
+            # preceding delta: each selectable step must stand on its own.
+            page = restarted.get(
+                f"/api/runs/{run_id}/events",
+                params={"after": step["sequence"] - 1, "limit": 1},
+            )
+            assert page.status_code == 200
+            stored = page.json()["events"][0]
+            assert stored == step
+            assert stored["payload"]["observation"] == observation
+            map_view = observation["map"]
+            assert len(map_view["rows"]) == 21
+            assert all(len(row) == 79 for row in map_view["rows"])
+            assert len(map_view["color_rows"]) == 21
+            assert all(len(row) == 158 for row in map_view["color_rows"])
+            assert observation["inventory"]
+            assert stored["payload"]["selection"]["intent"] is not None
+        assert observations[0]["player"] != observations[-1]["player"]
 
 
 def test_csp_allows_only_same_origin_resources_and_no_inline_script() -> None:

@@ -125,6 +125,9 @@ Order of work (2026-10-06, from the note 0050 baselines, where hunger is the
 largest failure class): parallel evaluation and evidence records (Phase 0),
 then the hunger live-lock and food reserve (Phase 4), then branch staircase
 identity on the way down and the stall breaker (Phase 2), then the rest.
+2026-10-18: the hunger live-lock shipped (note 0051); the step-history map
+and speed limit (Phase 0, from user feedback) come before the food reserve,
+to speed up diagnosis of everything after.
 
 Phase 0 — tooling
 - [x] Commit guard in `omp_commit.py`: refuse staged `nethack-agent/src`
@@ -152,6 +155,14 @@ Phase 0 — tooling
   under parallel evaluation.
 - [ ] detached-eval `stop` subcommand that signals the whole process
   group.
+- [x] Web UI step history: clicking a step in the Events tab shows the map
+  at that step in the map panel, and optionally that step's inventory and
+  player state. Each stored step carries its full observation, so no
+  reconstruction is needed. Attaching loads only the last 50 events and the
+  Events list keeps 300, so earlier steps of a long run are not yet selectable.
+- [ ] Speed limit for `resume`: a maximum steps-per-second setting for the
+  worker thread, controllable from the API, CLI, and browser UI, so a
+  watched run can be followed live. Default stays unlimited for evaluation.
 
 Phase 1 — objectives and measurement
 - [x] `enter_minetown_temple` objective leg. Success evidence follows
@@ -190,21 +201,31 @@ Phase 2 — F: navigation
 - [ ] Exit discovery from true-map evidence on every stalled level
   (milestone-2 seeds plus 2064852799 and 249447619).
 - [ ] Stall breaker: when a level has consumed a fixed turn budget with the
-  goal exit unknown, change strategy (other known exits, branch detour,
-  broader search) instead of continuing; budget fixed from probes.
+  goal exit unknown, or the only route is blocked by a never-melee monster
+  (seed 6: a floating eye in a corridor), change strategy (other known
+  exits, branch detour, broader search, another goal) instead of
+  continuing; budget fixed from probes.
 - [ ] Gnomish Mines navigation: irregular cave levels, no secret doors,
   narrow diagonals, boulders; branch identity on the way down and back up.
 - [ ] Minetown conduct: never anger the watch (no door kicking, no
   fountain quaffing or dipping, no shop theft); avoid temple priest anger.
 - [ ] Digging: acquire and use a pick-axe/mattock or wand of digging under
   conduct gates (ADR 0007).
-- [ ] Requalify ranged clearing of gas spores and floating eyes (rule 3
-  patch in `/tmp`; note 0045) under a fresh sample.
+- [ ] Requalify ranged clearing of gas spores and floating eyes (rule 3,
+  note 0045) under a fresh sample; it also unblocks routes like seed 6's
+  floating eye. The saved `/tmp` patch was lost in a host restart; only
+  part of it survives in commits `efe58e3`, `cad9108`, `87f74de` (reverted
+  by the rule-3 disposition), so the rest must be rebuilt.
 
 Phase 3 — A: survival in a crowded, deeper dungeon
 - [ ] Threat model from reviewed cards: monster difficulty and special
   attacks (floating eye, cockatrice, nymph, leprechaun, soldier ant,
   werecreatures, gas spore, mimics in shops, dwarves with mattocks).
+- [ ] Lycanthropy: once infection is publicly evident ("You feel
+  feverish."), pray to cure it when the prayer timeout is safe, after
+  confirming in the 3.6.7 source that it is a prayer trouble. Today the
+  evidence only stops jackal/fox/coyote corpse eating; seed 6's cure came
+  from a prayer made for another reason.
 - [ ] Peaceful handling for a dwarven hero in the Mines: never attack
   peaceful gnomes/dwarves/watch; keep the `Really attack?` decline.
 - [ ] Escape and recovery when prayer is unavailable: retreat to a

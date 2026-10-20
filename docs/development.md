@@ -149,7 +149,17 @@ and Verbose tabs support click and arrow-key navigation. Every tab has an
 independent auto-scroll checkbox. Messages lists each non-blank game message
 (trimmed, repeats kept) with its observation step and event sequence.
 Events and evidenced deterministic-execution rows expand on click; the newest
-step decision is expanded by default. Tools lists only step events that record
+step decision is expanded by default. Clicking a step summary in Events (or
+focusing it and pressing Enter) also pins that step's map, recorded annotations,
+message, prompt, player state, and inventory. The selected row is highlighted,
+and **Viewing step N — Back to live** above the map makes the historical view
+explicit. Incoming events and status updates continue in the background without
+changing the pinned view; **Back to live** resumes following the newest
+observation. This also works when attaching to a read-only run after a service
+restart. Each stored step has a complete map, so history uses its observation
+directly, not a reconstruction from `changed_cells`. The Events list remains
+bounded to 300 entries, and attachment loads only the last 50 events; selecting
+a row does not fetch earlier history. Tools lists only step events that record
 `deterministic_skill` or `deterministic_prompt` as their selection source and
 an executed action. Verbose shows game messages and concise trace text, not raw
 model responses; each summary previews its first text field. Focus or hover
@@ -223,7 +233,19 @@ external URLs, and insert model or game text with `textContent`.
 `tests/test_ui.py` enforces the headers and full served module graph, checks
 these asset rules, and executes renderer classification, ability labels,
 inventory BUC cues, map highlight precedence, path tint and toggle, and intent
-selection behavior with Node.js when Node is available.
+selection behavior with Node.js when Node is available. It also verifies that
+individual stored step pages still contain complete map/player/inventory/intent
+evidence after a service restart.
+
+Step-history smoke (2026-10-18): headless Chromium against the scripted service
+on port 8023, `--goal staircase`, seed 6, cap 300, completed at step 183.
+Selecting trailing-history step 134 matched its recorded map, destination/path,
+message, player state, and inventory; **Back to live** restored step 183 and
+cleared the selection highlight. In a second paused run, keyboard-selecting
+step 1 kept every displayed observation panel pinned while three new steps
+arrived; returning live showed step 7. After restarting the service, the first
+run attached read-only, step 134 still matched the same recorded panels, and
+returning live again showed step 183. The scratch server and data were removed.
 
 ### Owned headless scenarios
 

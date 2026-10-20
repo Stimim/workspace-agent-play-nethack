@@ -366,6 +366,16 @@ button:disabled { opacity: 0.45; cursor: default; }
 .agent-log > li:last-child { margin-bottom: 0; }
 .agent-log .empty-state { padding: 0.4rem; color: var(--muted); }
 .agent-log .kind-agent_error summary { color: var(--danger); }
+.agent-log .is-selected > .agent-row { border-color: var(--accent); }
+.agent-log .is-selected > .agent-row > summary { color: var(--accent); }
+
+.history-view {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  color: var(--accent);
+}
 
 .agent-row {
   border: 1px solid var(--border);

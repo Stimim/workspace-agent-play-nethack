@@ -792,7 +792,15 @@ independent auto-scroll control and scrolling body. Event rows are native
 expand/collapse details; each newly received step becomes the one decision
 expanded by default and exposes the selection, recorded intent and path (or
 "none recorded"), model decisions, candidates, executed action, reward, and
-outcome.
+outcome. Selecting an Events step summary pins that event's complete observation
+and recorded intent in the map, message, prompt, player-state, and inventory
+panels, independently of the newest live observation. The selected row is
+highlighted and a **Viewing step N — Back to live** control returns to following
+live updates. Native summary keyboard activation also selects the step. Every
+stored step contains the full map (including colors and pet evidence), so no
+delta replay or extra history request is needed, including for read-only runs
+after service restart. Selection is limited to the currently retained Events
+rows (at most 300, with only the trailing 50 events replayed on attachment).
 Messages lists one plain-text row, with observation step and event sequence, per
 `run_started` or `step` event whose `observation.message` is non-blank after
 trimming; repeated messages are kept because NetHack repeats them.

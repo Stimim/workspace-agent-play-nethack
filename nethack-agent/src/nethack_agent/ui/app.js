@@ -1,5 +1,5 @@
 import { ApiError, EventStream, findLastSequence, request, runPath } from "./client.js";
-import { appendEventLog, resetAgentLogs } from "./event-log.js";
+import { appendEventLog, resetAgentLogs, selectStepEntry } from "./event-log.js";
 import {
   goalFact,
   observationIntent,
@@ -40,6 +40,7 @@ const state = {
   actionNames: new Map(),
   observation: null,
   latestStep: null,
+  selectedStep: null,
   totals: emptyTotals(),
   stream: null,
   streamState: "idle",
@@ -71,6 +72,12 @@ function setObservation(observation) {
   if (observation && (!state.observation || observation.step_index >= state.observation.step_index)) {
     state.observation = observation;
   }
+}
+
+function selectStep(event) {
+  state.selectedStep = event;
+  selectStepEntry(view, event?.sequence);
+  scheduleRender();
 }
 
 function applyStatus(status) {
@@ -145,7 +152,7 @@ function handleEvent(generation, event) {
     default:
       break;
   }
-  appendEventLog(view, event, state.actionNames);
+  appendEventLog(view, event, state.actionNames, selectStep, state.selectedStep?.sequence);
   if (event.kind !== "step" || payload.outcome) {
     scheduleStatusRefresh(generation);
   }
@@ -201,6 +208,7 @@ async function attach(runId, { initialStatus = null } = {}) {
     actionNames: new Map(),
     observation: null,
     latestStep: null,
+    selectedStep: null,
     totals: emptyTotals(),
     streamState: "loading",
   });
@@ -310,8 +318,11 @@ function render() {
   setText(view.runError, state.lastError);
   setText(view.streamState, state.streamState);
 
-  const observation = state.observation;
-  renderMap(view.map, observation, observationIntent(observation, state.latestStep), view.showPath.checked);
+  const displayedStep = state.selectedStep ?? state.latestStep;
+  const observation = state.selectedStep?.payload.observation ?? state.observation;
+  renderMap(view.map, observation, observationIntent(observation, displayedStep), view.showPath.checked);
+  view.historyView.hidden = state.selectedStep === null;
+  setText(view.historyStep, state.selectedStep ? `Viewing step ${observation.step_index} —` : "");
   setText(view.mapStep, observation ? `step ${observation.step_index}` : "");
   view.message.textContent = observation?.message || "\u00a0";
   view.prompt.textContent = promptText(observation?.prompt);
@@ -344,6 +355,7 @@ element("attach-form").addEventListener("submit", (event) => {
 for (const command of ["pause", "resume", "step", "stop"]) {
   view[command].addEventListener("click", () => runAction(() => control(command)));
 }
+view.backToLive.addEventListener("click", () => selectStep(null));
 view.error.addEventListener("click", clearError);
 initializeView(scheduleRender);
 const initialRun = new URLSearchParams(location.hash.slice(1)).get("run");

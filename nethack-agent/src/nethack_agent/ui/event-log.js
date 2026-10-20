@@ -35,17 +35,33 @@ function appendLogEntry(log, entry, autoScroll) {
   }
 }
 
-export function appendEventLog(view, event, actionNames) {
-  if (event.kind === "step") {
-    for (const details of view.events.querySelectorAll("[data-decision]")) {
-      details.open = false;
+export function selectStepEntry(view, sequence) {
+  for (const entry of view.events.querySelectorAll("[data-step-sequence]")) {
+    const selected = entry.dataset.stepSequence === String(sequence);
+    entry.classList.toggle("is-selected", selected);
+    const summary = entry.querySelector("summary");
+    if (selected) {
+      summary.setAttribute("aria-current", "step");
+    } else {
+      summary.removeAttribute("aria-current");
     }
   }
-  appendLogEntry(
-    view.events,
-    renderEventEntry(event, actionNames, event.kind === "step"),
-    view.eventsAutoScroll,
-  );
+}
+
+export function appendEventLog(view, event, actionNames, onSelectStep, selectedSequence) {
+  if (event.kind === "step") {
+    for (const details of view.events.querySelectorAll("[data-decision]")) {
+      if (!details.closest(".is-selected")) {
+        details.open = false;
+      }
+    }
+  }
+  const entry = renderEventEntry(event, actionNames, event.kind === "step" && selectedSequence === undefined);
+  if (event.kind === "step") {
+    entry.dataset.stepSequence = String(event.sequence);
+    entry.querySelector("summary").addEventListener("click", () => onSelectStep(event));
+  }
+  appendLogEntry(view.events, entry, view.eventsAutoScroll);
 
   const message = gameMessage(event);
   if (message) {
