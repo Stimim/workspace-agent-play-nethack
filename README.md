@@ -9,9 +9,11 @@ playing agent uses local models and must remain offline.
 ```text
 .
 ├── AGENTS.md          # instructions for coding agents
+├── CLAUDE.md          # Claude Code entry point; imports AGENTS.md and the handover
 ├── ARCHITECTURE.md    # current system design and invariants
 ├── TODO_LIST.md       # prioritized product work and acceptance gates
 ├── docs/
+│   ├── handover.md    # status, open decisions and work in flight for the next agent
 │   ├── decisions/     # durable architecture decision records
 │   ├── notes/         # chronological development history and lessons
 │   └── external/      # acquisition notes for uncommitted source material

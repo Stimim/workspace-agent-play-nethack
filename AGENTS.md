@@ -10,7 +10,9 @@ Before changing behavior, read:
 1. `README.md` for repository layout and current status.
 2. `ARCHITECTURE.md` for component boundaries and invariants.
 3. `TODO_LIST.md` for the active milestone and acceptance criteria.
-4. `docs/README.md`, the relevant decision records, and the latest applicable
+4. `docs/handover.md` for work in flight, open decisions, and operating
+   limits.
+5. `docs/README.md`, the relevant decision records, and the latest applicable
    development notes.
 
 ## Repository rules
