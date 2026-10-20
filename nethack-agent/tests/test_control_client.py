@@ -144,3 +144,63 @@ def test_wait_for_state_has_a_monotonic_deadline(
 def test_malformed_run_state_is_distinct(response: object) -> None:
     with pytest.raises(MalformedControlResponse):
         ControlClient.status_state(response)
+
+
+@pytest.mark.parametrize("limit", [None, 0.0, 2.5])
+def test_create_run_sends_optional_speed_limit(
+    monkeypatch: pytest.MonkeyPatch, limit: float | None
+) -> None:
+    requests: list[tuple[str, str, object]] = []
+    status = _status(RunState.PAUSED)
+
+    def request(
+        _self: ControlClient, method: str, path: str, payload: object
+    ) -> dict[str, object]:
+        requests.append((method, path, payload))
+        return status
+
+    monkeypatch.setattr(ControlClient, "_request", request)
+    response = ControlClient().create_run(
+        seed=6,
+        max_episode_steps=20,
+        auto_start=False,
+        max_steps_per_second=limit,
+    )
+
+    payload: dict[str, object] = {
+        "seed": 6,
+        "max_episode_steps": 20,
+        "auto_start": False,
+    }
+    if limit is not None:
+        payload["max_steps_per_second"] = limit
+    assert requests == [("POST", "/api/runs", payload)]
+    assert response is status
+
+
+@pytest.mark.parametrize("limit", [None, 0.0, 2.5])
+def test_set_speed_posts_required_field_and_returns_status(
+    monkeypatch: pytest.MonkeyPatch, limit: float | None
+) -> None:
+    requests: list[tuple[str, str, object]] = []
+    status = _status(RunState.RUNNING)
+
+    def request(
+        _self: ControlClient, method: str, path: str, payload: object
+    ) -> dict[str, object]:
+        requests.append((method, path, payload))
+        return status
+
+    monkeypatch.setattr(ControlClient, "_request", request)
+
+    assert ControlClient().set_speed("run/1", limit) is status
+    assert requests == [
+        ("POST", "/api/runs/run%2F1/speed", {"max_steps_per_second": limit})
+    ]
+
+
+def test_set_speed_validates_status_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ControlClient, "_request", lambda *_args: {})
+
+    with pytest.raises(MalformedControlResponse):
+        ControlClient().set_speed("run-1", 2.5)

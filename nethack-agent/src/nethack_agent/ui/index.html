@@ -13,6 +13,7 @@
     <form id="start-form" class="controls" autocomplete="off">
       <label>Seed <input id="seed" name="seed" type="number" min="1" step="1" value="6" required></label>
       <label>Max steps <input id="max-steps" name="max-steps" type="number" min="1" max="100000" step="1" value="200" required></label>
+      <label>Max steps/s (0 unlimited) <input id="start-speed" name="start-speed" type="number" min="0" step="any" value="0" required></label>
       <label class="check"><input id="auto-start" name="auto-start" type="checkbox"> Auto start</label>
       <button id="start" type="submit">Start</button>
     </form>
@@ -28,6 +29,11 @@
       <button id="agent-toggle" class="agent-toggle" type="button"
               aria-controls="agent-column" aria-expanded="false">Agent info</button>
     </div>
+    <form id="speed-form" class="controls" autocomplete="off">
+      <label>Attached run max steps/s (0 unlimited) <input id="run-speed" name="run-speed" type="number" min="0" step="any" value="0" required disabled></label>
+      <button id="set-speed" type="submit" disabled>Set speed</button>
+      <span id="current-speed" role="status">Current: -</span>
+    </form>
   </header>
 
   <p id="error" class="error" role="alert" hidden></p>

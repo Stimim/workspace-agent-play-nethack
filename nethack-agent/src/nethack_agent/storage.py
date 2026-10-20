@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
+import threading
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -120,6 +122,10 @@ class RunStore:
     def __init__(self, path: Path) -> None:
         self.path = path.expanduser().resolve()
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._pid = os.getpid()
+        self._lock = threading.RLock()
+        self._database: sqlite3.Connection | None = None
+        self._closed = False
         with self._connection() as connection:
             connection.executescript(_SCHEMA)
             columns = {
@@ -411,17 +417,36 @@ class RunStore:
             values["task"] = task
         return RunRecord(**values)
 
+    def _require_process(self) -> None:
+        # Check before taking the lock: a fork may inherit it held by a thread
+        # that does not exist in the child. Evaluation creates a fresh store.
+        if os.getpid() != self._pid:
+            raise RuntimeError("RunStore cannot be used in a different process")
+
+    def close(self) -> None:
+        """Wait for in-flight work and release this store's connection."""
+        self._require_process()
+        with self._lock:
+            if self._database is not None:
+                self._database.close()
+                self._database = None
+            self._closed = True
+
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
-        connection = self._connect()
-        try:
-            with connection:
-                yield connection
-        finally:
-            connection.close()
+        self._require_process()
+        # A connection (including commit/rollback) has exactly one owner at a
+        # time, even when service API and gameplay threads share this store.
+        with self._lock:
+            if self._closed:
+                raise RuntimeError("RunStore is closed")
+            if self._database is None:
+                self._database = self._connect()
+            with self._database:
+                yield self._database
 
     def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.path, timeout=30)
+        connection = sqlite3.connect(self.path, timeout=30, check_same_thread=False)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
         return connection

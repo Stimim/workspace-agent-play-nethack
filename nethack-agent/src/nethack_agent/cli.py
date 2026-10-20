@@ -194,6 +194,15 @@ def _positive_float(value: str) -> float:
     return parsed
 
 
+def _nonnegative_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed) or parsed < 0:
+        raise argparse.ArgumentTypeError(
+            "must be a finite number greater than or equal to zero"
+        )
+    return parsed
+
+
 def _seed_list(value: str) -> tuple[int, ...]:
     try:
         seeds = tuple(int(item) for item in value.split(","))
@@ -256,6 +265,11 @@ def _build_parser() -> argparse.ArgumentParser:
     start_parser.add_argument("--max-steps", type=int, default=5_000)
     start_parser.add_argument("--auto", action="store_true")
     start_parser.add_argument(
+        "--max-steps-per-second",
+        type=_nonnegative_float,
+        help="maximum resume steps per second (default: unlimited; 0: unlimited)",
+    )
+    start_parser.add_argument(
         "--task",
         type=_task_file,
         help="TaskSpec JSON file (default: the service's --goal)",
@@ -266,6 +280,13 @@ def _build_parser() -> argparse.ArgumentParser:
         if operation == "events":
             operation_parser.add_argument("--after", type=int, default=-1)
             operation_parser.add_argument("--limit", type=int, default=100)
+    speed_parser = run_commands.add_parser("speed", help="set the resume speed limit")
+    speed_parser.add_argument("run_id")
+    speed_parser.add_argument(
+        "max_steps_per_second",
+        type=_nonnegative_float,
+        help="maximum resume steps per second (0: unlimited)",
+    )
 
     scenario_parser = subparsers.add_parser(
         "scenario", help="run a scenario in a managed local service"
@@ -394,9 +415,14 @@ def _run_control_command(arguments: argparse.Namespace) -> int:
                 max_episode_steps=arguments.max_steps,
                 auto_start=arguments.auto,
                 task=arguments.task,
+                max_steps_per_second=arguments.max_steps_per_second,
             )
         elif arguments.run_command == "status":
             response = client.status(arguments.run_id)
+        elif arguments.run_command == "speed":
+            response = client.set_speed(
+                arguments.run_id, arguments.max_steps_per_second
+            )
         elif arguments.run_command == "events":
             response = client.events(
                 arguments.run_id, after=arguments.after, limit=arguments.limit

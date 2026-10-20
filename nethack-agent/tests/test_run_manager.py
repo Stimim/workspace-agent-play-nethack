@@ -18,6 +18,7 @@ from nethack_agent.events import AgentErrorPayload, EventKind, RunStartedPayload
 from nethack_agent.model import DecisionAttemptDiagnostic, DecisionFailure
 from nethack_agent.ollama import OllamaConfig
 from nethack_agent.run_manager import RunManager
+from nethack_agent.storage import RunStore
 from nethack_agent.traversal import STAND_ON_DOWNSTAIRS
 
 _METRICS = DecisionMetrics(1, 1, 1.0, False)
@@ -158,9 +159,19 @@ def test_pause_resume_handoff_keeps_exactly_one_worker_and_stop_drains(
     assert not stop_thread.is_alive()
     assert stopped
     model.release[1].set()
+    kinds_before_close = [event.kind for event in runs.events_after(run.id)]
+    runs.stop(run.id)
+    assert [event.kind for event in runs.events_after(run.id)] == kinds_before_close
     runs.close()
+    runs.close()
+    with pytest.raises(RuntimeError, match="closed"):
+        runs.store.get_run(run.id)
     assert model.maximum_active == 1
-    kinds = [event.kind for event in runs.events_after(run.id)]
+    reopened = RunStore(tmp_path / "runs.sqlite3")
+    try:
+        kinds = [event.kind for event in reopened.events_after(run.id)]
+    finally:
+        reopened.close()
     assert kinds == [
         EventKind.RUN_STARTED,
         EventKind.RUN_RESUMED,
@@ -168,8 +179,6 @@ def test_pause_resume_handoff_keeps_exactly_one_worker_and_stop_drains(
         EventKind.RUN_RESUMED,
         EventKind.RUN_STOPPED,
     ]
-    runs.stop(run.id)
-    assert [event.kind for event in runs.events_after(run.id)] == kinds
 
 
 def test_stop_during_decision_failure_does_not_persist_agent_error(
@@ -191,7 +200,11 @@ def test_stop_during_decision_failure_does_not_persist_agent_error(
     model.release.set()
     runs.close()
 
-    kinds = [event.kind for event in runs.events_after(run.id)]
+    reopened = RunStore(tmp_path / "runs.sqlite3")
+    try:
+        kinds = [event.kind for event in reopened.events_after(run.id)]
+    finally:
+        reopened.close()
     assert kinds[-1] is EventKind.RUN_STOPPED
     assert EventKind.AGENT_ERROR not in kinds
 

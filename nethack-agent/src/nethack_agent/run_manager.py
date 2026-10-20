@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import importlib.metadata
+import math
 import threading
+import time
 import uuid
 from collections.abc import Callable
 from contextlib import suppress
@@ -70,6 +72,7 @@ class ManagedRun:
     client: OllamaClient
     worker: threading.Thread | None = None
     run_enabled: threading.Event = field(default_factory=threading.Event)
+    max_steps_per_second: float | None = None
 
 
 class RunManager:
@@ -80,6 +83,8 @@ class RunManager:
         *,
         model_factory: ModelFactory | None = None,
         knowledge_bundle: KnowledgeBundle | None = None,
+        clock: Callable[[], float] = time.monotonic,
+        wait: Callable[[threading.Condition, float], object] | None = None,
     ) -> None:
         self.knowledge_bundle = knowledge_bundle or load_default_knowledge_bundle()
         self.data_directory = data_directory.expanduser().resolve()
@@ -91,6 +96,9 @@ class RunManager:
         )
         self._runs: dict[str, ManagedRun] = {}
         self._lock = threading.RLock()
+        self._wake = threading.Condition(self._lock)
+        self._clock = clock
+        self._wait = wait or (lambda condition, timeout: condition.wait(timeout))
         self._closing = False
         self._closed = False
 
@@ -101,7 +109,9 @@ class RunManager:
         max_episode_steps: int = 5_000,
         auto_start: bool = False,
         task: TaskSpec = STAIRCASE_TASK,
+        max_steps_per_second: float | None = None,
     ) -> RunRecord:
+        max_steps_per_second = _validated_speed(max_steps_per_second)
         with self._lock:
             self._require_open()
             self._require_capacity()
@@ -135,7 +145,12 @@ class RunManager:
                     run_id=run_id,
                 )
                 durable = True
-                managed = ManagedRun(run_id, coordinator, client)
+                managed = ManagedRun(
+                    run_id,
+                    coordinator,
+                    client,
+                    max_steps_per_second=max_steps_per_second,
+                )
                 self._runs[run_id] = managed
                 observation = coordinator.start()
                 snapshot = coordinator.snapshot()
@@ -183,10 +198,12 @@ class RunManager:
                 if managed
                 else None
             )
+            speed = managed.max_steps_per_second if managed else None
         return {
             "run": record.to_json(),
             "coordinator": snapshot,
             "legal_actions": legal_actions,
+            "max_steps_per_second": speed,
         }
 
     def pause(self, run_id: str) -> RunRecord:
@@ -194,6 +211,7 @@ class RunManager:
             self._require_open()
             managed = self._managed(run_id)
             managed.run_enabled.clear()
+            self._wake.notify_all()
             managed.coordinator.pause()
             try:
                 record, _ = self.store.update_run_and_append_event(
@@ -213,6 +231,17 @@ class RunManager:
             self._require_open()
             managed = self._managed(run_id)
             return self._resume_locked(managed)
+
+    def set_speed(
+        self, run_id: str, max_steps_per_second: float | None
+    ) -> dict[str, object]:
+        speed = _validated_speed(max_steps_per_second)
+        with self._wake:
+            self._require_open()
+            managed = self._managed(run_id)
+            managed.max_steps_per_second = speed
+            self._wake.notify_all()
+        return self.status(run_id)
 
     def step(self, run_id: str) -> StepRecord:
         with self._lock:
@@ -238,6 +267,7 @@ class RunManager:
         with self._lock:
             managed = self._managed(run_id)
             managed.run_enabled.clear()
+            self._wake.notify_all()
             before = managed.coordinator.snapshot().state
             worker = managed.worker
             if before in {
@@ -300,6 +330,7 @@ class RunManager:
             )
         for worker in workers:
             self._join_worker(worker)
+        self.store.close()
         with self._lock:
             self._closed = True
             self._closing = False
@@ -323,6 +354,7 @@ class RunManager:
             self._persist_failure(managed, error)
             raise
         managed.run_enabled.set()
+        self._wake.notify_all()
         self._ensure_worker_locked(managed)
         return record
 
@@ -352,6 +384,7 @@ class RunManager:
                 and managed.coordinator.snapshot().state is RunState.RUNNING
             ):
                 try:
+                    started = self._clock()
                     record = managed.coordinator.advance(
                         on_step=lambda step: self._persist_step(
                             managed, step, expected_state=RunState.RUNNING
@@ -371,6 +404,7 @@ class RunManager:
                     return
                 if record.outcome is not None:
                     return
+                self._pace(managed, started)
         finally:
             with self._lock:
                 if managed.worker is threading.current_thread():
@@ -383,6 +417,20 @@ class RunManager:
                 ):
                     with suppress(Exception):
                         self._ensure_worker_locked(managed)
+
+    def _pace(self, managed: ManagedRun, started: float) -> None:
+        # Wait relative to step start: slow decisions need no additional delay.
+        # The condition releases the manager lock and wakes on lifecycle/speed
+        # changes, including rates whose intervals are many seconds long.
+        with self._wake:
+            while managed.run_enabled.is_set():
+                speed = managed.max_steps_per_second
+                if speed is None:
+                    return
+                remaining = 1.0 / speed - (self._clock() - started)
+                if remaining <= 0:
+                    return
+                self._wait(self._wake, min(remaining, threading.TIMEOUT_MAX))
 
     def _persist_step(
         self,
@@ -521,3 +569,13 @@ class RunManager:
     def _require_open(self) -> None:
         if self._closing or self._closed:
             raise RunControlError("run manager is shut down")
+
+
+def _validated_speed(value: float | None) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError("max_steps_per_second must be a finite nonnegative number")
+    if not math.isfinite(value) or value < 0:
+        raise ValueError("max_steps_per_second must be a finite nonnegative number")
+    return float(value) if value else None

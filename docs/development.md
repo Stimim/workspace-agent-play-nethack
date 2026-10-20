@@ -60,6 +60,7 @@ From another shell:
 uv run nethack-agent run start --seed 6 --max-steps 200   # paused after reset
 uv run nethack-agent run step RUN_ID                      # one hierarchical action
 uv run nethack-agent run resume RUN_ID                    # run on a worker thread
+uv run nethack-agent run speed RUN_ID 2                   # at most two steps/second
 uv run nethack-agent run pause RUN_ID
 uv run nethack-agent run status RUN_ID
 uv run nethack-agent run events RUN_ID --after -1
@@ -70,6 +71,30 @@ uv run nethack-agent run stop RUN_ID
 and exit nonzero on HTTP or connection errors. The service allows one active
 run per process; runs cannot be controlled after a service restart. The API
 and WebSocket endpoints are listed in `ARCHITECTURE.md`.
+
+Watch a paced run with `run start --seed 6 --auto --max-steps-per-second 2`.
+`run speed RUN_ID 10` changes the limit live; `run speed RUN_ID 0` removes it.
+Limits accept finite nonnegative numbers (including fractional rates such as
+`0.2`); omitted, `null` (API), and `0` mean unlimited. The API accepts
+`max_steps_per_second` on creation and `POST /api/runs/{id}/speed` with
+`{"max_steps_per_second": 2}` for changes. Status returns the current limit as
+top-level `max_steps_per_second` (`null` for unlimited).
+Only resumed worker steps are paced, relative to the previous step's start;
+slow decisions incur no extra delay. Pause, stop, and live speed changes wake
+the wait immediately. Single-step, evaluation, and scenario defaults remain
+unlimited. The limit is service-memory control state, not gameplay configuration:
+it writes no events or database fields, and is not retained after restart.
+
+Speed-limit smoke (2026-10-18, scripted staircase service on port 8024, seed 6):
+at 2 steps/s, step events 1-6 arrived at UTC `06:58:12.458741`,
+`12.960030`, `13.459204`, `13.959272`, `14.460698`, and `14.959106`
+(intervals 0.498408-0.501426 s). After `run speed RUN_ID 10`, steps 8-18
+arrived from `06:58:15.789861` through `16.791461`, with 0.098351-0.102847 s
+intervals. CLI pause held step 25 unchanged. Headless Chromium attached showing
+`Current: 10 steps/s`, changed the value to 0.2, resumed, and paused in 0.0944 s;
+step 27 stayed unchanged after another 0.7 s. Changing speed back to 10 while
+viewing step 1 preserved its map and selection. Scratch service/data and
+temporary browser libraries were removed.
 
 Without `--task`, a run executes the service's `--goal`; `scenario run`
 launches its service with the default goal. `run start --task FILE`
@@ -127,11 +152,16 @@ fires first, including above NLE's 5,000-step default.
 While `serve` is running, open <http://127.0.0.1:8000/> (or the chosen loopback
 host and port). The page is served by the control service itself; it needs no
 build step, extra dependency, or network access. The full-width control panel
-starts a run (seed, max steps, auto start), attaches to an existing run id, and
-pauses, resumes, single-steps, or stops the attached run. `#run=RUN_ID` in the
-URL reattaches after a reload. Starting while another run is active shows the
+starts a run (seed, max steps, maximum steps/second, auto start), attaches to an
+existing run id, and pauses, resumes, single-steps, or stops the attached run.
+`#run=RUN_ID` in the URL reattaches after a reload. Starting while another run is active shows the
 service's 409 detail; stop the active run first. Runs from before a service
 restart are shown read-only.
+
+The attached-run speed control shows the current limit and applies changes
+without pausing; `0` means unlimited. It always controls the live run, including
+while a historical step is pinned, and never changes the pinned observation.
+Read-only runs cannot change speed.
 
 The workspace keeps the run/map/player (50rem) and inventory (30rem) columns at
 fixed widths; agent information consumes the remaining width (at least 24rem).
@@ -335,6 +365,15 @@ its success threshold. Suite-wide acceptance still requires the configured
 limits on invalid actions and gate rejections and, for the committed suites,
 complete SQLite and ttyrec records. Policy mismatches are also rejected before
 creating run data.
+
+`RunStore` reuses one SQLite connection per instance with
+`check_same_thread=False`, serialized for each complete transaction by a
+`threading.RLock`. WAL mode, foreign keys, and atomic state/event transactions
+are unchanged. Stores reject use from an inherited process after fork before
+acquiring the lock; process evaluation workers create their own manager/store.
+`RunManager.close()` joins its workers before closing the store. Store
+`close()` waits for active transactions and is terminal and idempotent;
+subsequent operations raise `RuntimeError`, so reopen with a new `RunStore(path)`.
 
 Policy `hierarchical-traversal-v1` and knowledge bundle
 `staircase-reviewed-v3` have two committed suites:
@@ -572,6 +611,63 @@ scripted model always selects `explore_level` and waits as its fallback action,
 so it exercises the deterministic policy exactly as a real run does until the
 model is consulted. Changing seeds, the step cap, or acceptance requires a new
 suite file and `suite_id`, not an edit after results are known.
+
+### RunStore connection performance comparison
+
+Use one unchanged external suite at `/tmp/runstore-8-seed.json` containing the
+same eight seed episodes for both revisions; keep its tasks, caps, policy, and
+knowledge pins fixed. Do not modify committed suites. From the repository root,
+run this once before the change with `phase=before`, then once after with
+`phase=after`, using fresh, separate data/report directories:
+
+```bash
+phase=before
+_agents/skills/detached-eval/scripts/detached_eval.py start \
+  --name "runstore-$phase" --cwd nethack-agent -- \
+  nice -n 10 ionice -c 2 -n 7 /usr/bin/time -p \
+  uv run nethack-agent eval run --suite /tmp/runstore-8-seed.json \
+  --workers 4 --development-scripted-model \
+  --data-dir "/tmp/runstore-$phase/data" \
+  --report-dir "/tmp/runstore-$phase/reports"
+_agents/skills/detached-eval/scripts/detached_eval.py wait "runstore-$phase"
+```
+
+Wait without a tool deadline. Compare the `real` elapsed seconds in
+`/tmp/detached-eval/runstore-{before,after}.log` only after both reports contain
+all eight episodes; retain exit codes and compare episode outcomes and step
+counts so changed work is not mistaken for speedup. Keep machine load and
+priority settings comparable. Record actual measurements, not estimated timing
+numbers. This measures scripted end-to-end development throughput, not isolated
+SQLite latency or real-model gameplay performance, and is not milestone evidence.
+
+On 2026-10-19, the connection-reuse change was measured with the first case
+(`staircase-historical`) of `unified-d5-regression-v5`, restricted to seeds 1–8
+and otherwise unchanged (3,000-step cap), in
+`/tmp/runstore-reuse-benchmark/suite.json`. Both runs used four scripted workers,
+`nice -n 10 ionice -c 2 -n 7`, separate fresh databases, and `/usr/bin/time`
+around the CLI. Before: **33.22 s**; after: **31.59 s** (4.9% lower in this
+single pair; not a stable throughput estimate or isolated contention measure).
+Both exited 0 and all eight integrity audits passed. Outcomes and steps were
+identical:
+
+| Seed | Outcome | Steps |
+| --- | --- | --- |
+| 1 | truncated | 3000 |
+| 2 | objective_complete | 926 |
+| 3 | objective_complete | 734 |
+| 4 | objective_complete | 356 |
+| 5 | truncated | 3000 |
+| 6 | objective_complete | 712 |
+| 7 | objective_complete | 492 |
+| 8 | death | 20 |
+
+Reports are external under `/tmp/runstore-reuse-benchmark/`, in
+`before-reports/runstore-reuse-eight-seeds-development-20261019T120409Z.json`
+and `after-reports/runstore-reuse-eight-seeds-development-20261019T120522Z.json`;
+`before-time.txt` and `after-time.txt` contain CLI wall seconds. This pair
+compares the per-operation-connection implementation with connection reuse,
+not a policy change.
+
 
 ## Quality checks
 

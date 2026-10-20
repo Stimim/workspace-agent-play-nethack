@@ -22,6 +22,7 @@ import {
 // Attaching to an existing run replays only this many trailing events.
 const ATTACH_HISTORY_EVENTS = 50;
 const STATUS_REFRESH_DELAY_MS = 250;
+const STATUS_POLL_INTERVAL_MS = 1000;
 const FINISHED_STATES = new Set(["terminal", "stopped", "error"]);
 
 
@@ -34,6 +35,7 @@ const state = {
   runId: null,
   run: null,
   controllable: false,
+  maxStepsPerSecond: null,
   goal: null,
   skill: null,
   lastError: null,
@@ -83,6 +85,11 @@ function selectStep(event) {
 function applyStatus(status) {
   state.run = status.run;
   state.controllable = status.coordinator !== null;
+  const speed = status.max_steps_per_second ?? null;
+  if (speed !== state.maxStepsPerSecond) {
+    view.runSpeed.value = String(speed ?? 0);
+  }
+  state.maxStepsPerSecond = speed;
   setActionNames(status.legal_actions);
   if (status.coordinator) {
     state.goal = status.coordinator.current_goal;
@@ -160,9 +167,9 @@ function handleEvent(generation, event) {
 }
 
 
-function scheduleStatusRefresh(generation) {
+function scheduleStatusRefresh(generation, delay = STATUS_REFRESH_DELAY_MS) {
   clearTimeout(state.statusTimer);
-  state.statusTimer = setTimeout(() => refreshStatus(generation), STATUS_REFRESH_DELAY_MS);
+  state.statusTimer = setTimeout(() => refreshStatus(generation), delay);
 }
 
 async function refreshStatus(generation) {
@@ -177,6 +184,10 @@ async function refreshStatus(generation) {
   } catch (error) {
     if (generation === state.generation) {
       showError(error);
+    }
+  } finally {
+    if (generation === state.generation && state.controllable && !FINISHED_STATES.has(state.run?.state)) {
+      scheduleStatusRefresh(generation, STATUS_POLL_INTERVAL_MS);
     }
   }
 }
@@ -202,6 +213,7 @@ async function attach(runId, { initialStatus = null } = {}) {
     runId,
     run: null,
     controllable: false,
+    maxStepsPerSecond: null,
     goal: null,
     skill: null,
     lastError: null,
@@ -213,6 +225,7 @@ async function attach(runId, { initialStatus = null } = {}) {
     streamState: "loading",
   });
   resetAgentLogs(view);
+  view.runSpeed.value = "0";
   view.attachId.value = runId;
   history.replaceState(null, "", `#run=${encodeURIComponent(runId)}`);
   scheduleRender();
@@ -222,6 +235,9 @@ async function attach(runId, { initialStatus = null } = {}) {
     return;
   }
   applyStatus(status);
+  if (state.controllable && !FINISHED_STATES.has(state.run?.state)) {
+    scheduleStatusRefresh(generation, STATUS_POLL_INTERVAL_MS);
+  }
   let after = -1;
   if (!initialStatus) {
     const last = await findLastSequence(runId);
@@ -276,20 +292,29 @@ function readInteger(input, name) {
   return value;
 }
 
+function readSpeed(input) {
+  const value = Number(input.value);
+  if (!input.value.trim() || !Number.isFinite(value) || value < 0) {
+    throw new ApiError(0, "max steps/s must be a finite non-negative number (0 means unlimited)");
+  }
+  return value;
+}
+
 async function startRun() {
   const body = {
     seed: readInteger(view.seed, "seed"),
     max_episode_steps: readInteger(view.maxSteps, "max steps"),
     auto_start: view.autoStart.checked,
+    max_steps_per_second: readSpeed(view.startSpeed),
   };
   const status = await request("POST", "api/runs", body);
   await attach(status.run.id, { initialStatus: status });
 }
 
-async function control(command) {
+async function control(command, body) {
   const runId = state.runId;
   const generation = state.generation;
-  const status = await request("POST", runPath(runId, `/${command}`));
+  const status = await request("POST", runPath(runId, `/${command}`), body);
   if (generation === state.generation) {
     applyStatus(status);
   }
@@ -317,6 +342,9 @@ function render() {
   setExplainedText(view.runSkill, state.skill);
   setText(view.runError, state.lastError);
   setText(view.streamState, state.streamState);
+  setText(view.currentSpeed, run
+    ? `Current: ${state.maxStepsPerSecond ? `${state.maxStepsPerSecond} steps/s` : "unlimited"}`
+    : "Current: -");
 
   const displayedStep = state.selectedStep ?? state.latestStep;
   const observation = state.selectedStep?.payload.observation ?? state.observation;
@@ -335,6 +363,8 @@ function render() {
   view.resume.disabled = !(live && runState === "paused");
   view.step.disabled = !(live && runState === "paused");
   view.stop.disabled = !live;
+  view.runSpeed.disabled = !live;
+  view.setSpeed.disabled = !live;
   view.start.disabled = state.busy;
   view.attach.disabled = state.busy;
   repositionShownTooltip();
@@ -351,6 +381,13 @@ element("attach-form").addEventListener("submit", (event) => {
   if (runId) {
     runAction(() => attach(runId));
   }
+});
+element("speed-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  if (view.setSpeed.disabled) {
+    return;
+  }
+  runAction(() => control("speed", { max_steps_per_second: readSpeed(view.runSpeed) }));
 });
 for (const command of ["pause", "resume", "step", "stop"]) {
   view[command].addEventListener("click", () => runAction(() => control(command)));

@@ -23,6 +23,7 @@ from nethack_agent.decision import (
 from nethack_agent.model import DecisionFailure
 from nethack_agent.ollama import OllamaConfig
 from nethack_agent.run_manager import RunManager
+from nethack_agent.storage import RunStore
 from nethack_agent.tasks import GOAL_PRESETS, STAIRCASE_TASK, TaskSpec
 from nethack_agent.traversal import STAND_ON_DOWNSTAIRS
 
@@ -260,7 +261,11 @@ def test_disconnected_paused_websocket_and_service_shutdown_finalize_run(
         with api.websocket_connect(f"/api/runs/{run_id}/events/ws") as websocket:
             assert websocket.receive_json()["kind"] == "run_started"
 
-    persisted = manager.store.get_run(run_id)
+    reopened = RunStore(tmp_path / "runs.sqlite3")
+    try:
+        persisted = reopened.get_run(run_id)
+    finally:
+        reopened.close()
     assert persisted.state is RunState.STOPPED
     assert persisted.ttyrec_path is not None
     assert Path(persisted.ttyrec_path).is_file()

@@ -31,10 +31,16 @@ CONTENT_TYPES = {
 NODE = shutil.which("node")
 
 
-def _run_renderer_module(script: str) -> dict[str, object]:
+def _run_renderer_module(script: str, *, vm_modules: bool = False) -> dict[str, object]:
     assert NODE is not None
     completed = subprocess.run(
-        [NODE, "--input-type=module", "--eval", script],
+        [
+            NODE,
+            *(["--experimental-vm-modules"] if vm_modules else []),
+            "--input-type=module",
+            "--eval",
+            script,
+        ],
         cwd=UI_DIR,
         check=True,
         capture_output=True,
@@ -930,3 +936,216 @@ def test_step_decision_shows_exhausted_level_only_when_recorded() -> None:
     assert [fact for fact in result["exhausted"] if fact["label"] != "Exhausted"] == (
         result["legacy"]
     )
+
+
+@pytest.mark.skipif(NODE is None, reason="Node.js is unavailable")
+def test_run_speed_controls_follow_live_status_without_unpinning_history() -> None:
+    result = _run_renderer_module(
+        """
+        import vm from "node:vm";
+        import { readFile } from "node:fs/promises";
+
+        const nodes = new Map();
+        const element = (id) => {
+          if (!nodes.has(id)) {
+            nodes.set(id, {
+              value: "", checked: false, disabled: false, hidden: true,
+              textContent: "", handlers: {},
+              addEventListener(kind, callback) { this.handlers[kind] = callback; },
+            });
+          }
+          return nodes.get(id);
+        };
+        const view = new Proxy({}, { get: (_, key) => element(key) });
+        view.seed.value = "6";
+        view.maxSteps.value = "200";
+        view.startSpeed.value = "2.5";
+        const frames = [];
+        const timers = new Map();
+        let nextTimer = 0;
+        const calls = [];
+        const streams = [];
+        let selected = null;
+        let latestEvent = null;
+        let status = {
+          run: { id: "live", state: "paused", error: null },
+          coordinator: {
+            current_goal: null, current_skill: null, last_error: null,
+            observation: { step_index: 0 },
+          },
+          legal_actions: [],
+          max_steps_per_second: 2.5,
+        };
+        const context = vm.createContext({
+          URLSearchParams, location: { hash: "" },
+          history: { replaceState() {} },
+          requestAnimationFrame: (callback) => frames.push(callback),
+          setTimeout: (callback, delay) => {
+            const id = ++nextTimer;
+            timers.set(id, { callback, delay });
+            return id;
+          },
+          clearTimeout: (id) => timers.delete(id),
+        });
+        const modules = {
+          "./client.js": {
+            ApiError: Error,
+            runPath: (id, suffix = "") => `api/runs/${id}${suffix}`,
+            findLastSequence: async () => -1,
+            request: async (method, path, body) => {
+              calls.push({ method, path, body });
+              if (path.endsWith("/speed")) {
+                status.max_steps_per_second = body.max_steps_per_second || null;
+              }
+              return structuredClone(status);
+            },
+            EventStream: class {
+              constructor(id, after, hooks) { this.hooks = hooks; streams.push(this); }
+              start() {}
+              close() {}
+            },
+          },
+          "./view.js": {
+            element, view, initializeView() {}, repositionShownTooltip() {},
+            syncHeaderOffset() {},
+          },
+          "./event-log.js": {
+            resetAgentLogs() {},
+            selectStepEntry: (_, sequence) => { selected = sequence ?? null; },
+            appendEventLog: (_, event, names, callback) => {
+              latestEvent = { event, select: () => callback(event) };
+            },
+          },
+          "./render.js": {
+            goalFact: () => ({ text: "", help: "" }),
+            observationIntent: () => null,
+            promptText: () => "",
+            renderInventory() {}, renderMetrics() {}, renderStats() {},
+            renderMap: (node, observation) => { node.step = observation?.step_index; },
+            setExplainedText() {},
+            setText: (node, text) => { node.textContent = text ?? "-"; },
+          },
+        };
+        const app = new vm.SourceTextModule(await readFile("app.js", "utf8"), { context });
+        await app.link((specifier) => {
+          const exports = modules[specifier];
+          return new vm.SyntheticModule(Object.keys(exports), function () {
+            for (const [key, value] of Object.entries(exports)) {
+              this.setExport(key, value);
+            }
+          }, { context });
+        });
+        await app.evaluate();
+        const flush = async () => {
+          for (let i = 0; i < 20; i += 1) {
+            await Promise.resolve();
+            while (frames.length) frames.shift()();
+          }
+        };
+        const submit = async (id) => {
+          element(id).handlers.submit({ preventDefault() {} });
+          await flush();
+        };
+        await flush();
+        const detached = view.setSpeed.disabled && view.runSpeed.disabled;
+        await submit("start-form");
+        const started = {
+          body: calls[0].body, current: view.currentSpeed.textContent,
+          input: view.runSpeed.value, enabled: !view.setSpeed.disabled,
+        };
+        view.runSpeed.value = "0";
+        await submit("speed-form");
+        const unlimited = {
+          request: calls.at(-1), current: view.currentSpeed.textContent,
+        };
+        view.runSpeed.value = "1.25";
+        await submit("speed-form");
+        const fractional = calls.at(-1);
+        const callCount = calls.length;
+        const invalid = [];
+        for (const value of ["-1", "Infinity", "NaN", ""]) {
+          view.runSpeed.value = value;
+          await submit("speed-form");
+          invalid.push(!view.error.hidden && calls.length === callCount);
+        }
+        const step = (index) => ({
+          kind: "step", sequence: index,
+          payload: {
+            observation: { step_index: index }, selection: { goal: null, skill: null },
+          },
+        });
+        streams[0].hooks.onEvent(step(1));
+        latestEvent.select();
+        await flush();
+        streams[0].hooks.onEvent(step(2));
+        status.max_steps_per_second = 4;
+        status.coordinator.observation.step_index = 2;
+        const poll = [...timers.values()].find((timer) => timer.delay === 1000);
+        timers.clear();
+        await poll.callback();
+        await flush();
+        const pinned = {
+          step: view.map.step, selected, current: view.currentSpeed.textContent,
+          input: view.runSpeed.value, historyVisible: !view.historyView.hidden,
+        };
+        view.backToLive.handlers.click();
+        await flush();
+        const liveStep = view.map.step;
+        status = {
+          ...status, run: { ...status.run, id: "old" },
+          coordinator: null, max_steps_per_second: null,
+        };
+        view.attachId.value = "old";
+        await submit("attach-form");
+        const readOnlyCalls = calls.length;
+        await submit("speed-form");
+        console.log(JSON.stringify({
+          detached, started, unlimited, fractional, invalid, pinned, liveStep,
+          readOnly: {
+            disabled: view.setSpeed.disabled && view.runSpeed.disabled,
+            current: view.currentSpeed.textContent,
+            noPost: calls.length === readOnlyCalls,
+          },
+        }));
+        """,
+        vm_modules=True,
+    )
+    assert result["detached"] is True
+    assert result["started"] == {
+        "body": {
+            "seed": 6,
+            "max_episode_steps": 200,
+            "auto_start": False,
+            "max_steps_per_second": 2.5,
+        },
+        "current": "Current: 2.5 steps/s",
+        "input": "2.5",
+        "enabled": True,
+    }
+    assert result["unlimited"] == {
+        "request": {
+            "method": "POST",
+            "path": "api/runs/live/speed",
+            "body": {"max_steps_per_second": 0},
+        },
+        "current": "Current: unlimited",
+    }
+    assert result["fractional"] == {
+        "method": "POST",
+        "path": "api/runs/live/speed",
+        "body": {"max_steps_per_second": 1.25},
+    }
+    assert result["invalid"] == [True, True, True, True]
+    assert result["pinned"] == {
+        "step": 1,
+        "selected": 1,
+        "current": "Current: 4 steps/s",
+        "input": "4",
+        "historyVisible": True,
+    }
+    assert result["liveStep"] == 2
+    assert result["readOnly"] == {
+        "disabled": True,
+        "current": "Current: unlimited",
+        "noPost": True,
+    }

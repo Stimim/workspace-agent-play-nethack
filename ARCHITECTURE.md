@@ -608,8 +608,13 @@ into an asserted safe action
 SQLite is the authoritative structured event log. Every run will record configuration and version identifiers, seeds, projected observations, goals, candidate actions and scores, chosen action, concise rationale, inference timing and token counts, rewards, errors, and terminal outcome. Large binary arrays should not be duplicated in every event. NLE ttyrec files provide native episode replay and are referenced from the run record.
 
 `RunStore` implements this log in `<data-dir>/runs.sqlite3` (WAL mode with
-foreign keys enabled). Every per-operation SQLite connection is explicitly
-closed. The `runs` table holds scenario configuration, derived seeds,
+foreign keys enabled). Each store reuses one SQLite connection opened with
+`check_same_thread=False`; a `threading.RLock` serializes its use for the entire
+transaction, including commit or rollback. The store records its creating PID
+and rejects inherited use after fork before acquiring the lock. `close()` waits
+for active transactions, closes the connection, and is terminal and idempotent;
+later operations raise `RuntimeError`. Reopening requires a new `RunStore(path)`.
+The `runs` table holds scenario configuration, derived seeds,
 environment, character, model, policy, knowledge, NLE and Ollama versions, the
 Ollama `num_ctx` (`ollama_num_ctx`; stores created before it existed gain the
 column with `NULL` for older runs), the canonical `TaskSpec` JSON (`task`; its
@@ -672,7 +677,7 @@ can therefore launch the service, start a run for a specific task and seed,
 observe it, pause or single-step it, and stop it after collecting evidence.
 
 Run creation accepts validated run execution parameters (`seed`,
-`max_episode_steps`, `auto_start`, and an optional `task`) with strict types
+`max_episode_steps`, `auto_start`, an optional `max_steps_per_second`, and an optional `task`) with strict types
 (`StrictInt` and `StrictBool`, with `extra="forbid"`, and the `TaskSpec` domain
 parser for `task`) rather than arbitrary command lines. The character
 (`val-dwa-law`), model (`gemma4-nethack:latest`), policy
@@ -692,13 +697,26 @@ only to loopback hosts (`127.0.0.1`, `localhost`, or literal IPv6 `::1`), with
 `localhost` pinned specifically to `127.0.0.1`. Both `ControlClient` and
 `OllamaClient` normalize endpoints to literal loopback addresses and bypass
 HTTP proxies. `RunManager` owns at most one active run per process and ensures
-that at most one worker advances it at a time.
+that at most one worker advances it at a time. `RunManager.close()` closes its
+store only after joining its workers.
+Resume pacing lives only in `RunManager`'s worker loop, outside gameplay and
+persistence. A finite positive `max_steps_per_second` bounds step starts;
+`0`, `null`, or omission means unlimited. The monotonic deadline is relative to
+step start, so a slow step does not acquire an extra fixed sleep. A condition
+wait releases the manager lock and wakes on pause, stop, and speed changes.
+Single-step is unpaced. Evaluation and scenarios remain unlimited unless
+explicitly requested by a control-service client; there is no service-wide
+speed default. The current limit is exposed as top-level status
+`max_steps_per_second` (`null` for unlimited/read-only runs), not persisted:
+changing pacing adds no gameplay events, policy inputs, or schema migration,
+and old databases remain readable.
 
 - `GET /api/health`;
 - `POST /api/runs` with strict typed payload (`seed` as `StrictInt`, optional
   `max_episode_steps` as `StrictInt` default 5000, optional `auto_start` as
   `StrictBool` default false, and optional `task` as a `TaskSpec` object
-  defaulting to the staircase task; an invalid spec returns 422);
+  defaulting to the staircase task, plus optional finite nonnegative
+  `max_steps_per_second` (null/0 means unlimited); invalid values return 422);
 - `GET /api/runs/{id}` for the typed run record, coordinator snapshot with
   current observation, current goal and skill, objective leg, last live level,
   and legal actions;
@@ -707,6 +725,8 @@ that at most one worker advances it at a time.
   `events`, `next_after`, `has_more`, and `limit`;
 - `POST /api/runs/{id}/pause`, `POST /api/runs/{id}/resume`,
   `POST /api/runs/{id}/step`, `POST /api/runs/{id}/stop`;
+- `POST /api/runs/{id}/speed` with required `max_steps_per_second` (finite
+  nonnegative number or null), returning the updated status;
 - `WS /api/runs/{id}/events/ws?after=N&limit=M`, which performs bounded history
   replay and live event streaming, offloads SQLite queries asynchronously to
   worker threads (`asyncio.to_thread`), and actively monitors client
@@ -721,7 +741,7 @@ the service configuration rather than per request. Run control
 lives in memory: after a service restart, earlier runs remain readable but
 cannot be controlled, and their stored state is not reconciled.
 `ControlClient` and
-`nethack-agent run start|status|pause|resume|step|stop|events` use this API from
+`nethack-agent run start|status|pause|resume|step|stop|speed|events` use this API from
 the command line. `run` remains client-only and never owns the service.
 `ControlClient` validates health, status, and event-page response shapes,
 iterates every cursor page, applies finite monotonic readiness and state
@@ -817,8 +837,11 @@ them, and Escape dismisses a shown tooltip before closing the overlay. Live
 renders keep unchanged tooltip DOM and restore focus to the same trigger when
 values change.
 
-Controls start a run (seed, episode cap, auto start), attach to an existing run
-id (also via `#run=<id>`), and pause, resume, single-step, or stop it; API error
+Controls start a run (seed, episode cap, maximum steps/second, auto start),
+attach to an existing run id (also via `#run=<id>`), and pause, resume,
+single-step, or stop it. An attached-run speed form shows and changes the live
+limit (`0` means unlimited), independently of pinned-step viewing; read-only
+runs disable it. API error
 details are displayed. Attaching locates the newest event with O(log n)
 single-event page probes and replays only the last 50 events. The stream
 reconnects with backoff from the last delivered sequence after abnormal closure
@@ -1023,16 +1046,16 @@ invalid/gate/integrity-clean records
 `RunManager` with `create_run(auto_start=True)`: the same coordinator, worker
 loop, action gate, SQLite store, and ttyrec capture as the HTTP service, without
 HTTP or child-process failure modes. The manager, Ollama configuration,
-By default, episodes run sequentially. Adding `--workers N` runs `N` episodes
-concurrently using a `ProcessPoolExecutor`. Each worker instantiates its own
-`RunManager` instance pointing to the same SQLite WAL database. The evaluation
-harness reconstructs deterministic episode ordering in the report, maintaining
-transparent layout and artifacts.
 knowledge bundle, and policy version are created once for the suite; each case
-supplies only its declared task and cap. The evaluator never resumes or steers
-an episode. A run that pauses after a decision failure or gate rejection is
-stopped and scored by its stored evidence. Production mode first verifies that
-the configured local Ollama model is ready.
+supplies only its declared task and cap. By default, episodes run sequentially.
+Adding `--workers N` runs `N` episodes concurrently using a
+`ProcessPoolExecutor`. Each process worker instantiates its own `RunManager`
+and `RunStore`, pointing to the same SQLite WAL database without sharing a
+connection across processes. The evaluation harness reconstructs deterministic
+episode ordering in the report, maintaining transparent layout and artifacts.
+The evaluator never resumes or steers an episode. A run that pauses after a
+decision failure or gate rejection is stopped and scored by its stored evidence.
+Production mode first verifies that the configured local Ollama model is ready.
 
 After each episode the evaluator reads the complete event log back from
 SQLite. It audits contiguous sequences starting with `run_started`, contiguous

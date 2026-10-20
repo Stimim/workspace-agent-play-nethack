@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import sys
 from contextlib import asynccontextmanager, suppress
 from importlib.resources import files
 from typing import Annotated, Any, Final
 
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
-from fastapi.responses import Response
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 
 from nethack_agent.coordinator import (
@@ -47,12 +50,22 @@ _UI_HEADERS: Final = {
 }
 
 
+SpeedLimit = Annotated[float, Field(strict=True, ge=0, allow_inf_nan=False)]
+
+
+class SpeedRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    max_steps_per_second: SpeedLimit | None
+
+
 class CreateRunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     seed: Annotated[StrictInt, Field(ge=1, le=sys.maxsize)]
     max_episode_steps: Annotated[StrictInt, Field(ge=1, le=100_000)] = 5_000
     auto_start: StrictBool = False
+    max_steps_per_second: SpeedLimit | None = None
     # A strict `TaskSpec` JSON object, parsed by the domain contract.
     task: dict[str, Any] | None = None
 
@@ -70,6 +83,18 @@ def create_app(
             await asyncio.to_thread(manager.close)
 
     app = FastAPI(title="NetHack Agent", version="0.1.0", lifespan=lifespan)
+
+    @app.exception_handler(RequestValidationError)
+    async def invalid_request(_, error: RequestValidationError):  # type: ignore[no-untyped-def]
+        # JSON numbers such as 1e999 can decode to infinity. Keep the 422
+        # error itself valid JSON instead of failing while echoing that input.
+        detail = jsonable_encoder(
+            error.errors(),
+            custom_encoder={
+                float: lambda value: value if math.isfinite(value) else str(value)
+            },
+        )
+        return JSONResponse(status_code=422, content={"detail": detail})
 
     @app.exception_handler(RunNotFoundError)
     async def run_not_found(_, error: RunNotFoundError):  # type: ignore[no-untyped-def]
@@ -116,6 +141,7 @@ def create_app(
                 max_episode_steps=request.max_episode_steps,
                 auto_start=request.auto_start,
                 task=task,
+                max_steps_per_second=request.max_steps_per_second,
             )
         except (TypeError, ValueError) as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
@@ -124,6 +150,10 @@ def create_app(
     @app.get("/api/runs/{run_id}")
     def run_status(run_id: str) -> dict[str, object]:
         return manager.status(run_id)
+
+    @app.post("/api/runs/{run_id}/speed")
+    def speed(run_id: str, request: SpeedRequest) -> dict[str, object]:
+        return manager.set_speed(run_id, request.max_steps_per_second)
 
     @app.get("/api/runs/{run_id}/events")
     def run_events(
@@ -213,8 +243,6 @@ async def _wait_for_disconnect(websocket: WebSocket) -> None:
 
 
 def _error_response(status_code: int, detail: str):  # type: ignore[no-untyped-def]
-    from fastapi.responses import JSONResponse
-
     return JSONResponse(status_code=status_code, content={"detail": detail})
 
 

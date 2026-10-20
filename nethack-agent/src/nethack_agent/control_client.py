@@ -123,6 +123,7 @@ class ControlClient:
         max_episode_steps: int,
         auto_start: bool,
         task: TaskSpec | None = None,
+        max_steps_per_second: float | None = None,
     ) -> dict[str, Any]:
         """Create a run; without `task` the service runs the staircase task."""
         payload: dict[str, object] = {
@@ -132,6 +133,8 @@ class ControlClient:
         }
         if task is not None:
             payload["task"] = task.to_json()
+        if max_steps_per_second is not None:
+            payload["max_steps_per_second"] = max_steps_per_second
         response = self._request("POST", "/api/runs", payload)
         self.status_state(response)
         return response
@@ -243,6 +246,17 @@ class ControlClient:
         if operation not in {"pause", "resume", "step", "stop"}:
             raise ControlClientError(f"unsupported operation {operation!r}")
         response = self._request("POST", f"/api/runs/{_run_id(run_id)}/{operation}")
+        self.status_state(response)
+        return response
+
+    def set_speed(
+        self, run_id: str, max_steps_per_second: float | None
+    ) -> dict[str, Any]:
+        response = self._request(
+            "POST",
+            f"/api/runs/{_run_id(run_id)}/speed",
+            {"max_steps_per_second": max_steps_per_second},
+        )
         self.status_state(response)
         return response
 

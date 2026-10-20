@@ -8,6 +8,10 @@ export const element = (id) => document.getElementById(id);
 export const view = {
   seed: element("seed"),
   maxSteps: element("max-steps"),
+  startSpeed: element("start-speed"),
+  runSpeed: element("run-speed"),
+  setSpeed: element("set-speed"),
+  currentSpeed: element("current-speed"),
   autoStart: element("auto-start"),
   start: element("start"),
   attachId: element("attach-id"),

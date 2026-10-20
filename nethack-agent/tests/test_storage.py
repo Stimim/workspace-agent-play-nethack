@@ -1,7 +1,10 @@
 import json
+import multiprocessing
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
+from threading import Barrier
 
 import pytest
 
@@ -550,6 +553,239 @@ def test_atomic_event_update_rejects_a_step_after_stop(tmp_path: Path) -> None:
     assert [event.kind for event in store.events_after(run.id)] == [
         EventKind.RUN_STOPPED
     ]
+
+
+def test_shared_store_concurrent_readers_and_writers_keep_contiguous_sequences(
+    tmp_path: Path,
+) -> None:
+    store = RunStore(tmp_path / "runs.sqlite3")
+    run = create_stored_run(store, tmp_path)
+    writers = 4
+    readers = 2
+    rounds = 20
+    ready = Barrier(writers + readers, timeout=10)
+
+    def write_events() -> list[int]:
+        sequences = []
+        for _ in range(rounds):
+            ready.wait()
+            sequences.append(store.append_event(run.id, RunPausedPayload()).sequence)
+        return sequences
+
+    def read_events() -> None:
+        previous_count = 0
+        for _ in range(rounds):
+            ready.wait()
+            events = store.events_after(run.id)
+            assert [event.sequence for event in events] == list(range(len(events)))
+            assert len(events) >= previous_count
+            assert all(event.payload == RunPausedPayload() for event in events)
+            assert store.get_run(run.id).state is RunState.IDLE
+            previous_count = len(events)
+
+    try:
+        with ThreadPoolExecutor(max_workers=writers + readers) as executor:
+            written = [executor.submit(write_events) for _ in range(writers)]
+            observed = [executor.submit(read_events) for _ in range(readers)]
+            sequences = [
+                sequence for future in written for sequence in future.result(timeout=30)
+            ]
+            for future in observed:
+                future.result(timeout=30)
+
+        assert sorted(sequences) == list(range(writers * rounds))
+        assert [event.sequence for event in store.events_after(run.id)] == list(
+            range(writers * rounds)
+        )
+    finally:
+        store.close()
+
+
+def test_simultaneous_expected_state_transitions_have_one_matching_event(
+    tmp_path: Path,
+) -> None:
+    store = RunStore(tmp_path / "runs.sqlite3")
+    run = create_stored_run(store, tmp_path)
+    ready = Barrier(2, timeout=10)
+
+    def pause_or_stop(state: RunState) -> RunState | None:
+        payload = (
+            RunPausedPayload()
+            if state is RunState.PAUSED
+            else RunStoppedPayload(RunState.IDLE)
+        )
+        ready.wait()
+        try:
+            record, event = store.update_run_and_append_event(
+                run.id,
+                state=state,
+                event=payload,
+                expected_states=frozenset({RunState.IDLE}),
+            )
+        except RunStateConflictError:
+            return None
+        assert record.state is state
+        assert event.sequence == 0
+        assert event.payload == payload
+        return state
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            attempts = [
+                executor.submit(pause_or_stop, state)
+                for state in (RunState.PAUSED, RunState.STOPPED)
+            ]
+            results = [attempt.result(timeout=30) for attempt in attempts]
+
+        winners = [state for state in results if state is not None]
+        assert len(winners) == 1
+        assert results.count(None) == 1
+        assert store.get_run(run.id).state is winners[0]
+        events = store.events_after(run.id)
+        assert len(events) == 1
+        assert events[0].sequence == 0
+        assert events[0].payload == (
+            RunPausedPayload()
+            if winners[0] is RunState.PAUSED
+            else RunStoppedPayload(RunState.IDLE)
+        )
+    finally:
+        store.close()
+
+
+def test_failed_event_insert_rolls_back_state_and_allows_the_next_transaction(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "runs.sqlite3"
+    store = RunStore(database)
+    run = create_stored_run(store, tmp_path)
+    connection = sqlite3.connect(database)
+    try:
+        with connection:
+            connection.execute(
+                """
+                CREATE TRIGGER reject_paused_event BEFORE INSERT ON events
+                WHEN NEW.kind = 'run_paused'
+                BEGIN
+                    SELECT RAISE(ABORT, 'paused event rejected');
+                END
+                """
+            )
+        with pytest.raises(sqlite3.IntegrityError, match="paused event rejected"):
+            store.update_run_and_append_event(
+                run.id,
+                state=RunState.PAUSED,
+                event=RunPausedPayload(),
+                error="must roll back",
+                expected_states=frozenset({RunState.IDLE}),
+            )
+
+        assert store.get_run(run.id) == run
+        assert store.events_after(run.id) == ()
+        record, event = store.update_run_and_append_event(
+            run.id,
+            state=RunState.STOPPED,
+            event=RunStoppedPayload(RunState.IDLE),
+            expected_states=frozenset({RunState.IDLE}),
+        )
+        assert record.state is RunState.STOPPED
+        assert record.error is None
+        assert event.sequence == 0
+        assert store.events_after(run.id) == (event,)
+    finally:
+        connection.close()
+        store.close()
+
+
+def test_close_releases_database_resources_and_new_store_preserves_data(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "runs.sqlite3"
+    store = RunStore(database)
+    run = create_stored_run(store, tmp_path)
+    event = store.append_event(run.id, RunPausedPayload())
+    wal = database.with_name(database.name + "-wal")
+    shm = database.with_name(database.name + "-shm")
+    assert wal.exists()
+
+    store.close()
+    store.close()
+
+    # SQLite removes WAL resources when its last connection closes.
+    assert not wal.exists()
+    assert not shm.exists()
+    operations = (
+        lambda: create_stored_run(store, tmp_path),
+        lambda: store.get_run(run.id),
+        lambda: store.update_run(run.id, state=RunState.PAUSED),
+        lambda: store.append_event(run.id, RunPausedPayload()),
+        lambda: store.update_run_and_append_event(
+            run.id, state=RunState.PAUSED, event=RunPausedPayload()
+        ),
+        lambda: store.events_after(run.id),
+        lambda: store.event_page(run.id),
+    )
+    for operation in operations:
+        with pytest.raises(RuntimeError):
+            operation()
+
+    reopened = RunStore(database)
+    try:
+        assert reopened.get_run(run.id) == run
+        assert reopened.events_after(run.id) == (event,)
+        assert reopened.append_event(run.id, RunResumedPayload()).sequence == 1
+    finally:
+        reopened.close()
+
+
+@pytest.mark.skipif(
+    "fork" not in multiprocessing.get_all_start_methods(),
+    reason="requires inherited process state",
+)
+def test_inherited_store_refuses_operations_without_affecting_its_owner(
+    tmp_path: Path,
+) -> None:
+    store = RunStore(tmp_path / "runs.sqlite3")
+    run = create_stored_run(store, tmp_path)
+    context = multiprocessing.get_context("fork")
+    receiver, sender = context.Pipe(duplex=False)
+
+    def use_inherited_store() -> None:
+        try:
+            refused = []
+            for operation in (
+                lambda: store.get_run(run.id),
+                lambda: store.append_event(run.id, RunPausedPayload()),
+                store.close,
+            ):
+                try:
+                    operation()
+                except RuntimeError:
+                    refused.append(True)
+                else:
+                    refused.append(False)
+            sender.send(refused)
+        finally:
+            sender.close()
+
+    process = context.Process(target=use_inherited_store)
+    try:
+        process.start()
+        sender.close()
+        assert receiver.poll(10), "inherited store operation did not return"
+        assert receiver.recv() == [True, True, True]
+        process.join(timeout=10)
+        assert process.exitcode == 0
+        assert store.get_run(run.id) == run
+        assert store.events_after(run.id) == ()
+        assert store.append_event(run.id, RunPausedPayload()).sequence == 0
+    finally:
+        if process.is_alive():
+            process.terminate()
+            process.join(timeout=10)
+        sender.close()
+        receiver.close()
+        store.close()
 
 
 def test_event_replay_uses_stable_bounded_cursor_pages(tmp_path: Path) -> None:
