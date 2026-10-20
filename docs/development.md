@@ -557,6 +557,20 @@ development report is never real-model milestone evidence; the real
 continue rendering byte-for-byte
 ([note 0022](notes/0022-suite-schema-3-fresh-samples.md)).
 
+`--compare-report` is an in-run diff against a report of the same suite digest.
+Qualification arms instead run relabelled suite copies, possibly with different
+knowledge, on the same reserved seeds. Compare those finished reports with
+[`_agents/skills/evidence-record/compare.py`](../_agents/skills/evidence-record/SKILL.md):
+it pairs results by case and seed, applies the ADR 0007 §4.1 gates per paired
+set (objectives not lower; deaths, last-live Weak-or-worse and starvation
+deaths not higher; zero invalid actions, gate rejections and integrity
+failures; complete comparable records), lists every changed seed with
+transition flags and deltas, and adds per-arm death-cause, hunger and depth
+diagnostics. Its JSON is compact enough to commit under
+`docs/notes/evidence/<note>/`; the Markdown summary matches the notes' O/D/T
+tables. It reads report JSON only and is a coding-agent tool, not product
+code, beside the per-arm `record.py`.
+
 
 Progress lines go to stderr every `--progress-interval` seconds (default 30).
 Each invocation reserves a new `<suite>-<UTC timestamp>.json` and `.md` pair in

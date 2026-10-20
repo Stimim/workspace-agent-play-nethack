@@ -8,6 +8,47 @@ from pathlib import Path
 from typing import Any
 
 
+def iter_results(data: dict[str, Any]) -> list[tuple[str | None, dict[str, Any]]]:
+    """Return every (case_id, result) of a report, in report order."""
+    pairs: list[tuple[str | None, dict[str, Any]]] = []
+    for cr in data.get("case_results", []):
+        default_case_id = cr.get("case_id")
+        for res in cr.get("results", []):
+            pairs.append((res.get("case_id", default_case_id), res))
+    return pairs
+
+
+def seed_row(
+    case_id: str | None, res: dict[str, Any], failure_class: str | None = None
+) -> dict[str, Any]:
+    """Compact per-seed summary of one report result (the record row schema)."""
+    metrics = res.get("metrics", {})
+    outcome = res.get("outcome")
+    death_cause = metrics.get("death_cause")
+    if outcome != "death" or death_cause in (None, "unknown"):
+        death_cause = None
+    final_level = None
+    levels_visited = metrics.get("levels_visited", [])
+    if levels_visited:
+        last_lv = levels_visited[-1]
+        dnum = last_lv.get("dungeon_number")
+        dlevel = last_lv.get("dungeon_level")
+        if dnum is not None and dlevel is not None:
+            final_level = f"{dnum}:{dlevel}"
+    return {
+        "case_id": case_id,
+        "seed": res.get("seed"),
+        "outcome": outcome,
+        "steps": res.get("steps"),
+        "game_turns": metrics.get("game_turns"),
+        "death_cause": death_cause,
+        "hunger_at_death": metrics.get("hunger_at_death"),
+        "max_depth": metrics.get("max_depth"),
+        "final_level": final_level,
+        "failure_class": failure_class,
+    }
+
+
 def generate_evidence_record(
     report_path: Path,
     commit: str,
@@ -64,49 +105,11 @@ def generate_evidence_record(
         "rerun_hint": rerun_hint,
     }
 
-    rows: list[dict[str, Any]] = []
     classes_map = classes or {}
-
-    for cr in data.get("case_results", []):
-        default_case_id = cr.get("case_id")
-        for res in cr.get("results", []):
-            case_id = res.get("case_id", default_case_id)
-            seed = res.get("seed")
-            outcome = res.get("outcome")
-            steps = res.get("steps")
-            metrics = res.get("metrics", {})
-            game_turns = metrics.get("game_turns")
-            death_cause = metrics.get("death_cause")
-            if outcome != "death" or death_cause in (None, "unknown"):
-                death_cause = None
-            hunger_at_death = metrics.get("hunger_at_death")
-            max_depth = metrics.get("max_depth")
-            levels_visited = metrics.get("levels_visited", [])
-            final_level = None
-            if levels_visited:
-                last_lv = levels_visited[-1]
-                dnum = last_lv.get("dungeon_number")
-                dlevel = last_lv.get("dungeon_level")
-                if dnum is not None and dlevel is not None:
-                    final_level = f"{dnum}:{dlevel}"
-
-            # Check failure class: classes_map may have string or int keys
-            failure_class = classes_map.get(str(seed))
-
-            rows.append(
-                {
-                    "case_id": case_id,
-                    "seed": seed,
-                    "outcome": outcome,
-                    "steps": steps,
-                    "game_turns": game_turns,
-                    "death_cause": death_cause,
-                    "hunger_at_death": hunger_at_death,
-                    "max_depth": max_depth,
-                    "final_level": final_level,
-                    "failure_class": failure_class,
-                }
-            )
+    rows = [
+        seed_row(case_id, res, classes_map.get(str(res.get("seed"))))
+        for case_id, res in iter_results(data)
+    ]
 
     rows.sort(key=lambda r: (r["case_id"], r["seed"]))
 

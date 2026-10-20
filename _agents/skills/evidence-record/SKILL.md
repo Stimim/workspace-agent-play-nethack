@@ -48,3 +48,39 @@ The output JSON contains:
   - `max_depth`: Maximum dungeon level depth reached.
   - `final_level`: Level where the run ended formatted as `"<dungeon_number>:<dungeon_level>"`.
   - `failure_class`: Failure category string from `--classes`, or `null`.
+
+`record.py` exposes `iter_results(report)` and `seed_row(case_id, result)`; `compare.py` reuses them, so both tools summarize a seed the same way. `final_level` is the last level in `levels_visited` (the most recently *first-visited* level), not necessarily where the episode ended.
+
+## Paired comparison (`compare.py`)
+
+Applies the ADR 0007 §4.1 qualification gates to baseline/candidate report pairs and keeps the paired per-seed evidence that individual records and replay audits do not. It reads report JSON only (never `runs.sqlite3`), so it is cheap and safe to run on raw arms under `~/nethack-evidence/`.
+
+```bash
+uv run --project nethack-agent python3 _agents/skills/evidence-record/compare.py \
+  --pair NAME BASELINE_REPORT CANDIDATE_REPORT \
+  [--pair NAME2 BASELINE_REPORT2 CANDIDATE_REPORT2 ...] \
+  [--base-commit SHA] [--candidate-commit SHA] \
+  [--output docs/notes/evidence/<note>/paired-comparison.json] \
+  [--markdown OUT.md]
+```
+
+- Repeat `--pair` for every paired set of a qualification (five for notes 0052/0057). Names must be unique.
+- Pairs are keyed by `(case_id, seed)`. Suite IDs, suite digests, policy and knowledge versions may differ between arms (candidate suites are honest relabelled copies); they are listed under `arm_differences` and do not fail a gate. Model, character, per-case task and step cap, and the paired seed set must match, or the pair is not comparable.
+- The Markdown summary goes to stdout unless `--markdown` is given. Exit code 0 means the comparison was produced (whatever the verdict); 2 means unreadable input or duplicate pair names.
+
+Gates per pair (`passed` is `true`, `false`, or `null` for unknown):
+
+| Gate | Rule |
+| --- | --- |
+| `objectives_not_lower` | candidate `objective_complete` count >= baseline |
+| `deaths_not_higher` | candidate deaths <= baseline |
+| `weak_or_worse_not_higher` | deaths whose last-live `hunger_at_death` is weak/fainting/fainted/starved, or whose cause contains "starvation"; unknown if any death in either arm lacks hunger evidence |
+| `starvation_not_higher` | deaths whose cause contains "starvation" |
+| `zero_invalid_actions`, `zero_gate_rejections`, `zero_integrity_failures` | zero in both arms |
+| `complete_comparable_records` | both reports `complete`, every requested seed evaluated, terminal records with ttyrecs, no result errors, and no comparability problem |
+
+A pair's verdict is `fail` if any gate failed, else `unknown` if any gate is unknown, else `pass`; the header verdict combines the pairs the same way. The verdict is mechanical: the note still has to trace every lost success and new death (note 0040 protocol).
+
+JSON output: `header` (schema version, commits, verdict, gate definitions) and one entry per pair with `verdict`, `failed_gates`, `unknown_gates`, `gates` (baseline/candidate/passed), `comparability_problems`, `arm_differences`, per-arm summaries (`baseline`, `candidate`: report file and SHA-256, suite, policy, knowledge, O/D/T, Weak-or-worse, starvation, deaths without hunger evidence, quality counts, conduct counts or `null` when absent, and diagnostics: death causes, hunger at death, deaths by max depth, median death turn, max depth and final XL), `transitions` (outcome changes), `changed_seeds` (endpoint = outcome, death cause or hunger changed; with flags such as `lost_success`, `new_death`, `new_weak_or_worse`, `avoided_death`, `cause_changed`, and turn/depth/step deltas) and `seeds` (every paired seed's outcome in each arm). Each seed row is one line.
+
+Checked against the recorded verdicts: the five note-0057 pairs reproduce its table (Minetown regression and both fresh sets fail, the rest pass) and the five note-0052 pairs reproduce its three failures and the changed-seed lists of `~/nethack-evidence/0052/paired-report-analysis.json`.

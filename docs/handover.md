@@ -106,8 +106,10 @@ catalog entries 1 and 701 changed from death to truncated; ADR 0004's
    baseline fresh arms.
 6. **Apply the gates.** For every paired set: objectives not lower, deaths not
    higher, Weak-or-worse and starvation deaths not higher; zero invalid
-   actions, gate rejections and integrity failures. Trace every lost success
-   and new death. A behavior change after launch spoils the sample.
+   actions, gate rejections and integrity failures.
+   `_agents/skills/evidence-record/compare.py` computes these per pair and
+   lists every changed seed. Trace every lost success and new death. A
+   behavior change after launch spoils the sample.
 7. **Record the outcome** in the main repo, whether QUALIFIED or REJECTED:
    - the note, with a `## Decision` heading;
    - compact records under `docs/notes/evidence/<note>/`;
@@ -128,6 +130,10 @@ _agents/skills/detached-eval/scripts/detached_eval.py --state-dir DIR wait RUN  
 # compact per-seed record for a report
 uv run --project nethack-agent python3 _agents/skills/evidence-record/record.py REPORT.json \
   --commit SHA --command "CMD" --output docs/notes/evidence/NNNN/NAME.json
+# paired ADR 0007 gates and changed seeds; repeat --pair for each set
+uv run --project nethack-agent python3 _agents/skills/evidence-record/compare.py \
+  --pair NAME BASE_REPORT.json CAND_REPORT.json --base-commit SHA \
+  --output docs/notes/evidence/NNNN/paired-comparison.json
 # checks (from nethack-agent/)
 uv run ruff check . && uv run ruff format --check . && uv run pytest -q
 ```

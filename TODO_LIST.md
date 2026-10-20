@@ -30,9 +30,9 @@ Phase 0 tooling may proceed alongside this order.
 
 ### Phase 0 — tooling
 
-Done: commit guard, native-truth reader, detached/parallel evaluation, [detached-eval stop](_agents/skills/detached-eval/SKILL.md), [RunStore connection reuse](docs/development.md), evidence records, step-history map and live speed limit ([0047](docs/notes/0047-native-truth-reader.md), [0050](docs/notes/0050-phase1-objectives-baselines-detector-audit.md), [0056]).
+Done: commit guard, native-truth reader, detached/parallel evaluation, [detached-eval stop](_agents/skills/detached-eval/SKILL.md), [RunStore connection reuse](docs/development.md), evidence records, [paired report comparison](_agents/skills/evidence-record/SKILL.md), step-history map and live speed limit ([0047](docs/notes/0047-native-truth-reader.md), [0050](docs/notes/0050-phase1-objectives-baselines-detector-audit.md), [0056]).
 
-- [ ] Add replay comparison and aggregate run diagnostics; retain paired evidence beyond individual replay audits ([ADR 0004](docs/decisions/0004-traversal-goals-and-task-progression.md#8-staged-plan-after-a), [0056]).
+- [ ] Add step-level replay comparison (first divergent step and rule firing between paired arms from stored events). Paired report comparison with ADR 0007 gates and aggregate diagnostics is done ([evidence-record compare](_agents/skills/evidence-record/SKILL.md)) ([ADR 0004](docs/decisions/0004-traversal-goals-and-task-progression.md#8-staged-plan-after-a), [0056]).
 - [ ] Record actual tool/script executions for Tools, replacing its deterministic-step-only view; preserve provenance ([UI limits](docs/development.md), [0056]).
 - [ ] Automate browser layout, overlay, focus and tooltip tests; cover behaviors currently checked only by recorded smokes ([0009](docs/notes/0009-ui-agent-information-redesign.md), [0018](docs/notes/0018-agent-column-viewport-fit.md)).
 - [ ] Box destinations on the hero's own cell; show replanning divergence and record computed-but-unfollowed routes (blocker waits/stair defense) ([0011](docs/notes/0011-map-intent-annotations.md), [0012](docs/notes/0012-planned-path-overlay.md)).
