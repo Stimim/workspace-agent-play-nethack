@@ -37,6 +37,7 @@ from nethack_agent.decision import (
     classify_prayer_outcome,
     confirmation_answer_error,
     confirmation_prompt_kind,
+    disengage_action_error,
     is_corpse_decline,
     level_change_selection_error,
     observed_corpse_decline,
@@ -267,6 +268,10 @@ class StepPayload:
         survival_error = survival_action_selection_error(
             self.action.name, self.selection
         )
+        if survival_error is None:
+            survival_error = disengage_action_error(
+                self.action, self.selection, structural_only=True
+            )
         prayer = None if intent is None else intent.prayer
         if self.action.name == PRAY_ACTION_NAME:
             if (

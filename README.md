@@ -68,6 +68,13 @@ task never changes level. Runs expose the current goal and skill, stream
 typed events through the loopback service and CLI, and keep bounded scenarios
 and network verification reproducible.
 
+Isolated candidate 0059 combines rule 0057 (combat-only, bounded Elbereth
+recovery with native engraving/text transport and exact LOOK readback) with
+rule 0054 (a finite no-progress navigation budget). It is not qualified or
+shipped, and qualifying the two as one unit needs an ADR 0007 exception the
+owner has not recorded. See
+[Architecture](ARCHITECTURE.md#isolated-candidate-0059-not-qualified-not-approved-for-qualification).
+
 The first product milestone requires this hierarchy to succeed on at least 6
 of 10 fixed `NetHackStaircase-v0` seeds, including seed 6, while recording
 SQLite events and ttyrecs and streaming the decision trace to a local web UI.

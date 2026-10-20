@@ -329,6 +329,7 @@ def navigation_action_error(
             intent.corpse,
             intent.food,
             intent.drop,
+            intent.disengage,
         )
     ):
         return "navigation evidence cannot accompany another action"

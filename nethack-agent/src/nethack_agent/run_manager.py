@@ -52,7 +52,14 @@ from nethack_agent.tasks import STAIRCASE_TASK, TaskSpec
 # Survival adds the action profile, deterministic prayer, safe corpse eating,
 # corrected meal lifecycle, and exit discovery from notes 0025–0034.
 # Earlier suites and reports remain pinned to their original policies.
-POLICY_VERSION: Final = "hierarchical-survival-hp-prayer-burden-look-ration-v1"
+# Unshipped combined candidate 0059: rule 0057 (Elbereth disengage-and-rest)
+# plus rule 0054 (no-progress navigation budget). This label is for a
+# qualification that the ADR 0007 one-rule exception would have to permit;
+# it is not the shipped policy.
+# Suite policy labels are limited to 80 characters, hence "qual".
+POLICY_VERSION: Final = (
+    "hierarchical-survival-hp-prayer-burden-look-ration-elbereth-navbudget-qual-v1"
+)
 _ACTIVE_STATES: Final = frozenset({RunState.IDLE, RunState.RUNNING, RunState.PAUSED})
 
 

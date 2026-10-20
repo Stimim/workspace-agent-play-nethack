@@ -19,6 +19,98 @@ verified ration instead of cancelling and reopening `EAT` at zero game turns
 `oracle-regression-v2` pin the active policy while all old suite definitions
 and reports stay unchanged.
 
+### Isolated candidate 0059 (not qualified, not approved for qualification)
+
+This worktree (branch `rule-0059-rest-plus-stall-budget`, base `22d0a5f`)
+combines rule 0057 (Elbereth disengage-and-rest, REJECTED alone, note 0057)
+with rule 0054 (finite no-progress navigation budget, unqualified,
+`~/nethack-evidence/0054/STATUS.md`). Qualifying them as one unit needs an
+ADR 0007 exception to "one rule per qualification" that the project owner
+has not recorded, so no suite, seed reservation or preregistration exists.
+`POLICY_VERSION` is the qualification-only label
+`hierarchical-survival-hp-prayer-burden-look-ration-elbereth-navbudget-qual-v1`
+(suite labels are limited to 80 characters); shipped suites stay pinned to
+the shipped policy. The two rules interact as follows:
+
+- **A protected rest spends no navigation allowance.** The rest is `.`
+  (`MiscDirection.WAIT`), which neither searches nor waits on a blocker, so
+  `DisengageRecovery.select_action` and replay's `derive_action_record`
+  both record every Elbereth byte as `ActionKind.OTHER`. As `WAIT` (0057's
+  recording), eight rests spent the eight blocker waits and authorized
+  local-recovery departure after only that many turns, and twenty would
+  have credited the hero's neighbours with full search coverage they never
+  received (which `search_pass_complete` trusts on protected target levels).
+- **Rest turns still spend the no-progress clock.** The clock counts
+  residence game turns since new public knowledge, and a rest learns
+  nothing, so it is not paused or refilled. This is the conservative choice
+  for food: note 0057's new deaths were mostly Weak or Fainting after long
+  rests, and pausing the clock would let each rest (up to 200 turns) add to a
+  stall's total residence instead of being bounded by it. On protected
+  target levels the clock alone never authorizes departure (full coverage
+  is still required), so resting cannot push the hero off a target level.
+- **Selection order is unchanged from each rule.** An owned engraving
+  prompt is answered first; pending burden, food and corpse transactions and
+  critical prayer precede a new disengage step; disengage precedes adjacent
+  defense, burden, hunger, navigation, exploration and stuck consultation,
+  so a spent budget never interrupts an
+  owned engraving transaction or protected rest; departure waits until the
+  recovery exits. A deterministic disengage step (engrave, LOOK, rest)
+  ends a stuck spell like any other deterministic skill step: the
+  coordinator and `ExplorationReplay` both clear `stuck_consult_step`, so the
+  next stuck report after a rest may consult the model at once
+  (`STUCK_RECONSULT_STEPS` applies only between consecutive stuck reports).
+- **Evidence is exclusive.** One `ActionIntent` cannot carry disengage
+  together with navigation or local-recovery evidence; `ActionGate` and the
+  evaluator both authorize an owned Elbereth byte from its recovery
+  evidence before the navigation and local-recovery checks.
+
+Tests: `nethack-agent/tests/test_rest_stall_interaction.py`.
+
+### Isolated candidate 0057 (not qualified)
+
+This worktree adds only combat Elbereth disengagement: at one-third HP with
+safe prayer unavailable and a visible non-immune hostile (the code does not
+trigger after an HP prayer; note 0057),
+the deterministic recovery skill writes dust Elbereth, verifies it with LOOK,
+and waits one turn at a time until the recovery target or a safety/budget exit.
+It does not add quiet rest or retreat movement. Unsafe or unsupported
+conditions fall back to existing behavior with an explicit recorded reason.
+Hungry stops recovery, and every failed write, prompt step and elapsed turn
+spends a persistent bounded budget. Only verified protection inhibits attacks.
+After exact protection readback, recovery remains combat-triggered even when
+the attackers flee out of sight. A separate established-recovery latch survives
+LOOK and repair, without treating a pending readback as verified protection.
+Publicly peaceful creatures are not attacking threats and do not interrupt
+this recovery. No prior combat trigger still means no wounded quiet-rest rule.
+
+The engraving transaction owns tool selection, optional overwrite, each text
+byte, submission and every MORE page. `disengage_action_error` is shared by
+selection, the runtime action gate, structural step validation and public
+event replay; command-letter collisions cannot become movement or EAT.
+The environment preserves only the owned native engraving prompts and LOOK
+pages. Native 3.6.7 Elbereth does not protect against distant attacks, immune
+monsters, or blind monsters; dust can be corrupted on creation and erodes.
+The existing policy labels and historical suites are retained pending a
+separate frozen qualification decision; light probes are diagnosis only.
+
+Chosen diagnostic defaults remain one-third entry HP, 75% recovery target,
+200 elapsed turns, two repair retries and 24 prompt steps per transaction.
+The higher joint arm (40%/80%) saved none of the eight selected deaths and
+did not justify widening the approved trigger. These probes do not establish
+an optimal target or cap. Recovery is limited to reviewed reachable branches
+(main dungeon, Mines and Sokoban) and non-polymorphed heroes below Overtaxed,
+outside shops/temples. Threat eligibility now follows NetHack 3.6.7's own
+Elbereth-immunity predicate from public glyph/description data: immune iff
+the glyph's species is the @ class, a minion-flagged celestial, a named
+unique (minotaur, shopkeeper, guard, priest, Wizard of Yendor, Riders), or
+its description names a shop/guard/priest role; unknown or undescribed
+glyphs are also excluded. Passive-attack species (gas spore, floating eye,
+the four colored molds, acid blob, blue/spotted jelly, shrieker) are never
+a threat and never interrupt recovery merely by being visible; they are
+never attacked from the protected square either. Known incoming ranged
+damage or damage during a protected wait disables stationary recovery;
+a monster the public log reports as blinded this encounter is excluded.
+
 ## System context
 ```mermaid
 flowchart LR
