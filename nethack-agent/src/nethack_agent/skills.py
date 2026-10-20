@@ -46,6 +46,14 @@ from nethack_agent.navigation import (
     locked_door_kick_error,
     route_tree,
 )
+from nethack_agent.navigation_budget import (
+    SEARCH_CANDIDATE_CAP,
+    legacy_search_candidate,
+    navigation_available,
+    search_candidate,
+    search_evidence,
+    wait_evidence,
+)
 from nethack_agent.observation import (
     InventoryItem,
     ProjectedObservation,
@@ -62,13 +70,7 @@ from nethack_agent.traversal import (
     candidate_tier,
 )
 
-# Each search finds an adjacent hidden door or corridor with probability 1/7
-# at Luck 0 (NetHackWiki "Search"); ten searches find it about 79% of the time.
-SEARCHES_PER_ROUND: Final = 10
-MONSTER_WAIT_LIMIT: Final = 8
 SEARCH_DENSITY_RADIUS: Final = 4
-MIN_SEARCH_SCORE: Final = 20
-SEARCH_DISTANCE_WEIGHT: Final = 2
 _FRONTIER_PASSAGES: Final = frozenset(
     {
         CellKind.DOORWAY,
@@ -167,6 +169,8 @@ class StaircaseNavigationSkill:
             chosen = _best_stair(blocked, candidates)
             if chosen is None:
                 return None
+            if _frontier_goal(memory, tree, tuple(candidates)) is not None:
+                return None
         destination = IntentDestination(
             kind,
             *chosen,
@@ -221,7 +225,7 @@ class StaircaseNavigationSkill:
                 destination,
             )
         return _past_monster(
-            memory, blocked, actions_by_name, chosen, name, destination
+            memory, blocked, actions_by_name, chosen, name, destination, target
         )
 
 
@@ -295,8 +299,12 @@ class ExploreLevelSkill:
     ) -> ExploreResult:
         """Explore, biased toward remembered staircases compatible with `target`.
 
-        Without a target (an explore_level goal) no staircase biases the search.
+        Without a target (an explore_dungeon leg's `ExploreLevelGoal`) no
+        staircase biases the search, and the unbounded round-scored
+        algorithm governs search/wait instead of the place-objective's
+        finite, non-refillable navigation budget.
         """
+        legacy = target is None
         defense = _attack_adjacent_hostile(memory, actions_by_name, None)
         if defense is not None:
             return ExploreResult(defense, None)
@@ -324,7 +332,7 @@ class ExploreLevelSkill:
             if action is not None:
                 return ExploreResult(action, None)
         if memory.search_goal is not None:
-            action = _search(memory, tree, actions_by_name)
+            action = _search(memory, tree, actions_by_name, target)
             if action is not None:
                 return ExploreResult(action, None)
 
@@ -339,6 +347,7 @@ class ExploreLevelSkill:
                 goal,
                 "unexplored space",
                 IntentDestination(DestinationKind.FRONTIER, *goal),
+                target,
             )
             if action is not None:
                 return ExploreResult(action, None)
@@ -346,15 +355,17 @@ class ExploreLevelSkill:
 
         action = _kick_locked_door(memory, tree, actions_by_name, target)
         if action is None:
-            action = _search(memory, tree, actions_by_name)
+            action = _search(memory, tree, actions_by_name, target)
         if action is not None:
             return ExploreResult(action, None)
-        return ExploreResult(
-            None,
-            StuckReason.MONSTER_BLOCKED
-            if blocked_by_monster
-            else StuckReason.SEARCH_EXHAUSTED,
-        )
+        if legacy:
+            return ExploreResult(
+                None,
+                StuckReason.MONSTER_BLOCKED
+                if blocked_by_monster
+                else StuckReason.SEARCH_EXHAUSTED,
+            )
+        return ExploreResult(None, StuckReason.NAVIGATION_BUDGET_EXHAUSTED)
 
 
 def is_safe_food_ration(item: InventoryItem) -> bool:
@@ -965,6 +976,7 @@ def _past_monster(
     goal: Point,
     purpose: str,
     destination: IntentDestination,
+    target: StairTarget | None = None,
 ) -> SkillAction | None:
     """Advance on a route that is blocked only by displayed monsters."""
     route = tree.route(goal)
@@ -994,14 +1006,15 @@ def _past_monster(
             attack_target=MapCell(*step),
         )
     search = actions_by_name.get("Command.SEARCH")
-    if search is None or memory.monster_waits >= MONSTER_WAIT_LIMIT:
+    evidence = wait_evidence(memory, step, target)
+    if search is None or evidence is None:
         return None
     return SkillAction(
         search.index,
         f"Wait in place for the {monster.name} blocking the route to the "
         f"{purpose} to move; it is peaceful or unsafe to melee.",
         ActionRecord(ActionKind.WAIT, memory.position),
-        ActionIntent(destination, None, None),
+        ActionIntent(destination, None, None, navigation=evidence),
     )
 
 
@@ -1106,72 +1119,48 @@ def _search(
     memory: LevelMemory,
     tree: RouteTree,
     actions_by_name: dict[str, LegalAction],
+    target: StairTarget | None = None,
 ) -> SkillAction | None:
-    """Search at the reachable spot facing the most unexplored space.
+    """Rotate through hidden-passage candidates.
 
-    Spots face secret-door walls or blank corridor continuations, including
-    bends and visited doorways. Every search covers the eight adjacent
-    cells; a cell stops counting once searched `SEARCHES_PER_ROUND` times per
-    round, so candidates rotate as coverage grows. The chosen spot stays
-    committed until it is spent or unreachable, so travel does not dither
-    between spots whose scores shift as walking reveals the map.
+    Without a `target` (an explore_dungeon leg) this is the original
+    unbounded, density-gated round search; a place-objective `target`
+    instead rotates through the finite per-candidate cap, never regrown by
+    a model re-arm.
     """
     search = actions_by_name.get("Command.SEARCH")
     if search is None:
         return None
-    budget = SEARCHES_PER_ROUND * (memory.search_round + 1)
-    density = _UnexploredDensity(memory, SEARCH_DENSITY_RADIUS)
-
-    def evaluate(point: Point) -> tuple[int, int] | None:
-        if point in memory.monsters or memory.kind(point) is CellKind.CLOSED_DOOR:
+    if target is None:
+        candidate = legacy_search_candidate(memory, tree)
+        if candidate is None:
             return None
-        targets = [
-            target
-            for target in _search_targets(memory, point)
-            if memory.search_coverage.get(target, 0) < budget
-        ]
-        score = sum(density.around(target) for target in targets)
-        if score < MIN_SEARCH_SCORE:
+        spot, targets, budget = candidate
+    else:
+        if not navigation_available(memory):
             return None
-        return score, min(memory.search_coverage.get(target, 0) for target in targets)
-
-    spot = memory.search_goal
-    evaluation = (
-        evaluate(spot)
-        if spot is not None
-        and spot in tree.distances
-        and spot not in memory.abandoned_goals
-        else None
-    )
-    if evaluation is None:
-        spot = None
-        best: tuple[int, int, int, int] | None = None
-        for point, distance in tree.distances.items():
-            if point in memory.abandoned_goals:
-                continue
-            candidate = evaluate(point)
-            if candidate is None:
-                continue
-            key = (
-                -(candidate[0] - SEARCH_DISTANCE_WEIGHT * distance),
-                distance,
-                point[1],
-                point[0],
-            )
-            if best is None or key < best:
-                best = key
-                spot = point
-                evaluation = candidate
-    if spot is None or evaluation is None:
-        return None
+        candidate = search_candidate(memory, tree)
+        if candidate is None:
+            return None
+        spot, targets = candidate
+        budget = SEARCH_CANDIDATE_CAP
     origin = memory.position
     if spot == origin:
+        evidence = search_evidence(memory, target)
+        if evidence is None:
+            return None
+        least = min(memory.search_coverage.get(cell, 0) for cell in targets)
         return SkillAction(
             search.index,
             f"Search for hidden passages at {_cell(spot)} "
-            f"(least-searched neighbour {evaluation[1]}/{budget}).",
+            f"(least-searched neighbour {least}/{budget}).",
             ActionRecord(ActionKind.SEARCH, origin, search_spot=spot),
-            _toward(DestinationKind.SEARCH_SPOT, spot),
+            ActionIntent(
+                IntentDestination(DestinationKind.SEARCH_SPOT, *spot),
+                None,
+                None,
+                navigation=evidence,
+            ),
         )
     return _route_step(
         memory,

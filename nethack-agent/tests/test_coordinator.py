@@ -49,7 +49,7 @@ from nethack_agent.decision import (
     TraversalPermit,
 )
 from nethack_agent.environment import LegalAction, NleEnvironment, ScenarioConfig
-from nethack_agent.evaluation import load_suite, summarize_run
+from nethack_agent.evaluation import _action_is_valid, load_suite, summarize_run
 from nethack_agent.events import EventKind, RunEvent, RunStartedPayload, StepPayload
 from nethack_agent.model import (
     DecisionFailure,
@@ -65,7 +65,13 @@ from nethack_agent.observation import (
 )
 from nethack_agent.replay import ExplorationReplay
 from nethack_agent.storage import RunRecord
-from nethack_agent.tasks import STAIRCASE_TASK, ActionProfile, NleTask, TaskSpec
+from nethack_agent.tasks import (
+    GOAL_PRESETS,
+    STAIRCASE_TASK,
+    ActionProfile,
+    NleTask,
+    TaskSpec,
+)
 from nethack_agent.traversal import (
     STAND_ON_DOWNSTAIRS,
     ExploreDungeonLeg,
@@ -163,15 +169,12 @@ class ConsultingModel:
         skills: tuple[Skill, ...],
         stuck: StuckReason | None,
     ) -> ModelSkillDecision:
-        del observation, goals
-        assert set(skills) == {
-            Skill.STAIRCASE_NAVIGATION,
-            Skill.EXPLORE_LEVEL,
-        }
+        del observation
+        assert Skill.EXPLORE_LEVEL in set(skills)
         self.consultations.append(stuck)
         skill = Skill.EXPLORE_LEVEL if stuck is None else self.stuck_skill
         return ModelSkillDecision(
-            SkillDecision(STAND_ON_DOWNSTAIRS, skill, "Scripted consultation."),
+            SkillDecision(goals[0], skill, "Scripted consultation."),
             _METRICS,
             "{}",
         )
@@ -200,6 +203,7 @@ def coordinator(
     *,
     seed: int = 6,
     max_steps: int = 20,
+    task: TaskSpec = STAIRCASE_TASK,
 ) -> AgentCoordinator:
     return AgentCoordinator(
         NleEnvironment(
@@ -207,6 +211,7 @@ def coordinator(
                 seed=seed,
                 artifact_directory=directory,
                 max_episode_steps=max_steps,
+                task=task,
             )
         ),
         ObservationProjector(),
@@ -812,37 +817,48 @@ def advance_until_stuck(agent: AgentCoordinator, limit: int) -> StepRecord:
     raise AssertionError(f"exploration never reported stuck within {limit} steps")
 
 
-def test_stuck_exploration_consults_model_and_rearms_search(tmp_path: Path) -> None:
-    # Seed 16 walls the hero into two rooms whose exits are hidden, so
-    # exploration exhausts its first search round after a few hundred steps.
+def test_stuck_exploration_consults_once_without_refilling_search(
+    tmp_path: Path,
+) -> None:
+    # Seed 1379 blocks the Oracle objective's hidden exit on a deep level. A
+    # place objective's stuck navigation spends its finite, persistent
+    # budget: one consultation picks EXPLORE_LEVEL, rearm cannot refill
+    # anything, and every later step stays on the same model fallback
+    # without re-consulting.
     model = ConsultingModel(Skill.EXPLORE_LEVEL)
-    agent = coordinator(tmp_path, model, seed=16, max_steps=600)
+    agent = coordinator(
+        tmp_path, model, seed=1379, max_steps=1400, task=GOAL_PRESETS["oracle"]
+    )
     agent.start()
     agent.resume()
 
-    stuck = advance_until_stuck(agent, 590)
+    stuck = advance_until_stuck(agent, 1390)
+    coverage = dict(agent._dungeon.current.search_coverage)
     following = agent.advance()
 
-    assert model.consultations == [None, StuckReason.SEARCH_EXHAUSTED]
-    assert model.action_calls == 0
+    assert model.consultations == [None, StuckReason.NAVIGATION_BUDGET_EXHAUSTED]
+    assert model.action_calls == 2
     assert stuck.skill_model_decision is not None
     assert stuck.skill_model_decision.decision.skill is Skill.EXPLORE_LEVEL
-    assert stuck.selection.source is ActionSelectionSource.DETERMINISTIC_SKILL
+    assert stuck.selection.source is ActionSelectionSource.MODEL_FALLBACK
     assert stuck.selection.skill is Skill.EXPLORE_LEVEL
     assert stuck.selection.skill_selection is SkillSelectionSource.MODEL
-    assert stuck.selection.stuck_reason is StuckReason.SEARCH_EXHAUSTED
-    # The step whose decision found the level exhausted records the marker.
-    assert stuck.selection.exhausted_level == LevelKey(0, 1)
+    assert stuck.selection.stuck_reason is StuckReason.NAVIGATION_BUDGET_EXHAUSTED
+    assert stuck.selection.exhausted_level is None
+    assert not agent._dungeon.current.explored
     assert following is not None
     assert following.selection.exhausted_level is None
-    assert following.selection.skill_selection is SkillSelectionSource.ARBITER
-    assert following.selection.stuck_reason is None
+    assert following.selection.skill_selection is SkillSelectionSource.MODEL
+    assert following.selection.stuck_reason is StuckReason.NAVIGATION_BUDGET_EXHAUSTED
+    assert agent._dungeon.current.search_coverage == coverage
     agent.stop()
 
 
 def test_model_fallback_after_stuck_cannot_leave_the_level(tmp_path: Path) -> None:
     model = ConsultingModel(Skill.STAIRCASE_NAVIGATION)
-    agent = coordinator(tmp_path, model, seed=16, max_steps=600)
+    agent = coordinator(
+        tmp_path, model, seed=1379, max_steps=1400, task=GOAL_PRESETS["oracle"]
+    )
     model.fallback_index = next(
         action.index
         for action in agent.legal_actions
@@ -851,18 +867,17 @@ def test_model_fallback_after_stuck_cannot_leave_the_level(tmp_path: Path) -> No
     agent.start()
     agent.resume()
 
-    with pytest.raises(ActionGateError, match="MiscDirection.UP is forbidden"):
-        for _ in range(590):
+    with pytest.raises(ActionGateError, match="requires a .* goal in that direction"):
+        for _ in range(1390):
             agent.advance()
 
     snapshot = agent.snapshot()
-    assert model.consultations == [None, StuckReason.SEARCH_EXHAUSTED]
-    assert model.fallback_skills == [Skill.STAIRCASE_NAVIGATION]
+    assert model.consultations == [None, StuckReason.NAVIGATION_BUDGET_EXHAUSTED]
+    assert model.fallback_skills[0] is Skill.STAIRCASE_NAVIGATION
     assert snapshot.state is RunState.PAUSED
     assert snapshot.outcome is None
-    assert snapshot.last_error is not None and "forbidden" in snapshot.last_error
+    assert snapshot.last_error is not None
     assert snapshot.observation is not None
-    assert snapshot.observation.player.dungeon_level == 1
     agent.stop()
 
 
@@ -1040,17 +1055,20 @@ class FailOnceWhenStuckModel(ConsultingModel):
         return super().select_skill(observation, goals, skills, stuck)
 
 
-def test_a_discarded_decision_does_not_keep_its_exhaustion_mark(
+def test_discarded_budget_consultation_neither_marks_explored_nor_refills(
     tmp_path: Path,
 ) -> None:
-    # Seed 16 exhausts its first search round; the stuck consultation that
-    # follows the new exhaustion mark fails and pauses the run unrecorded.
+    # A failed, unrecorded consultation can be retried; it still cannot
+    # convert the spent place-objective budget into explored credit or a
+    # fresh search round.
     model = FailOnceWhenStuckModel()
-    agent = coordinator(tmp_path, model, seed=16, max_steps=600)
+    agent = coordinator(
+        tmp_path, model, seed=1379, max_steps=1400, task=GOAL_PRESETS["oracle"]
+    )
     agent.start()
     agent.resume()
     with pytest.raises(DecisionFailure):
-        for _ in range(590):
+        for _ in range(1390):
             record = agent.advance()
             assert record is not None and record.selection.exhausted_level is None
 
@@ -1058,12 +1076,11 @@ def test_a_discarded_decision_does_not_keep_its_exhaustion_mark(
     agent.resume()
     retried = agent.advance()
 
-    # The retried decision marks the level again, so the recorded step carries
-    # the marker that memory now reflects.
     assert retried is not None
-    assert retried.selection.exhausted_level == LevelKey(0, 1)
-    assert retried.selection.stuck_reason is StuckReason.SEARCH_EXHAUSTED
-    assert model.consultations == [None, StuckReason.SEARCH_EXHAUSTED]
+    assert retried.selection.exhausted_level is None
+    assert retried.selection.stuck_reason is StuckReason.NAVIGATION_BUDGET_EXHAUSTED
+    assert not agent._dungeon.current.explored
+    assert model.consultations == [None, StuckReason.NAVIGATION_BUDGET_EXHAUSTED]
     agent.stop()
 
 
@@ -1948,5 +1965,52 @@ def test_look_discovers_a_covered_staircase_under_a_real_native_pile(
         assert more_record.action.name == "MiscAction.MORE"
         assert not more_record.after.prompt.active
         assert agent._dungeon.current.cmap(position) == 23
+    finally:
+        agent.stop()
+
+
+def test_native_runtime_evaluator_and_replay_share_navigation_budget(
+    tmp_path: Path,
+) -> None:
+    # A place objective (Oracle) spends its persistent, non-refillable
+    # navigation budget; the runtime gate, evaluator, and replay must agree
+    # on every SEARCH action's evidence against real NLE-derived memory.
+    task = GOAL_PRESETS["oracle"]
+    agent = coordinator(
+        tmp_path, ScriptedDevelopmentModel(), seed=1379, max_steps=1400, task=task
+    )
+    agent.start()
+    agent.resume()
+    replay = None
+    searched = 0
+    consulted = False
+    try:
+        for _ in range(1390):
+            record = agent.advance()
+            assert record is not None
+            if replay is None:
+                replay = ExplorationReplay(task, agent.legal_actions, record.before)
+            event = step_payload(record)
+            if (
+                record.action.name == "Command.SEARCH"
+                and not record.before.prompt.active
+            ):
+                assert _action_is_valid(
+                    event,
+                    agent.legal_actions,
+                    record.before,
+                    True,
+                    ActionProfile.NLE_SURVIVAL_ACTIONS,
+                    dungeon_memory=replay._dungeon,
+                )
+            assert replay.step(event) is None
+            searched += record.action.name == "Command.SEARCH"
+            if record.selection.stuck_reason is not None:
+                consulted = True
+                break
+            if record.outcome is not None:
+                break
+        assert searched > 0
+        assert consulted
     finally:
         agent.stop()

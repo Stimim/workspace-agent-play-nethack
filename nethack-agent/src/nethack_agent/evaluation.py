@@ -2171,16 +2171,27 @@ def _replay_exhaustion(
     initial: ProjectedObservation | None,
     steps: Sequence[StepPayload],
 ) -> tuple[tuple[frozenset[LevelKey], ...], list[str]]:
-    """Re-derive exhaustion markers; return the confirmed levels after each step.
+    """Rebuild resource/exploration state and confirm exploration credit.
 
-    A marker counts only when replaying the coordinator's memory shows that
-    deterministic exploration was exhausted on the observation the step was
-    decided on. Runs without markers or explore_dungeon legs need no replay.
+    Place objectives always replay: removing every local-recovery marker must
+    not bypass comparison with the objective planner's expected authorization.
+    Only a genuine exploration-exhausted marker can earn exploration credit.
     """
     none: tuple[frozenset[LevelKey], ...] = (frozenset(),) * len(steps)
     needed = any(
-        isinstance(leg, ExploreDungeonLeg) for leg in task.objective.legs
-    ) or any(payload.selection.exhausted_level is not None for payload in steps)
+        isinstance(leg, ExploreDungeonLeg | FindOracleLeg | EnterMinetownTempleLeg)
+        for leg in task.objective.legs
+    ) or any(
+        payload.selection.exhausted_level is not None
+        or (
+            payload.selection.intent is not None
+            and (
+                payload.selection.intent.navigation is not None
+                or payload.selection.intent.local_recovery is not None
+            )
+        )
+        for payload in steps
+    )
     if not needed:
         return none, []
     if legal_actions is None or initial is None:
@@ -2581,6 +2592,43 @@ def _action_is_valid(
     ):
         return False
     selection = payload.selection
+    from nethack_agent.navigation_budget import (
+        local_recovery_error,
+        navigation_action_error,
+    )
+
+    if (
+        action.name == "Command.SEARCH"
+        and dungeon_memory is None
+        and not (
+            decided_on is not None
+            and decided_on.prompt.active
+            and selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
+            and selection.skill
+            in (Skill.HUNGER, Skill.BURDEN, Skill.CORPSE, Skill.PRAYER)
+        )
+    ):
+        return False
+    if (
+        navigation_action_error(
+            action,
+            selection,
+            decided_on,
+            None if dungeon_memory is None else dungeon_memory.current,
+        )
+        is not None
+    ):
+        return False
+    if (
+        local_recovery_error(
+            action,
+            selection,
+            decided_on,
+            None if dungeon_memory is None else dungeon_memory.current,
+        )
+        is not None
+    ):
+        return False
     drop = None if selection.intent is None else selection.intent.drop
     if drop is not None:
         return (

@@ -23,6 +23,7 @@ from nethack_agent.decision import (
     ActionSelection,
     ActionSelectionSource,
     DestinationKind,
+    LocalRecoveryEvidence,
     Skill,
     StuckReason,
 )
@@ -41,8 +42,17 @@ from nethack_agent.observation import ProjectedObservation
 from nethack_agent.planner import ObjectivePlanner, leg_complete
 from nethack_agent.skills import ExploreLevelSkill
 from nethack_agent.tasks import TaskSpec
-from nethack_agent.traversal import STAIR_GOAL_TYPES, Goal, LevelKey, StairTarget
+from nethack_agent.traversal import (
+    STAIR_GOAL_TYPES,
+    ExploreLevelGoal,
+    Goal,
+    LevelKey,
+    StairTarget,
+)
 
+# While exploration stays stuck after a stuck consultation, the model chooses
+# fallback actions and is asked to reselect a skill at most this often.
+STUCK_RECONSULT_STEPS: Final = 20
 _KICK_ACTION_NAME: Final = "Command.KICK"
 _SEARCH_ACTION_NAME: Final = "Command.SEARCH"
 
@@ -106,6 +116,17 @@ def derive_action_record(
     if action_name in LEVEL_CHANGE_ACTIONS:
         return ActionRecord(ActionKind.TRAVERSE, origin)
     intent = selection.intent
+    if action_name == _SEARCH_ACTION_NAME and (
+        selection.source is not ActionSelectionSource.DETERMINISTIC_PROMPT
+    ):
+        navigation = None if intent is None else intent.navigation
+        if navigation is not None:
+            if navigation.kind == "blocker_wait":
+                return ActionRecord(ActionKind.WAIT, origin)
+            return ActionRecord(ActionKind.SEARCH, origin, search_spot=origin)
+        # Historical model fallbacks spent a real SEARCH even without an intent.
+        if intent is None:
+            return ActionRecord(ActionKind.SEARCH, origin, search_spot=origin)
     if selection.source is not ActionSelectionSource.DETERMINISTIC_SKILL or (
         intent is None
     ):
@@ -190,6 +211,14 @@ def kick_action_error(
     return None
 
 
+def stuck_consult_due(memory: LevelMemory, step_index: int) -> bool:
+    """Whether a stuck report on this step may consult the model again."""
+    return (
+        memory.stuck_consult_step is None
+        or step_index - memory.stuck_consult_step >= STUCK_RECONSULT_STEPS
+    )
+
+
 class ExplorationReplay:
     """Rebuild dungeon memory step by step and validate exhaustion markers.
 
@@ -210,8 +239,9 @@ class ExplorationReplay:
         self._decided_on = initial
         # The coordinator starts on leg 0 and advances only after a step.
         self._leg = 0
-        self._first_step = True
+        self._skill_selected = False
         self._ended = False
+        self._planned_local_recovery: LocalRecoveryEvidence | None = None
         self.explored: set[LevelKey] = set()
 
     def step(self, payload: StepPayload) -> str | None:
@@ -237,19 +267,56 @@ class ExplorationReplay:
                 memory.mark_exhausted()
                 self.explored.add(marker)
                 if not self._leg_complete():
-                    self._plan(memory)
+                    goal = self._plan(memory)
         decision = payload.skill_decision
-        # Only the first step consults the model at the start; any later skill
-        # decision is a stuck consultation, whose explore_level choice re-arms.
-        if (
-            not self._first_step
-            and decision is not None
-            and decision.skill is Skill.EXPLORE_LEVEL
+        # Survival may delay initial model selection beyond the first step.
+        # Every later committed skill decision is a stuck consultation.
+        stuck_consulted = decision is not None and self._skill_selected
+        if stuck_consulted and not stuck_consult_due(
+            memory, self._decided_on.step_index
         ):
-            memory.rearm()
-        self._first_step = False
+            problem = problem or (
+                "model reconsulted within the stuck re-consultation interval"
+            )
+        if decision is not None:
+            if (
+                stuck_consulted
+                and decision.skill is Skill.EXPLORE_LEVEL
+                and payload.selection.stuck_reason
+                is not StuckReason.NAVIGATION_BUDGET_EXHAUSTED
+            ):
+                memory.rearm(legacy=isinstance(goal, ExploreLevelGoal))
+            self._skill_selected = True
         if problem is None:
             problem = kick_action_error(payload.action.name, payload.selection, memory)
+        if problem is None:
+            from nethack_agent.navigation_budget import navigation_action_error
+
+            problem = navigation_action_error(
+                payload.action, payload.selection, self._decided_on, memory
+            )
+        if problem is None:
+            from nethack_agent.navigation_budget import (
+                local_recovery_error,
+                local_recovery_plan_error,
+            )
+
+            problem = local_recovery_plan_error(
+                payload.action, payload.selection, goal, self._planned_local_recovery
+            )
+            if problem is None:
+                problem = local_recovery_error(
+                    payload.action, payload.selection, self._decided_on, memory
+                )
+        # Mirrors the coordinator's commit: ordinary progress ends the stuck
+        # spell, so the next stuck report may consult at once.
+        if stuck_consulted:
+            memory.stuck_consult_step = self._decided_on.step_index
+        elif (
+            payload.selection.source is ActionSelectionSource.DETERMINISTIC_SKILL
+            and payload.selection.stuck_reason is None
+        ):
+            memory.stuck_consult_step = None
         memory.record(
             derive_action_record(payload.selection, payload.action.name, memory)
         )
@@ -263,6 +330,7 @@ class ExplorationReplay:
 
     def _plan(self, memory: LevelMemory) -> Goal:
         planned = self._planner.plan(self._leg, self._dungeon)
+        self._planned_local_recovery = planned.local_recovery
         if planned.rearm:
             memory.rearm_for_branch()
         return planned.goal

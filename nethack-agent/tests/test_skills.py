@@ -36,6 +36,7 @@ from nethack_agent.navigation import (
     StairLink,
     route_tree,
 )
+from nethack_agent.navigation_budget import SEARCH_CANDIDATE_CAP
 from nethack_agent.observation import (
     BucStatus,
     InventoryItem,
@@ -45,7 +46,6 @@ from nethack_agent.observation import (
     PromptState,
 )
 from nethack_agent.skills import (
-    SEARCHES_PER_ROUND,
     CorpseSkill,
     ExploreLevelSkill,
     GoldNavigationSkill,
@@ -491,7 +491,10 @@ def test_monster_blocked_route_is_recorded_while_approaching_not_waiting(
     assert_followed_route(approach, (1, 1))
     assert wait is not None
     assert action_name(actions, wait.action_index) == "Command.SEARCH"
-    assert wait.intent == ActionIntent(downstairs, None, None)
+    assert wait.intent.destination == downstairs
+    assert wait.intent.path is None
+    assert wait.intent.navigation.kind == "blocker_wait"
+    assert wait.intent.navigation.targets == (MapCell(3, 1),)
 
     # Attacking a hostile blocker steps into the route's first cell. Adjacent-
     # hostile defense normally runs first, so call the route branch directly.
@@ -850,7 +853,9 @@ def test_search_rotates_spots_then_reports_exhaustion(
         assert record.search_spot is not None
         spot = IntentDestination(DestinationKind.SEARCH_SPOT, *record.search_spot)
         if record.kind is ActionKind.SEARCH:
-            assert result.action.intent == ActionIntent(spot, None, None)
+            assert result.action.intent.destination == spot
+            assert result.action.intent.path is None
+            assert result.action.intent.navigation.kind == "search"
         else:
             assert result.action.intent == ActionIntent(
                 spot, None, cells(record.search_spot)
@@ -874,15 +879,15 @@ def test_search_rotates_spots_then_reports_exhaustion(
         memory.observe(sketch(template, lines, step=step))
         assert step < 200
 
-    assert result.stuck is StuckReason.SEARCH_EXHAUSTED
+    assert result.stuck is StuckReason.NAVIGATION_BUDGET_EXHAUSTED
     # Each floor cell faces walls the other cannot cover, so both are used.
     assert spots == {(3, 2), (4, 2)}
-    assert searches == 2 * SEARCHES_PER_ROUND
+    assert searches == 2 * SEARCH_CANDIDATE_CAP
 
     memory.rearm()
     again = skill.select_action(memory, actions)
-    assert again.action is not None
-    assert again.action.record.kind is ActionKind.SEARCH
+    assert again.action is None
+    assert again.stuck is StuckReason.NAVIGATION_BUDGET_EXHAUSTED
 
 
 def test_learned_edges_and_oscillation_abandon_goals(
@@ -902,7 +907,7 @@ def test_learned_edges_and_oscillation_abandon_goals(
         generic.observe(sketch(template, lines, step=step))
     assert not generic.step_allowed((1, 1), (2, 1))
     generic.rearm()
-    assert generic.step_allowed((1, 1), (2, 1))
+    assert not generic.step_allowed((1, 1), (2, 1))
 
     wobble = LevelMemory()
     frames = (("-----", "|@..|", "-----"), ("-----", "|.@.|", "-----"))
@@ -935,6 +940,9 @@ def test_dungeon_memory_restores_levels_and_clears_only_the_previous_visit(
     assert second is not first
     assert second.level == LevelKey(0, 2)
     assert second.visited == {(2, 0)}
+    # A fresh level's first decision may already be stuck (oracle seed 3,
+    # step 2250 crashed reading this before any ordinary commit wrote it).
+    assert second.stuck_consult_step is None
     assert not second.search_coverage
     assert not first.links and not second.links
 
@@ -945,9 +953,11 @@ def test_dungeon_memory_restores_levels_and_clears_only_the_previous_visit(
     assert back.search_coverage
     assert back.visited == {(1, 0), (2, 0)}
     assert ((1, 0), (2, 0)) in back.blocked_edges
-    # ...while the previous visit's routing state is gone.
+    # New neighbouring public terrain on arrival permits reconsideration;
+    # merely returning to a level never refills the persistent allowances.
     assert not back.suspect_edges
     assert not back.abandoned_goals
+    # A stuck spell from the previous visit does not delay re-consultation.
     assert back.stuck_consult_step is None
     assert back.position == (2, 0)
 
@@ -2151,7 +2161,7 @@ def test_search_checks_continuations_at_bends_and_fanned_corridor_ends(
         frame[y][x] = "@"
         frames.append(tuple("".join(row) for row in frame))
     memory = remembered(template, *frames)
-    memory.search_coverage = {point: SEARCHES_PER_ROUND for point in memory.cells()}
+    memory.search_coverage = {point: SEARCH_CANDIDATE_CAP for point in memory.cells()}
     memory.search_coverage[hidden] = 0
 
     result = ExploreLevelSkill().select_action(memory, actions)
@@ -2168,13 +2178,13 @@ def test_known_boulder_is_not_a_hidden_passage_search_target(
     lines = ("             ",) * 5 + ("     @#0     ",) + ("             ",) * 5
     arrived = (*lines[:5], "     #@0     ", *lines[6:])
     memory = remembered(template, lines, arrived)
-    memory.search_coverage = {point: SEARCHES_PER_ROUND for point in memory.cells()}
+    memory.search_coverage = {point: SEARCH_CANDIDATE_CAP for point in memory.cells()}
     memory.search_coverage[(7, 5)] = 0
 
     result = ExploreLevelSkill().select_action(memory, actions)
 
     assert result.action is None
-    assert result.stuck is StuckReason.SEARCH_EXHAUSTED
+    assert result.stuck is StuckReason.NAVIGATION_BUDGET_EXHAUSTED
 
 
 def test_committed_search_is_not_interrupted_by_a_monster_blocked_frontier(

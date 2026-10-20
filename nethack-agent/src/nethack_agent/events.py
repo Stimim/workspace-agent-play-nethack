@@ -44,6 +44,10 @@ from nethack_agent.decision import (
 )
 from nethack_agent.environment import LegalAction
 from nethack_agent.model import DecisionAttemptDiagnostic, DecisionFailure
+from nethack_agent.navigation_budget import (
+    local_recovery_error,
+    navigation_action_error,
+)
 from nethack_agent.observation import ProjectedObservation
 from nethack_agent.traversal import GOAL_TYPES, Goal, goal_from_json
 
@@ -254,6 +258,12 @@ class StepPayload:
                 cell.y >= len(rows) or cell.x >= len(rows[0]) for cell in intent.cells()
             ):
                 raise ContractError("step intent cell is outside the observation map")
+        navigation_error = navigation_action_error(self.action, self.selection)
+        if navigation_error is not None:
+            raise ContractError(navigation_error)
+        recovery_error = local_recovery_error(self.action, self.selection)
+        if recovery_error is not None:
+            raise ContractError(recovery_error)
         survival_error = survival_action_selection_error(
             self.action.name, self.selection
         )

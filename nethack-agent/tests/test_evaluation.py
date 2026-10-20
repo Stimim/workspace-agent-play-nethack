@@ -2642,9 +2642,9 @@ def test_explore_objectives_count_only_exhaustion_markers_the_replay_confirms(
         Objective((ExploreDungeonLeg(1),)),
     )
     try:
-        # Seed 53 exhausts its first level within the Scout's hunger horizon.
+        # Give the explicit Scout contract enough time for its full C-pass.
         run_id = manager.create_run(
-            seed=53, max_episode_steps=400, auto_start=True, task=task
+            seed=53, max_episode_steps=1200, auto_start=True, task=task
         ).id
         deadline = time.monotonic() + 120
         while manager.store.get_run(run_id).state is RunState.RUNNING:
@@ -2654,7 +2654,7 @@ def test_explore_objectives_count_only_exhaustion_markers_the_replay_confirms(
         manager.close()
     store = RunStore(data_directory / "runs.sqlite3")
     base_suite = load_suite(SUITE_PATH)
-    case = replace(base_suite.cases[0], task=task, max_episode_steps=400)
+    case = replace(base_suite.cases[0], task=task, max_episode_steps=1200)
     suite = replace(base_suite, cases=(case,))
     record = store.get_run(run_id)
 

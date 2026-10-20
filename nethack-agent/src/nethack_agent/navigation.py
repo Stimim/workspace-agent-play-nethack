@@ -273,6 +273,7 @@ class LevelMemory:
         self.town_identified = False
         self.temple_entry: str | None = None
         self.oracle_attacks = 0
+        self.oracle_seen = False
         self.target_conduct = False
         self.oracle_navigation = False
         self.width = 0
@@ -292,7 +293,21 @@ class LevelMemory:
         self.shop_cells: set[Point] = set()
         self.peaceful_glyphs: set[int] = set()
         self.knowledge = 0
+        self._known_cell_count = 0
+        self._structural_progress = False
+        self.navigation_turns = 0
+        self.navigation_progress_turns = 0
+        # Only an explicit explore_dungeon leg's unbounded round-based search
+        # grows this; place-objective travel never refills via rearm.
         self.search_round = 0
+        self.edge_failures: dict[Edge, int] = {}
+        self.suspect_edges: set[Edge] = set()
+        self.abandoned_goals: set[Point] = set()
+        self.history: deque[tuple[Point, int, bool]] = deque(maxlen=HISTORY_LENGTH)
+        self.stale_moves = 0
+        self.monster_waits = 0
+        self.search_location: Point | None = None
+        self.search_turns_remaining = 0
         self.stair_identities: dict[Point, StairIdentity] = {}
         self.links: dict[Point, StairLink] = {}
         self._exhausted_knowledge: int | None = None
@@ -307,6 +322,7 @@ class LevelMemory:
     def enter(self) -> None:
         """Forget what held only for the previous visit to this level."""
         self.step_index = -1
+        self._navigation_previous_turn: int | None = None
         self.position: Point = (0, 0)
         self.monsters: dict[Point, Monster] = {}
         self.hit_points = 0
@@ -316,13 +332,7 @@ class LevelMemory:
         # Cells whose current glyph is exactly `GOLD_GLYPH`; rederived from
         # every observation, never remembered once the gold is not displayed.
         self.gold: frozenset[Point] = frozenset()
-        self.edge_failures: dict[Edge, int] = {}
-        self.suspect_edges: set[Edge] = set()
-        self.abandoned_goals: set[Point] = set()
         self.search_goal: Point | None = None
-        self.history: deque[tuple[Point, int, bool]] = deque(maxlen=HISTORY_LENGTH)
-        self.stale_moves = 0
-        self.monster_waits = 0
         self.stuck_consult_step: int | None = None
         self.pending_kick: Point | None = None
         # Set after a committed `Command.FIGHT`, cleared by the next
@@ -354,20 +364,29 @@ class LevelMemory:
             raise ValueError(
                 f"memory of level {self.level} cannot observe level {level}"
             )
+        if self._navigation_previous_turn is not None:
+            self.navigation_turns += max(
+                0, player.turn - self._navigation_previous_turn
+            )
+        self._navigation_previous_turn = player.turn
         self.step_index = observation.step_index
         self.position = (player.x, player.y)
         self.hit_points = player.hit_points
         self.hunger = player.hunger
+        self._structural_progress = False
         self._update_cells(observation)
         record, self._pending = self._pending, None
         if record is not None:
             self._learn(record, observation)
         self.visited.add(self.position)
         x, y = self.position
+        old_kind_here = self.kind(self.position)
         self._correct_terrain_here(
             observation.message.lower()
             + (" " + observation.look_stair if observation.look_stair else "")
         )
+        if self.kind(self.position) is not old_kind_here:
+            self._structural_progress = True
         message = observation.message.lower()
         if "closed for inventory" in message:
             self.inventory_closed_doors.update(
@@ -406,9 +425,13 @@ class LevelMemory:
             and record.target_glyph is None
             and record.kind in (ActionKind.MOVE, ActionKind.OPEN_DOOR)
         )
-        if knowledge != self.knowledge:
-            self.knowledge = knowledge
+        if knowledge > self._known_cell_count or self._structural_progress:
+            self.knowledge += max(1, knowledge - self._known_cell_count)
+            self._known_cell_count = max(self._known_cell_count, knowledge)
+            self.navigation_progress_turns = self.navigation_turns
             self.abandoned_goals.clear()
+            self.edge_failures.clear()
+            self.suspect_edges.clear()
             self.monster_waits = 0
             self.stale_moves = 0
         elif routed:
@@ -429,16 +452,29 @@ class LevelMemory:
             self.history.clear()
             self.stale_moves = 0
 
-    def rearm(self) -> None:
-        """Start another bounded search round after a stuck consultation."""
-        self.search_round += 1
-        self.edge_failures.clear()
-        self.suspect_edges.clear()
-        self.abandoned_goals.clear()
+    @property
+    def navigation_elapsed(self) -> int:
+        """Residence turns since genuine new public knowledge on this level."""
+        return self.navigation_turns - self.navigation_progress_turns
+
+    def rearm(self, *, legacy: bool = False) -> None:
+        """Reconsider a destination; `legacy` also starts another bounded round.
+
+        Only an explicit explore_dungeon leg (`ExploreLevelGoal`) passes
+        `legacy=True`: it alone gets another finite search round and a full
+        quarantine/wait reset, exactly as it always has. Place-objective
+        travel (reach_level, find_oracle, enter_minetown_temple) never
+        refills its persistent, non-growing navigation budget this way.
+        """
         self.search_goal = None
-        self.monster_waits = 0
-        self.history.clear()
-        self.stale_moves = 0
+        if legacy:
+            self.search_round += 1
+            self.edge_failures.clear()
+            self.suspect_edges.clear()
+            self.abandoned_goals.clear()
+            self.monster_waits = 0
+            self.history.clear()
+            self.stale_moves = 0
 
     def _correct_terrain_here(self, message: str) -> None:
         """Fix the remembered terrain under the hero from the look-here message.
@@ -466,6 +502,16 @@ class LevelMemory:
         self._pending = record
         if record.kind in (ActionKind.MOVE, ActionKind.OPEN_DOOR, ActionKind.SEARCH):
             self.search_goal = record.search_spot
+        if record.kind is ActionKind.SEARCH:
+            from nethack_agent.navigation_budget import SEARCH_BATCH_SIZE
+
+            if (
+                self.search_location != record.origin
+                or self.search_turns_remaining == 0
+            ):
+                self.search_turns_remaining = SEARCH_BATCH_SIZE
+            self.search_location = record.origin
+            self.search_turns_remaining -= 1
         if record.kind in (ActionKind.SEARCH, ActionKind.WAIT):
             if record.kind is ActionKind.WAIT:
                 self.monster_waits += 1
@@ -493,6 +539,13 @@ class LevelMemory:
                 if nethack.glyph_is_cmap(glyph):
                     index = nethack.glyph_to_cmap(glyph)
                     if _CMAP_KINDS[index] is not None:
+                        previous = cmap_row[x]
+                        if (
+                            previous > 0
+                            and index > 0
+                            and _CMAP_KINDS[previous] is not _CMAP_KINDS[index]
+                        ):
+                            self._structural_progress = True
                         cmap_row[x] = index
                 elif nethack.glyph_is_object(glyph):
                     if (
@@ -511,6 +564,10 @@ class LevelMemory:
                         bool(nethack.glyph_is_pet(glyph)),
                     )
         self.monsters = monsters
+        if "hallucinating" not in observation.player.conditions and any(
+            monster.name == "Oracle" for monster in monsters.values()
+        ):
+            self.oracle_seen = True
         self.boulders = frozenset(boulders)
         self.objects = frozenset(objects)
         self.gold = frozenset(gold)

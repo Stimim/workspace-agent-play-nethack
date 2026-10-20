@@ -290,9 +290,12 @@ dungeon_level)`. A level record remembers the last terrain glyph of every cell
 hero has been adjacent to, search coverage, learned blocked moves, locked
 doors, kicks, peaceful monster glyphs, stair identities and links, and whether
 exploration exhausted it; these persist across visits. Abandoned goals,
-suspect edges, the position history, waits, stuck consultations, and pending
-actions are cleared whenever the hero enters the level, and everything resets
-on `start`. The look-here messages "There is a staircase down/up here." mark a
+suspect edges, position history, search coverage, blocker waits, and local
+elapsed no-progress time also persist across model re-arms and revisits. Only
+newly observed terrain/structural knowledge resets the no-progress clock and transient routing quarantine; time spent on
+another level is excluded. Pending actions and live occupants reset on entry;
+everything resets on `start`. The look-here messages
+"There is a staircase down/up here." mark a
 staircase hidden under an object. A stair action followed by a level change
 links both staircases and records their identities (`traversed` and
 `arrival`; returning by a staircase the hero already used keeps its
@@ -357,19 +360,53 @@ dead ends, and blank orthogonal continuations opposite known passages at
 bends or fanned corridor ends are candidates. Visited open doors and doorless
 doorways also face outward blank extensions. Displayed boulders are not
 concealed-passage targets: searching detours does not push or route through
-them. Scores still use never-observed cells near targets minus twice travel
-distance; each adjacent cell counts until searched 10 times per round, and
-the chosen spot stays committed until spent or unreachable. There is no
-global SEARCH cap or new corridor-priority tier
-([note 0040](docs/notes/0040-causal-hidden-detour-qualification.md)).
-Routing that dithers among at most six cells for 12 moves, or 100 routed moves
-without new knowledge, abandons the goal until the map changes. When no spot
-remains the skill reports `search_exhausted` (or `monster_blocked`).
+them. An explicit `explore_dungeon` leg's `ExploreLevelGoal` (Scout, Gold,
+Eat) keeps the original, unbounded search: `navigation_budget` ranks each
+reachable stand by nearby never-observed density, gated below
+`MIN_SEARCH_SCORE`; each adjacent cell counts until searched ten times per
+round, and a stuck model consultation starts another round (widening the cap
+and clearing quarantine and waits), exactly as it always has. `search_exhausted`
+(or `monster_blocked`) still completes only that explicit leg.
 
-A stuck report triggers a model skill consultation, at most once per 20 stuck
-steps. Choosing `explore_level` re-arms exploration (a new search round, cleared
-suspect edges and abandoned goals); choosing `staircase_navigation`, or a
-re-armed exploration that still cannot act, yields a model fallback action.
+A place objective's stair-seeking travel (`reach_level`, `find_oracle`,
+`enter_minetown_temple`) instead uses a separate, **finite, never-refillable**
+navigation budget: the least-covered under-cap candidate, then
+benefit/density, travel distance, and map order; an executed batch stays
+committed while it still benefits an under-cap candidate, for at most ten
+searches, and coverage is cumulative per level, never multiplied by a round.
+A reachable goal-compatible staircase or frontier is attempted before more
+search or blocker waiting. This per-candidate cap and per-level no-progress
+clock share one public-evidence predicate across skill selection,
+`ActionGate`, `StepPayload`, and evaluator replay. Blocker waits consume that
+same clock and their persistent eight-action allowance. A model's
+`explore_level` consultation on a place objective only reconsiders the
+existing destination: unlike the explicit leg, it never starts a new round,
+widens the cap, or clears quarantine/waits.
+Routing that dithers among at most six cells for 12 moves, or 100 routed moves
+without new knowledge, quarantines its goal until actual map progress.
+Spending this finite budget yields `navigation_budget_exhausted`, never
+`search_exhausted`/explored/completed credit on a place objective.
+
+The existing Minetown/Oracle objective planner may use a separate
+`local_recovery` intent permit to continue its normal goal-compatible stair
+route, never an off-goal detour. All reachable frontiers must first be
+exhausted. On possible target levels (Mines 3–4 or Oracle Dlvl 5–9), the clock
+is four times larger and every reachable concealed-passage candidate must
+receive its full coverage cap; a monster-blocked frontier also vetoes leaving.
+A publicly seen Oracle or known town/altar/temple prevents spent-local-budget
+departure. Fountain/statue hints alone are not permanent target proofs.
+This resource state never marks a level explored or completes an objective.
+Recorded permits must match the actual planner on replay, even if a forged
+event omits every permit.
+
+While exploration stays stuck on one visit, the model is asked to reselect a
+skill at most once every `STUCK_RECONSULT_STEPS` (20) steps; an ordinary
+deterministic decision ends the stuck spell. Replay enforces the same interval.
+Choosing `explore_level` only reconsiders the existing state;
+it cannot clear quarantine, coverage, waits, or the clock. Exhaustion can fall
+back to ordinary model actions but grants neither extra SEARCH nor fake abort
+or completion. Hunger, prayer, prompts, and immediate combat still preempt
+navigation recovery.
 
 Every proposal passes through `ActionGate`, which verifies the finite action
 index and its profile role. Level changes require a matching
@@ -529,7 +566,7 @@ inference runs outside the lock, so pause or stop during inference invalidates
 and discards the pending skill or action decision. Level memory folds in each
 observation idempotently and learns from an action only after NLE executed it;
 the one exception is a stuck re-arm chosen by the model, which is kept if a
-pause then discards the step because it only widens the search budget.
+pause then discards the step; it cannot refill any recovery allowance.
 `DecisionFailure` and
 action-gate rejection pause with structured diagnostics; an unexpected model,
 NLE, projection, or persistence failure moves the run to `error`, closes NLE,
@@ -1037,13 +1074,14 @@ only when the recorded intent has `pair_known: true`, preserving the
 coordinator's evidence that two stairs of that direction were known; false,
 null, and legacy-absent evidence never broaden permission. Runs stored before
 task specs are audited as the staircase task, which prohibits level changes.
-A run with an `explore_dungeon` leg or any `exhausted_level` marker is replayed
-by `replay.ExplorationReplay`, which rebuilds the coordinator's dungeon memory
-step by step (re-deriving each executed action's memory record from its
-selection and intent, and replaying planner and model re-arms) and confirms a
-marker only if the shared exploration skill reports `search_exhausted` on the
-decided-on observation of that level. An unconfirmed marker is an integrity
-problem, and only confirmed markers complete an `explore_dungeon` leg.
+Runs with an `explore_dungeon` leg, a place objective, an `exhausted_level`
+marker, or recovery evidence are replayed by `replay.ExplorationReplay`.
+It rebuilds dungeon memory step by step (re-deriving executed action records
+from selections/intents and replaying planner/model re-arms). Search/wait
+allowances and objective-planned local-recovery permits must match the same
+public-state predicates used at runtime. Only the distinct shared
+`search_exhausted` result on the decided-on observation confirms exploration
+credit; spent-local-recovery evidence never does.
 
 Report schema 3 groups results and acceptance by case and retains a global
 aggregate and gate. Each episode records steps, game turns, maximum depth,

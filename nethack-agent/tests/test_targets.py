@@ -171,6 +171,9 @@ def test_minetown_planner_stops_descent_at_identified_town(
     memory = dungeon.observe(temple_observation(template, step=2))
     assert planner.plan(0, dungeon).goal == EnterTempleGoal(LevelKey(2, 3))
     memory.mark_exhausted()
+    # A publicly known altar on a possible town level must retain its target.
+    assert planner.plan(0, dungeon).goal == EnterTempleGoal(LevelKey(2, 3))
+    memory.altars.clear()
     assert planner.plan(0, dungeon).goal == main_stairs(StairDirection.DOWN)
     memory.town_identified = True
     assert planner.plan(0, dungeon).goal == EnterTempleGoal(LevelKey(2, 3))

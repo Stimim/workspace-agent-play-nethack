@@ -25,6 +25,7 @@ from nethack_agent.decision import (
     CorpseOutcomeKind,
     FoodEvidence,
     HungerPermit,
+    LocalRecoveryEvidence,
     MapCell,
     ModelActionDecision,
     ModelSkillDecision,
@@ -68,9 +69,20 @@ from nethack_agent.navigation import (
     ExhaustionState,
     LevelMemory,
 )
+from nethack_agent.navigation_budget import (
+    local_recovery_error,
+    local_recovery_plan_error,
+    navigation_action_error,
+    requires_local_recovery_marker,
+)
 from nethack_agent.observation import ObservationProjector, ProjectedObservation
 from nethack_agent.planner import ObjectivePlanner, leg_complete
-from nethack_agent.replay import kick_action_error, routine_actions, stair_target
+from nethack_agent.replay import (
+    kick_action_error,
+    routine_actions,
+    stair_target,
+    stuck_consult_due,
+)
 from nethack_agent.skills import (
     CorpseSkill,
     ExploreLevelSkill,
@@ -97,9 +109,6 @@ from nethack_agent.traversal import (
     TraverseStairsGoal,
 )
 
-# While exploration stays stuck after a stuck consultation, the model chooses
-# fallback actions and is asked to reselect a skill at most this often.
-STUCK_RECONSULT_STEPS: Final = 20
 # Tasks whose NLE success state ends the episode; a completed objective does
 # not end them early.
 _NLE_SUCCESS_TASKS: Final = frozenset({NleTask.STAIRCASE, NleTask.ORACLE})
@@ -199,6 +208,8 @@ class ActionGate:
         lycanthropy_known: bool = False,
         food_permit: FoodPermit | None = None,
         burden: BurdenRecovery | None = None,
+        local_recovery_permit: LocalRecoveryEvidence | None = None,
+        local_recovery_goal: Goal | None = None,
     ) -> LegalAction:
         if isinstance(action_index, bool) or not isinstance(action_index, int):
             raise ActionGateError("action index must be an integer")
@@ -275,6 +286,20 @@ class ActionGate:
                 raise ActionGateError(error)
         elif action.name == "Command.KICK":
             raise ActionGateError("kicking requires deterministic locked-gate evidence")
+        if selection is not None:
+            error = navigation_action_error(action, selection, before, memory)
+            if error is not None:
+                raise ActionGateError(error)
+            error = local_recovery_plan_error(
+                action, selection, local_recovery_goal, local_recovery_permit
+            )
+            if error is not None:
+                raise ActionGateError(error)
+            error = local_recovery_error(action, selection, before, memory)
+            if error is not None:
+                raise ActionGateError(error)
+        elif action.name == "Command.SEARCH":
+            raise ActionGateError("routine SEARCH requires navigation evidence")
         direction = LEVEL_CHANGE_ACTIONS.get(action.name)
         if direction is not None and (
             permit is None or permit.direction is not direction
@@ -515,6 +540,8 @@ class AgentCoordinator:
         self._outcome: RunOutcome | None = None
         self._observation: ProjectedObservation | None = None
         self._goal: Goal = STAND_ON_DOWNSTAIRS
+        self._planned_goal: Goal | None = None
+        self._planned_local_recovery: LocalRecoveryEvidence | None = None
         self._skill_decision: SkillDecision | None = None
         self._current_skill: Skill | None = None
         self._last_error: str | None = None
@@ -674,6 +701,8 @@ class AgentCoordinator:
                         lycanthropy_known=self._lycanthropy_known,
                         food_permit=food_permit,
                         burden=self._burden,
+                        local_recovery_permit=self._planned_local_recovery,
+                        local_recovery_goal=self._planned_goal,
                     )
                 except ActionGateError as error:
                     self._state = RunState.PAUSED
@@ -1045,9 +1074,8 @@ class AgentCoordinator:
                     )
                 assert explored.stuck is not None
                 stuck = explored.stuck
-        consulted = skill_model_decision is None and (
-            memory.stuck_consult_step is None
-            or before.step_index - memory.stuck_consult_step >= STUCK_RECONSULT_STEPS
+        consulted = skill_model_decision is None and stuck_consult_due(
+            memory, before.step_index
         )
         if consulted:
             skill_model_decision = self._select_skill(before, stuck, goal)
@@ -1057,7 +1085,7 @@ class AgentCoordinator:
             if model_skill.skill is Skill.EXPLORE_LEVEL:
                 # The re-arm is kept even if a later pause discards this step;
                 # it only widens the deterministic search budget.
-                memory.rearm()
+                memory.rearm(legacy=isinstance(goal, ExploreLevelGoal))
                 rearmed = self._exploration.select_action(
                     memory, actions, stair_target(goal)
                 )
@@ -1126,6 +1154,8 @@ class AgentCoordinator:
         widens the deterministic search budget of an exhausted level.
         """
         planned = self._planner.plan(leg, self._dungeon)
+        self._planned_goal = planned.goal
+        self._planned_local_recovery = planned.local_recovery
         if planned.rearm:
             memory.rearm_for_branch()
         return planned.goal
@@ -1583,22 +1613,33 @@ class AgentCoordinator:
         stuck_consulted: bool = False,
         exhausted_level: LevelKey | None = None,
     ) -> _Plan:
-        return _Plan(
-            selection=ActionSelection(
-                source=source,
-                goal=goal,
-                skill=skill,
-                skill_selection=skill_selection,
-                stuck_reason=stuck,
-                action_index=proposal.action_index,
-                rationale=proposal.rationale,
-                intent=(
-                    None
-                    if proposal.intent is None
-                    else replace(proposal.intent, level=self._dungeon.current.level)
-                ),
-                exhausted_level=exhausted_level,
+        selection = ActionSelection(
+            source=source,
+            goal=goal,
+            skill=skill,
+            skill_selection=skill_selection,
+            stuck_reason=stuck,
+            action_index=proposal.action_index,
+            rationale=proposal.rationale,
+            intent=(
+                None
+                if proposal.intent is None
+                else replace(proposal.intent, level=self._dungeon.current.level)
             ),
+            exhausted_level=exhausted_level,
+        )
+        if self._planned_local_recovery is not None and requires_local_recovery_marker(
+            selection, self._environment.legal_actions[proposal.action_index]
+        ):
+            assert selection.intent is not None
+            selection = replace(
+                selection,
+                intent=replace(
+                    selection.intent, local_recovery=self._planned_local_recovery
+                ),
+            )
+        return _Plan(
+            selection=selection,
             skill_model_decision=skill_model_decision,
             action_model_decision=None,
             record=proposal.record,

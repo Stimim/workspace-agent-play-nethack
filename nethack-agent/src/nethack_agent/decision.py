@@ -116,6 +116,7 @@ class StuckReason(Enum):
 
     SEARCH_EXHAUSTED = "search_exhausted"
     MONSTER_BLOCKED = "monster_blocked"
+    NAVIGATION_BUDGET_EXHAUSTED = "navigation_budget_exhausted"
 
 
 class DestinationKind(Enum):
@@ -913,6 +914,140 @@ class DropEvidence:
 
 
 @dataclass(frozen=True, slots=True)
+class NavigationEvidence:
+    """Public state authorizing one bounded search or blocker wait."""
+
+    kind: str
+    origin: MapCell
+    targets: tuple[MapCell, ...]
+    knowledge: int
+    no_progress_turns: int
+    waits: int
+
+    def __post_init__(self) -> None:
+        if self.kind not in ("search", "blocker_wait"):
+            raise ContractError("navigation kind must be search or blocker_wait")
+        if not isinstance(self.origin, MapCell):
+            raise TypeError("navigation origin must be a MapCell")
+        if not isinstance(self.targets, tuple) or not all(
+            isinstance(cell, MapCell) for cell in self.targets
+        ):
+            raise TypeError("navigation targets must be a tuple of MapCell values")
+        if not self.targets or len(set(self.targets)) != len(self.targets):
+            raise ContractError("navigation targets must be nonempty and unique")
+        if self.kind == "blocker_wait" and len(self.targets) != 1:
+            raise ContractError("blocker wait requires exactly one target")
+        integer_value(self.knowledge, "navigation knowledge", minimum=0)
+        integer_value(self.no_progress_turns, "navigation no_progress_turns", minimum=0)
+        integer_value(self.waits, "navigation waits", minimum=0)
+
+    def to_json(self) -> dict[str, object]:
+        return {
+            "kind": self.kind,
+            "origin": self.origin.to_json(),
+            "targets": [cell.to_json() for cell in self.targets],
+            "knowledge": self.knowledge,
+            "no_progress_turns": self.no_progress_turns,
+            "waits": self.waits,
+        }
+
+    @classmethod
+    def from_json(cls, value: object) -> Self:
+        payload = object_value(
+            value,
+            "navigation evidence",
+            {"kind", "origin", "targets", "knowledge", "no_progress_turns", "waits"},
+        )
+        return cls(
+            kind=string_value(payload["kind"], "navigation kind"),
+            origin=MapCell.from_json(payload["origin"], "navigation origin"),
+            targets=tuple(
+                MapCell.from_json(cell, "navigation target")
+                for cell in array_value(payload["targets"], "navigation targets")
+            ),
+            knowledge=integer_value(
+                payload["knowledge"], "navigation knowledge", minimum=0
+            ),
+            no_progress_turns=integer_value(
+                payload["no_progress_turns"], "navigation no_progress_turns", minimum=0
+            ),
+            waits=integer_value(payload["waits"], "navigation waits", minimum=0),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class LocalRecoveryEvidence:
+    """A planner's local-recovery decision, never evidence of exploration."""
+
+    objective_kind: str
+    level: LevelKey
+    knowledge: int
+    no_progress_turns: int
+    protected_target_level: bool
+    coverage_complete: bool
+
+    def __post_init__(self) -> None:
+        if self.objective_kind not in ("find_oracle", "enter_minetown_temple"):
+            raise ContractError("local recovery requires a supported objective kind")
+        if not isinstance(self.level, LevelKey):
+            raise TypeError("local recovery level must be a LevelKey")
+        integer_value(self.knowledge, "local recovery knowledge", minimum=0)
+        integer_value(
+            self.no_progress_turns, "local recovery no_progress_turns", minimum=0
+        )
+        boolean_value(
+            self.protected_target_level, "local recovery protected_target_level"
+        )
+        boolean_value(self.coverage_complete, "local recovery coverage_complete")
+
+    def to_json(self) -> dict[str, object]:
+        return {
+            "objective_kind": self.objective_kind,
+            "level": self.level.to_json(),
+            "knowledge": self.knowledge,
+            "no_progress_turns": self.no_progress_turns,
+            "protected_target_level": self.protected_target_level,
+            "coverage_complete": self.coverage_complete,
+        }
+
+    @classmethod
+    def from_json(cls, value: object) -> Self:
+        payload = object_value(
+            value,
+            "local recovery evidence",
+            {
+                "objective_kind",
+                "level",
+                "knowledge",
+                "no_progress_turns",
+                "protected_target_level",
+                "coverage_complete",
+            },
+        )
+        return cls(
+            objective_kind=string_value(
+                payload["objective_kind"], "local recovery objective_kind"
+            ),
+            level=LevelKey.from_json(payload["level"], "local recovery level"),
+            knowledge=integer_value(
+                payload["knowledge"], "local recovery knowledge", minimum=0
+            ),
+            no_progress_turns=integer_value(
+                payload["no_progress_turns"],
+                "local recovery no_progress_turns",
+                minimum=0,
+            ),
+            protected_target_level=boolean_value(
+                payload["protected_target_level"],
+                "local recovery protected_target_level",
+            ),
+            coverage_complete=boolean_value(
+                payload["coverage_complete"], "local recovery coverage_complete"
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class ActionIntent:
     """The route, attack target, or prayer evidence for one deterministic action.
 
@@ -939,6 +1074,8 @@ class ActionIntent:
     corpse: CorpseEvidence | None = None
     food: FoodEvidence | None = None
     drop: DropEvidence | None = None
+    navigation: NavigationEvidence | None = None
+    local_recovery: LocalRecoveryEvidence | None = None
 
     def __post_init__(self) -> None:
         if self.destination is not None and not isinstance(
@@ -959,6 +1096,41 @@ class ActionIntent:
             raise TypeError("intent food must be FoodEvidence or None")
         if self.drop is not None and not isinstance(self.drop, DropEvidence):
             raise TypeError("drop must be DropEvidence")
+        if self.local_recovery is not None:
+            if not isinstance(self.local_recovery, LocalRecoveryEvidence):
+                raise TypeError("intent local_recovery must be LocalRecoveryEvidence")
+            if (
+                self.destination is None
+                or self.destination.kind
+                not in (DestinationKind.DOWNSTAIRS, DestinationKind.UPSTAIRS)
+                or any(
+                    value is not None
+                    for value in (
+                        self.attack_target,
+                        self.prayer,
+                        self.corpse,
+                        self.food,
+                        self.drop,
+                        self.navigation,
+                    )
+                )
+            ):
+                raise ContractError("local recovery requires only a staircase route")
+        if self.navigation is not None:
+            if not isinstance(self.navigation, NavigationEvidence):
+                raise TypeError("intent navigation must be NavigationEvidence or None")
+            if any(
+                value is not None
+                for value in (
+                    self.attack_target,
+                    self.path,
+                    self.prayer,
+                    self.corpse,
+                    self.food,
+                    self.drop,
+                )
+            ):
+                raise ContractError("navigation intent cannot select another action")
         if self.drop is not None and any(
             value is not None
             for value in (
@@ -978,6 +1150,7 @@ class ActionIntent:
             and self.corpse is None
             and self.food is None
             and self.drop is None
+            and self.navigation is None
         ):
             raise ContractError(
                 "intent requires a destination, attack target, prayer, "
@@ -999,6 +1172,11 @@ class ActionIntent:
             *(self.path or ()),
             *((self.corpse.cell,) if self.corpse is not None else ()),
             *((self.food.cell,) if self.food is not None else ()),
+            *(
+                (self.navigation.origin, *self.navigation.targets)
+                if self.navigation is not None
+                else ()
+            ),
         )
 
     def to_json(self) -> dict[str, object]:
@@ -1020,6 +1198,10 @@ class ActionIntent:
             payload["food"] = self.food.to_json()
         if self.drop is not None:
             payload["drop"] = self.drop.to_json()
+        if self.navigation is not None:
+            payload["navigation"] = self.navigation.to_json()
+        if self.local_recovery is not None:
+            payload["local_recovery"] = self.local_recovery.to_json()
         return payload
 
     @classmethod
@@ -1031,7 +1213,16 @@ class ActionIntent:
             value,
             "intent",
             {"destination", "attack_target"},
-            optional={"path", "level", "prayer", "corpse", "food", "drop"},
+            optional={
+                "path",
+                "level",
+                "prayer",
+                "corpse",
+                "food",
+                "drop",
+                "navigation",
+                "local_recovery",
+            },
         )
         destination = payload["destination"]
         attack_target = payload["attack_target"]
@@ -1041,6 +1232,8 @@ class ActionIntent:
         corpse = payload.get("corpse")
         food = payload.get("food")
         drop = payload.get("drop")
+        navigation = payload.get("navigation")
+        local_recovery = payload.get("local_recovery")
         if path is not None:
             path = array_value(path, "intent path")
             if len(path) > MAX_INTENT_PATH_LENGTH:
@@ -1068,6 +1261,14 @@ class ActionIntent:
             corpse=None if corpse is None else CorpseEvidence.from_json(corpse),
             food=None if food is None else FoodEvidence.from_json(food),
             drop=None if drop is None else DropEvidence.from_json(drop),
+            navigation=(
+                None if navigation is None else NavigationEvidence.from_json(navigation)
+            ),
+            local_recovery=(
+                None
+                if local_recovery is None
+                else LocalRecoveryEvidence.from_json(local_recovery)
+            ),
         )
 
 

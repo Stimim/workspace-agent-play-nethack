@@ -9,7 +9,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Final
 
+from nethack_agent.decision import LocalRecoveryEvidence
 from nethack_agent.navigation import DungeonMemory, LevelMemory
+from nethack_agent.navigation_budget import local_recovery_evidence
 from nethack_agent.traversal import (
     BRANCH_STAIRS,
     DUNGEONS_OF_DOOM,
@@ -54,6 +56,7 @@ class PlannedGoal:
     # Grant the current level one more exploration round before it is searched
     # again for a branch staircase.
     rearm: bool = False
+    local_recovery: LocalRecoveryEvidence | None = None
 
 
 def main_stairs(direction: StairDirection) -> TraverseStairsGoal:
@@ -103,10 +106,14 @@ class ObjectivePlanner:
                 return (
                     PlannedGoal(_leave_branch(dungeon, here))
                     if here.dungeon_number != DUNGEONS_OF_DOOM
-                    else _enter_branch(dungeon, here, 2)
+                    else _enter_branch(dungeon, here, 2, "enter_minetown_temple")
                 )
             memory = dungeon.current
-            if memory.town_identified:
+            if (
+                memory.town_identified
+                or (here.dungeon_level in (3, 4) and memory.altars)
+                or memory.temple_entry is not None
+            ):
                 goal_type = (
                     OccupyAltarGoal
                     if any("unaligned altar" in text for text in memory.altars.values())
@@ -117,24 +124,32 @@ class ObjectivePlanner:
                 return PlannedGoal(main_stairs(StairDirection.DOWN))
             if here.dungeon_level > 4:
                 return PlannedGoal(main_stairs(StairDirection.UP))
-            if here.dungeon_level == 3 and memory.explored:
-                return PlannedGoal(main_stairs(StairDirection.DOWN))
+            recovery = local_recovery_evidence(memory, "enter_minetown_temple")
+            if here.dungeon_level == 3 and (memory.explored or recovery is not None):
+                return PlannedGoal(
+                    main_stairs(StairDirection.DOWN), local_recovery=recovery
+                )
             return PlannedGoal(EnterTempleGoal(here))
         if isinstance(leg, FindOracleLeg):
             if here.dungeon_number != DUNGEONS_OF_DOOM:
                 return PlannedGoal(_leave_branch(dungeon, here))
             memory = dungeon.current
-            if any(monster.name == "Oracle" for monster in memory.monsters.values()):
+            if memory.oracle_seen or any(
+                monster.name == "Oracle" for monster in memory.monsters.values()
+            ):
                 return PlannedGoal(ApproachOracleGoal(here))
             if here.dungeon_level < 5:
                 return PlannedGoal(main_stairs(StairDirection.DOWN))
             if here.dungeon_level > 9:
                 return PlannedGoal(main_stairs(StairDirection.UP))
-            if not memory.explored:
+            recovery = local_recovery_evidence(memory, "find_oracle")
+            if not memory.explored and recovery is None:
                 return PlannedGoal(ApproachOracleGoal(here))
             if here.dungeon_level < 9:
-                return PlannedGoal(main_stairs(StairDirection.DOWN))
-            return PlannedGoal(main_stairs(StairDirection.UP))
+                return PlannedGoal(
+                    main_stairs(StairDirection.DOWN), local_recovery=recovery
+                )
+            return PlannedGoal(main_stairs(StairDirection.UP), local_recovery=recovery)
         target_dungeon = (
             leg.level.dungeon_number
             if isinstance(leg, ReachLevelLeg)
@@ -258,7 +273,10 @@ def _leave_branch(dungeon: DungeonMemory, here: LevelKey) -> TraverseStairsGoal:
 
 
 def _enter_branch(
-    dungeon: DungeonMemory, here: LevelKey, dungeon_number: int
+    dungeon: DungeonMemory,
+    here: LevelKey,
+    dungeon_number: int,
+    recovery_kind: str | None = None,
 ) -> PlannedGoal:
     """Find and take the Dungeons of Doom staircase into `dungeon_number`.
 
@@ -274,6 +292,13 @@ def _enter_branch(
         for key, memory in dungeon.levels.items()
         if key.dungeon_number == DUNGEONS_OF_DOOM
     }
+    spent = {
+        level: evidence
+        for level, memory in levels.items()
+        if recovery_kind is not None
+        and (evidence := local_recovery_evidence(memory, recovery_kind)) is not None
+    }
+    recovery = spent.get(here.dungeon_level)
     identified = [
         level
         for level, memory in levels.items()
@@ -288,7 +313,7 @@ def _enter_branch(
         level
         for level in span
         if level not in levels
-        or not levels[level].exhausted
+        or (not levels[level].exhausted and level not in spent)
         or levels[level].pair_known(direction)
     ]
     rearmable = [
@@ -296,6 +321,7 @@ def _enter_branch(
         for level in span
         if level in levels
         and levels[level].exhausted
+        and level not in spent
         and not levels[level].pair_known(direction)
         and not levels[level].branch_rearmed
     ]
@@ -303,11 +329,15 @@ def _enter_branch(
         if here.dungeon_level in candidates:
             return PlannedGoal(goal)
         if candidates:
-            return PlannedGoal(_toward(here, _nearest(candidates, here)))
+            return PlannedGoal(
+                _toward(here, _nearest(candidates, here)), local_recovery=recovery
+            )
     if here.dungeon_level in rearmable:
         return PlannedGoal(goal, rearm=True)
     if rearmable:
-        return PlannedGoal(_toward(here, _nearest(rearmable, here)))
+        return PlannedGoal(
+            _toward(here, _nearest(rearmable, here)), local_recovery=recovery
+        )
     # Every range level was searched twice without a branch staircase; keep
     # searching here and let stuck consultations decide.
     return PlannedGoal(goal)
