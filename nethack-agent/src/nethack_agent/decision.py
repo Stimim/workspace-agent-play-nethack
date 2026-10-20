@@ -4,7 +4,7 @@ import json
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Final, Self
+from typing import TYPE_CHECKING, Final, Self
 
 from nethack_agent.contracts import (
     ContractError,
@@ -34,6 +34,10 @@ from nethack_agent.traversal import (
     candidate_tier,
     goal_from_json,
 )
+
+if TYPE_CHECKING:
+    from nethack_agent.disengage import DisengageRecovery
+    from nethack_agent.environment import LegalAction
 
 # The actions that change dungeon level. The gate passes one only with a
 # coordinator TraversalPermit (ADR 0004); the model is never offered them.
@@ -85,6 +89,7 @@ class Skill(Enum):
     HUNGER = "hunger"
     PRAYER = "prayer"
     BURDEN = "burden"
+    DISENGAGE = "disengage"
     # Route to visible gold on NetHackGold-v0; deterministic, never offered to
     # the model.
     GOLD_NAVIGATION = "gold_navigation"
@@ -913,6 +918,77 @@ class DropEvidence:
 
 
 @dataclass(frozen=True, slots=True)
+class DisengageEvidence:
+    """Exact next native byte and the public recovery state authorizing it."""
+
+    phase: str
+    command: int
+    step: int
+    start_turn: int
+    x: int
+    y: int
+    text_index: int
+    retries: int
+    prompt_actions: int
+    recovery_turns: int
+    no_heal_periods: int
+
+    def __post_init__(self) -> None:
+        if self.phase not in {
+            "engrave",
+            "tool",
+            "overwrite",
+            "text",
+            "submit",
+            "more",
+            "look",
+            "wait",
+        }:
+            raise ContractError("invalid disengage phase")
+        integer_value(self.command, "disengage command", minimum=0, maximum=255)
+        for name in (
+            "step",
+            "start_turn",
+            "x",
+            "y",
+            "text_index",
+            "retries",
+            "prompt_actions",
+            "recovery_turns",
+            "no_heal_periods",
+        ):
+            integer_value(getattr(self, name), f"disengage {name}", minimum=0)
+        if self.text_index > 8 or self.retries > 2 or self.prompt_actions > 24:
+            raise ContractError("disengage budget exceeds limit")
+        if self.recovery_turns > 200 or self.no_heal_periods > 2:
+            raise ContractError("disengage recovery budget exceeds limit")
+        expected = {
+            "engrave": 69,
+            "tool": 45,
+            "overwrite": 110,
+            "submit": 13,
+            "more": 13,
+            "look": 58,
+            "wait": 46,
+        }
+        if self.phase == "text":
+            if self.text_index >= 8 or self.command != ord("Elbereth"[self.text_index]):
+                raise ContractError("disengage text byte does not match cursor")
+        elif self.command != expected[self.phase]:
+            raise ContractError("disengage command does not match phase")
+
+    def to_json(self) -> dict[str, object]:
+        return {name: getattr(self, name) for name in self.__dataclass_fields__}
+
+    @classmethod
+    def from_json(cls, value: object) -> Self:
+        payload = object_value(
+            value, "disengage evidence", set(cls.__dataclass_fields__)
+        )
+        return cls(**payload)
+
+
+@dataclass(frozen=True, slots=True)
 class ActionIntent:
     """The route, attack target, or prayer evidence for one deterministic action.
 
@@ -939,6 +1015,7 @@ class ActionIntent:
     corpse: CorpseEvidence | None = None
     food: FoodEvidence | None = None
     drop: DropEvidence | None = None
+    disengage: DisengageEvidence | None = None
 
     def __post_init__(self) -> None:
         if self.destination is not None and not isinstance(
@@ -959,6 +1036,22 @@ class ActionIntent:
             raise TypeError("intent food must be FoodEvidence or None")
         if self.drop is not None and not isinstance(self.drop, DropEvidence):
             raise TypeError("drop must be DropEvidence")
+        if self.disengage is not None:
+            if not isinstance(self.disengage, DisengageEvidence):
+                raise TypeError("disengage must be DisengageEvidence")
+            if any(
+                value is not None
+                for value in (
+                    self.destination,
+                    self.attack_target,
+                    self.path,
+                    self.prayer,
+                    self.corpse,
+                    self.food,
+                    self.drop,
+                )
+            ):
+                raise ContractError("disengage intent cannot mix other evidence")
         if self.drop is not None and any(
             value is not None
             for value in (
@@ -978,6 +1071,7 @@ class ActionIntent:
             and self.corpse is None
             and self.food is None
             and self.drop is None
+            and self.disengage is None
         ):
             raise ContractError(
                 "intent requires a destination, attack target, prayer, "
@@ -1020,6 +1114,8 @@ class ActionIntent:
             payload["food"] = self.food.to_json()
         if self.drop is not None:
             payload["drop"] = self.drop.to_json()
+        if self.disengage is not None:
+            payload["disengage"] = self.disengage.to_json()
         return payload
 
     @classmethod
@@ -1031,7 +1127,7 @@ class ActionIntent:
             value,
             "intent",
             {"destination", "attack_target"},
-            optional={"path", "level", "prayer", "corpse", "food", "drop"},
+            optional={"path", "level", "prayer", "corpse", "food", "drop", "disengage"},
         )
         destination = payload["destination"]
         attack_target = payload["attack_target"]
@@ -1068,6 +1164,11 @@ class ActionIntent:
             corpse=None if corpse is None else CorpseEvidence.from_json(corpse),
             food=None if food is None else FoodEvidence.from_json(food),
             drop=None if drop is None else DropEvidence.from_json(drop),
+            disengage=(
+                None
+                if payload.get("disengage") is None
+                else DisengageEvidence.from_json(payload["disengage"])
+            ),
         )
 
 
@@ -1149,7 +1250,13 @@ class ActionSelection:
             if self.source is not ActionSelectionSource.DETERMINISTIC_SKILL and not (
                 self.source is ActionSelectionSource.DETERMINISTIC_PROMPT
                 and self.skill
-                in (Skill.PRAYER, Skill.CORPSE, Skill.HUNGER, Skill.BURDEN)
+                in (
+                    Skill.PRAYER,
+                    Skill.CORPSE,
+                    Skill.HUNGER,
+                    Skill.BURDEN,
+                    Skill.DISENGAGE,
+                )
                 and self.intent.destination is None
                 and self.intent.attack_target is None
                 and self.intent.path is None
@@ -1158,6 +1265,10 @@ class ActionSelection:
                     or (self.skill is Skill.CORPSE and self.intent.corpse is not None)
                     or (self.skill is Skill.HUNGER and self.intent.food is not None)
                     or (self.skill is Skill.BURDEN and self.intent.drop is not None)
+                    or (
+                        self.skill is Skill.DISENGAGE
+                        and self.intent.disengage is not None
+                    )
                 )
             ):
                 raise ContractError(
@@ -1393,10 +1504,86 @@ class PromptPermit:
             raise TypeError("prompt permit kind must be a PromptKind")
 
 
+def disengage_action_error(
+    action: LegalAction,
+    selection: ActionSelection | None,
+    before: ProjectedObservation | None = None,
+    recovery: DisengageRecovery | None = None,
+    *,
+    structural_only: bool = False,
+) -> str | None:
+    """One shared structural/live authorization for native recovery bytes."""
+    evidence = (
+        None
+        if selection is None or selection.intent is None
+        else selection.intent.disengage
+    )
+    if evidence is not None or (
+        selection is not None and selection.skill is Skill.DISENGAGE
+    ):
+        error = survival_action_selection_error(action.name, selection)
+        if error is not None:
+            return error
+        if evidence is None or action.command != evidence.command:
+            return "disengage action byte does not match evidence"
+        if not structural_only and (
+            before is None or recovery is None or recovery.expected(before) != evidence
+        ):
+            return "disengage evidence does not match live recovery"
+        return None
+    if action.name == "Command.ENGRAVE" and (
+        (not structural_only and before is not None and not before.prompt.active)
+        or selection is None
+        or selection.source is not ActionSelectionSource.DETERMINISTIC_PROMPT
+        or selection.skill not in (Skill.HUNGER, Skill.CORPSE, Skill.BURDEN)
+    ):
+        return "engraving requires deterministic disengage evidence"
+    if structural_only:
+        return None
+    if before is None or recovery is None:
+        return None
+    if recovery.owns_prompt(before):
+        return "native disengage prompt requires its exact owned evidence"
+    if recovery.protected(before) and (
+        (
+            selection is not None
+            and selection.intent is not None
+            and selection.intent.attack_target is not None
+        )
+        or recovery.blocks_attack(action.command, before)
+    ):
+        return "valid Elbereth protection forbids attacking"
+    return None
+
+
 def survival_action_selection_error(
     action_name: str, selection: ActionSelection
 ) -> str | None:
     """Why a restricted action is invalid from its recorded selection fields."""
+    evidence = None if selection.intent is None else selection.intent.disengage
+    if selection.skill is Skill.DISENGAGE or evidence is not None:
+        if evidence is None or selection.skill is not Skill.DISENGAGE:
+            return "disengage requires deterministic recovery evidence"
+        source = (
+            ActionSelectionSource.DETERMINISTIC_SKILL
+            if evidence.phase in {"engrave", "look", "wait"}
+            else ActionSelectionSource.DETERMINISTIC_PROMPT
+        )
+        if selection.source is not source:
+            return "disengage phase requires its deterministic selection source"
+        names = {
+            "engrave": "Command.ENGRAVE",
+            "look": "Command.LOOK",
+            "wait": "MiscDirection.WAIT",
+        }
+        if evidence.phase in names and action_name != names[evidence.phase]:
+            return "disengage phase does not match selected action"
+        return None
+    if action_name == "Command.ENGRAVE" and (
+        selection.source is not ActionSelectionSource.DETERMINISTIC_PROMPT
+        or selection.skill not in (Skill.HUNGER, Skill.CORPSE, Skill.BURDEN)
+    ):
+        return "engraving requires deterministic disengage evidence"
     if selection.intent is not None and selection.intent.drop is not None:
         if selection.skill is Skill.BURDEN and (
             selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT

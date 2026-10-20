@@ -47,6 +47,8 @@ from nethack_agent.decision import (
     ESC_COMMAND,
     LEVEL_CHANGE_ACTIONS,
     PRAY_ACTION_NAME,
+    PRAYER_FIRST_SAFE_TURN,
+    PRAYER_REPEAT_WAIT_TURNS,
     YES_COMMAND,
     ActionSelectionSource,
     CorpseEvidence,
@@ -69,6 +71,7 @@ from nethack_agent.decision import (
     confirmation_prompt_kind,
     corpse_age_matches,
     corpse_confirmation_error,
+    disengage_action_error,
     hunger_action_error,
     is_corpse_decline,
     level_change_error,
@@ -76,6 +79,7 @@ from nethack_agent.decision import (
     prayer_action_error,
     prompt_response_error,
 )
+from nethack_agent.disengage import DisengageRecovery
 from nethack_agent.environment import CHARACTER, LegalAction
 from nethack_agent.events import (
     AgentErrorPayload,
@@ -1839,6 +1843,7 @@ def summarize_run(
     arrived_food: FoodEvidence | None = None
     pending_food: FoodEvidence | None = None
     burden = BurdenRecovery()
+    disengage = DisengageRecovery()
 
     sequences = [event.sequence for event in events]
     if sequences != list(range(len(events))):
@@ -1873,6 +1878,18 @@ def summarize_run(
                 successful.append(payload.skill_metrics)
             if payload.action_metrics is not None:
                 successful.append(payload.action_metrics)
+            if decided_on is not None and _observation_is_live(decided_on):
+                disengage.observe(
+                    decided_on,
+                    prayer_memory.current,
+                    prayer_available=decided_on.player.turn
+                    >= max(
+                        PRAYER_FIRST_SAFE_TURN,
+                        0
+                        if last_prayer_turn is None
+                        else (last_prayer_turn + PRAYER_REPEAT_WAIT_TURNS),
+                    ),
+                )
             valid = _action_is_valid(
                 payload,
                 legal_actions,
@@ -1892,6 +1909,7 @@ def summarize_run(
                 pending_food=pending_food,
                 dungeon_memory=prayer_memory,
                 burden=burden,
+                disengage=disengage,
                 on_altar=(
                     prayer_memory.current.cmap(prayer_memory.current.position) == 27
                     or (
@@ -1905,6 +1923,12 @@ def summarize_run(
                 None
                 if payload.selection.intent is None
                 else payload.selection.intent.drop,
+                payload.observation,
+            )
+            disengage.advance(
+                None
+                if payload.selection.intent is None
+                else (payload.selection.intent.disengage),
                 payload.observation,
             )
             if not valid:
@@ -2559,6 +2583,7 @@ def _action_is_valid(
     arrived_food: FoodEvidence | None = None,
     pending_food: FoodEvidence | None = None,
     burden: BurdenRecovery | None = None,
+    disengage: DisengageRecovery | None = None,
 ) -> bool:
     if not isinstance(legal_actions, tuple):
         return False
@@ -2581,6 +2606,10 @@ def _action_is_valid(
     ):
         return False
     selection = payload.selection
+    if disengage_action_error(action, selection, decided_on, disengage) is not None:
+        return False
+    if selection.intent is not None and selection.intent.disengage is not None:
+        return action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
     drop = None if selection.intent is None else selection.intent.drop
     if drop is not None:
         return (

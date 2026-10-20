@@ -68,6 +68,11 @@ task never changes level. Runs expose the current goal and skill, stream
 typed events through the loopback service and CLI, and keep bounded scenarios
 and network verification reproducible.
 
+Isolated candidate 0057 adds combat-only, bounded Elbereth recovery with
+native engraving/text transport and exact LOOK readback. It is not qualified
+or shipped: quiet wounded rest and retreat movement are explicitly excluded.
+See the candidate contract in [Architecture](ARCHITECTURE.md#isolated-candidate-0057-not-qualified).
+
 The first product milestone requires this hierarchy to succeed on at least 6
 of 10 fixed `NetHackStaircase-v0` seeds, including seed 6, while recording
 SQLite events and ttyrecs and streaming the decision trace to a local web UI.

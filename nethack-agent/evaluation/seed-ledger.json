@@ -362,6 +362,12 @@
       "seeds": [],
       "ranges": [[511, 540]],
       "note": "Frozen minetown-fresh-v1 and oracle-fresh-v1 sample for the note 0051 ration live-lock qualification. Development-only; consumed, never reused. See note0051."
+    },
+    {
+      "source": "note-0057-elbereth-disengage-qualification",
+      "seeds": [],
+      "ranges": [[605, 634]],
+      "note": "Reserved before either fresh arm for note 0057 combat-only Elbereth qualification: paired Minetown/Oracle fresh-v3, seeds 605-634. Development-only, not milestone acceptance; consumed, never reused."
     }
   ]
 }

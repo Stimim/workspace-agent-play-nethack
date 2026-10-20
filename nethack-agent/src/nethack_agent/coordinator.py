@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Final
 
 from nethack_agent.burden import BurdenRecovery, burden_action_error
+from nethack_agent.conduct import noncombat_actions
 from nethack_agent.corpse import (
     CorpseKill,
     eligible_corpse,
@@ -17,6 +18,8 @@ from nethack_agent.decision import (
     EAT_ACTION_NAME,
     LEVEL_CHANGE_ACTIONS,
     PRAY_ACTION_NAME,
+    PRAYER_FIRST_SAFE_TURN,
+    PRAYER_REPEAT_WAIT_TURNS,
     YES_COMMAND,
     ActionSelection,
     ActionSelectionSource,
@@ -45,6 +48,7 @@ from nethack_agent.decision import (
     confirmation_answer_error,
     confirmation_prompt_kind,
     corpse_confirmation_error,
+    disengage_action_error,
     hunger_action_error,
     is_corpse_decline,
     level_change_error,
@@ -53,6 +57,7 @@ from nethack_agent.decision import (
     prayer_action_error,
     prompt_response_error,
 )
+from nethack_agent.disengage import DisengageRecovery
 from nethack_agent.environment import LegalAction, NleEnvironment, StepTransition
 from nethack_agent.food import (
     is_floor_eat_prompt,
@@ -158,6 +163,7 @@ class ActionGate:
                 ActionRole.PROMPT_KEY,
                 ActionRole.PRAYER,
                 ActionRole.BURDEN_DROP,
+                ActionRole.ENGRAVING,
             }
             and not (
                 action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
@@ -199,6 +205,7 @@ class ActionGate:
         lycanthropy_known: bool = False,
         food_permit: FoodPermit | None = None,
         burden: BurdenRecovery | None = None,
+        disengage: DisengageRecovery | None = None,
     ) -> LegalAction:
         if isinstance(action_index, bool) or not isinstance(action_index, int):
             raise ActionGateError("action index must be an integer")
@@ -210,6 +217,15 @@ class ActionGate:
         error = conduct_error(action, before, memory)
         if error is not None:
             raise ActionGateError(error)
+        error = disengage_action_error(action, selection, before, disengage)
+        if error is not None:
+            raise ActionGateError(error)
+        if (
+            selection is not None
+            and selection.intent is not None
+            and (selection.intent.disengage is not None)
+        ):
+            return action
         food = (
             None
             if selection is None or selection.intent is None
@@ -485,6 +501,11 @@ class AgentCoordinator:
             if task.action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
             else None
         )
+        self._disengage = (
+            DisengageRecovery()
+            if task.action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
+            else None
+        )
         self._prayer = (
             PrayerSkill()
             if task.action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
@@ -550,6 +571,8 @@ class AgentCoordinator:
                 self._hunger.reset()
             if self._burden is not None:
                 self._burden = BurdenRecovery()
+            if self._disengage is not None:
+                self._disengage = DisengageRecovery()
             self._prayer_count = 0
             self._last_prayer_turn = None
             self._prayer_kill_count = 0
@@ -650,6 +673,12 @@ class AgentCoordinator:
                 raise
 
             selection = plan.selection
+            if self._disengage is not None and self._disengage.fallback_reason:
+                selection = replace(
+                    selection,
+                    rationale=selection.rationale
+                    + f" Elbereth fallback: {self._disengage.fallback_reason}.",
+                )
             with self._lock:
                 if self._advance_was_canceled_locked(revision, started_state):
                     return None
@@ -674,6 +703,7 @@ class AgentCoordinator:
                         lycanthropy_known=self._lycanthropy_known,
                         food_permit=food_permit,
                         burden=self._burden,
+                        disengage=self._disengage,
                     )
                 except ActionGateError as error:
                     self._state = RunState.PAUSED
@@ -689,6 +719,13 @@ class AgentCoordinator:
                     if self._burden is not None:
                         self._burden.advance(
                             None if selection.intent is None else selection.intent.drop,
+                            after,
+                        )
+                    if self._disengage is not None:
+                        self._disengage.advance(
+                            None
+                            if selection.intent is None
+                            else selection.intent.disengage,
                             after,
                         )
                     selection = self._commit_prayer_locked(
@@ -764,6 +801,32 @@ class AgentCoordinator:
                 return None
         actions = self._gate.actions_by_name
         arbiter = SkillSelectionSource.ARBITER
+        if self._disengage is not None:
+            safe_turn = max(
+                PRAYER_FIRST_SAFE_TURN,
+                0
+                if self._last_prayer_turn is None
+                else (self._last_prayer_turn + PRAYER_REPEAT_WAIT_TURNS),
+            )
+            self._disengage.observe(
+                before, memory, prayer_available=before.player.turn >= safe_turn
+            )
+            if self._disengage.protected(before):
+                actions = noncombat_actions(actions, memory)
+            if before.prompt.active:
+                recovery = self._disengage.select_action(
+                    before, self._gate.actions_by_command
+                )
+                if recovery is not None:
+                    return self._skill_plan(
+                        recovery,
+                        goal,
+                        Skill.DISENGAGE,
+                        arbiter,
+                        None,
+                        skill_model_decision,
+                        source=ActionSelectionSource.DETERMINISTIC_PROMPT,
+                    )
         if self._burden is not None:
             self._burden.observe(before)
             if self._burden.pending is not None:
@@ -867,6 +930,19 @@ class AgentCoordinator:
                     skill_model_decision,
                     source=source,
                 )
+        if self._disengage is not None:
+            recovery = self._disengage.select_action(
+                before, self._gate.actions_by_command
+            )
+            if recovery is not None:
+                return self._skill_plan(
+                    recovery,
+                    goal,
+                    Skill.DISENGAGE,
+                    arbiter,
+                    None,
+                    skill_model_decision,
+                )
         if not before.prompt.active and self._corpse is not None:
             defense = _attack_adjacent_hostile(memory, actions, None)
             if defense is not None:
@@ -878,7 +954,11 @@ class AgentCoordinator:
                     None,
                     skill_model_decision,
                 )
-        if self._burden is not None and not before.prompt.active:
+        if (
+            self._burden is not None
+            and not before.prompt.active
+            and not (self._disengage is not None and self._disengage.protected(before))
+        ):
             drop = self._burden.select_action(before, self._gate.actions_by_command)
             if drop is not None:
                 return self._skill_plan(
@@ -887,7 +967,10 @@ class AgentCoordinator:
         if (
             not before.prompt.active
             and self._hunger is not None
-            and not (self._burden is not None and self._burden.active)
+            and (
+                not (self._burden is not None and self._burden.active)
+                or (self._disengage is not None and self._disengage.protected(before))
+            )
         ):
             hunger = self._hunger.select_action(
                 before, actions, self._gate.actions_by_command
@@ -952,7 +1035,9 @@ class AgentCoordinator:
         prompt = self._prompt_handler.select_action(
             before, actions, self._gate.actions_by_command
         )
-        navigation = None if before.prompt.active else self._navigate(memory, goal)
+        navigation = (
+            None if before.prompt.active else self._navigate(memory, goal, actions)
+        )
         arbiter_skill = (
             Skill.STAIRCASE_NAVIGATION
             if navigation is not None and isinstance(goal, STAIR_GOAL_TYPES)
@@ -1019,7 +1104,7 @@ class AgentCoordinator:
             replanned = self._plan_goal(leg, memory)
             if replanned != goal:
                 goal = replanned
-                navigation = self._navigate(memory, goal)
+                navigation = self._navigate(memory, goal, actions)
                 if navigation is not None:
                     return self._skill_plan(
                         navigation,
@@ -1130,11 +1215,17 @@ class AgentCoordinator:
             memory.rearm_for_branch()
         return planned.goal
 
-    def _navigate(self, memory: LevelMemory, goal: Goal) -> SkillAction | None:
+    def _navigate(
+        self,
+        memory: LevelMemory,
+        goal: Goal,
+        actions: dict[str, LegalAction] | None = None,
+    ) -> SkillAction | None:
+        actions = self._gate.actions_by_name if actions is None else actions
         if isinstance(goal, ApproachOracleGoal | EnterTempleGoal):
             from nethack_agent.skills import navigate_target
 
-            return navigate_target(memory, self._gate.actions_by_name, goal)
+            return navigate_target(memory, actions, goal)
         if not isinstance(goal, STAIR_GOAL_TYPES):
             return None
         level_change = (
@@ -1142,9 +1233,7 @@ class AgentCoordinator:
             if isinstance(goal, TraverseStairsGoal)
             else None
         )
-        return self._navigation.select_action(
-            memory, self._gate.actions_by_name, goal, level_change
-        )
+        return self._navigation.select_action(memory, actions, goal, level_change)
 
     def _traversal_permit(
         self, selection: ActionSelection, before: ProjectedObservation
@@ -1219,7 +1308,11 @@ class AgentCoordinator:
         index = selection.action_index
         if (
             selection.intent is not None
-            and (selection.intent.food is not None or selection.intent.drop is not None)
+            and (
+                selection.intent.food is not None
+                or selection.intent.drop is not None
+                or selection.intent.disengage is not None
+            )
         ) or (
             selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
             and selection.skill is Skill.HUNGER
@@ -1310,6 +1403,8 @@ class AgentCoordinator:
         if selection.intent is not None and selection.intent.drop is not None:
             return None
         if selection.intent is not None and selection.intent.food is not None:
+            return None
+        if selection.intent is not None and selection.intent.disengage is not None:
             return None
         if not 0 <= index < len(legal):
             return None
@@ -1618,9 +1713,13 @@ class AgentCoordinator:
         stuck_consulted: bool = False,
         exhausted_level: LevelKey | None = None,
     ) -> _Plan | None:
-        action_model_decision = self._model.select_action(
-            before, self.allowed_actions, goal, skill
-        )
+        allowed = self.allowed_actions
+        if self._disengage is not None and self._disengage.protected(before):
+            safe = noncombat_actions(
+                {action.name: action for action in allowed}, self._dungeon.current
+            )
+            allowed = tuple(safe.values())
+        action_model_decision = self._model.select_action(before, allowed, goal, skill)
         if canceled():
             return None
         decision = action_model_decision.decision

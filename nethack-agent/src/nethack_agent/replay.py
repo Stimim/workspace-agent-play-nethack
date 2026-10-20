@@ -18,14 +18,19 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Final
 
+from nethack_agent.conduct import noncombat_actions
 from nethack_agent.decision import (
     LEVEL_CHANGE_ACTIONS,
+    PRAY_ACTION_NAME,
+    PRAYER_FIRST_SAFE_TURN,
+    PRAYER_REPEAT_WAIT_TURNS,
     ActionSelection,
     ActionSelectionSource,
     DestinationKind,
     Skill,
     StuckReason,
 )
+from nethack_agent.disengage import DisengageRecovery
 from nethack_agent.environment import LegalAction
 from nethack_agent.events import StepPayload
 from nethack_agent.navigation import (
@@ -110,6 +115,13 @@ def derive_action_record(
         intent is None
     ):
         return ActionRecord(ActionKind.OTHER, origin)
+    if intent.disengage is not None:
+        return ActionRecord(
+            ActionKind.WAIT
+            if action_name == "MiscDirection.WAIT"
+            else ActionKind.OTHER,
+            origin,
+        )
     destination = intent.destination
     if intent.path is not None:
         assert destination is not None
@@ -208,6 +220,8 @@ class ExplorationReplay:
         self._dungeon = DungeonMemory()
         self._dungeon.observe(initial)
         self._decided_on = initial
+        self._disengage = DisengageRecovery()
+        self._last_prayer_turn: int | None = None
         # The coordinator starts on leg 0 and advances only after a step.
         self._leg = 0
         self._first_step = True
@@ -221,6 +235,23 @@ class ExplorationReplay:
         memory = self._dungeon.current
         goal = self._plan(memory)
         problem = None
+        before = self._decided_on
+        self._disengage.observe(
+            before,
+            memory,
+            prayer_available=before.player.turn
+            >= max(
+                PRAYER_FIRST_SAFE_TURN,
+                0
+                if self._last_prayer_turn is None
+                else (self._last_prayer_turn + PRAYER_REPEAT_WAIT_TURNS),
+            ),
+        )
+        actions = (
+            noncombat_actions(self._actions, memory)
+            if self._disengage.protected(before)
+            else self._actions
+        )
         marker = payload.selection.exhausted_level
         if marker is not None:
             problem = (
@@ -228,7 +259,7 @@ class ExplorationReplay:
                 if marker != memory.level
                 else exhaustion_error(
                     memory,
-                    self._actions,
+                    actions,
                     stair_target(goal),
                     prompt_active=self._decided_on.prompt.active,
                 )
@@ -253,6 +284,14 @@ class ExplorationReplay:
         memory.record(
             derive_action_record(payload.selection, payload.action.name, memory)
         )
+        self._disengage.advance(
+            None
+            if payload.selection.intent is None
+            else (payload.selection.intent.disengage),
+            payload.observation,
+        )
+        if payload.action.name == PRAY_ACTION_NAME:
+            self._last_prayer_turn = before.player.turn
         if payload.terminated or payload.truncated:
             self._ended = True
             return problem

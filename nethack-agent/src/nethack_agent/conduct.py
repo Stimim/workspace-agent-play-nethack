@@ -26,6 +26,18 @@ ATTACK_DELTA_BY_ACTION_NAME: Final[dict[str, Point]] = {
 }
 
 
+def noncombat_actions(
+    actions: dict[str, LegalAction], memory: LevelMemory
+) -> dict[str, LegalAction]:
+    """Filter attacks, not route choices, while verified protection is retained."""
+    blocked = {"Command.FIGHT", "Command.THROW", "Command.FIRE", "Command.KICK"}
+    x, y = memory.position
+    for name, (dx, dy) in ATTACK_DELTA_BY_ACTION_NAME.items():
+        if (x + dx, y + dy) in memory.monsters:
+            blocked.add(name)
+    return {name: action for name, action in actions.items() if name not in blocked}
+
+
 def attack_evidence(
     action: LegalAction,
     observation: ProjectedObservation,

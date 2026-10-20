@@ -74,6 +74,7 @@ class ActionRole(Enum):
     PRAYER = "prayer"
     FOOD_PICKUP = "food_pickup"
     BURDEN_DROP = "burden_drop"
+    ENGRAVING = "engraving"
 
 
 class ActionProfile(Enum):
@@ -96,6 +97,10 @@ class ActionProfile(Enum):
             nethack.Command.DROP
         ):
             return ActionRole.BURDEN_DROP
+        if self is ActionProfile.NLE_SURVIVAL_ACTIONS and command == int(
+            nethack.Command.ENGRAVE
+        ):
+            return ActionRole.ENGRAVING
         if command in _PROFILE_PROMPT_KEY_COMMANDS[self]:
             return ActionRole.PROMPT_KEY
         if command == int(nethack.Command.EAT):
@@ -136,6 +141,7 @@ _SURVIVAL_ACTIONS: Final = (
     nethack.Command.PICKUP,
     nethack.Command.LOOK,
     *_BURDEN_KEYS,
+    nethack.TextCharacters.MINUS,
 )
 
 _PROFILE_ACTIONS: Final[dict[ActionProfile, tuple[IntEnum, ...]]] = {
@@ -149,12 +155,13 @@ _PROFILE_PROMPT_KEY_COMMANDS: Final[dict[ActionProfile, frozenset[int]]] = {
         int(action) for action in _HUNGER_ADDITIONS
     ),
     ActionProfile.NLE_SURVIVAL_ACTIONS: frozenset(
-        int(action) for action in (*_HUNGER_ADDITIONS, *_BURDEN_KEYS)
+        int(action)
+        for action in (*_HUNGER_ADDITIONS, *_BURDEN_KEYS, nethack.TextCharacters.MINUS)
     ),
 }
 PROMPT_KEY_ACTION_NAMES: Final = frozenset(
     f"{type(action).__name__}.{action.name}"
-    for action in (*_HUNGER_ADDITIONS, *_BURDEN_KEYS)
+    for action in (*_HUNGER_ADDITIONS, *_BURDEN_KEYS, nethack.TextCharacters.MINUS)
 )
 
 # Tasks whose objectives have behavior. Action profiles are independent of the

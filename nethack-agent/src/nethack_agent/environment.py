@@ -255,6 +255,8 @@ class NleEnvironment:
         self._pickup_menu_open = False
         self._drop_prompt_open = False
         self._look_menu_open = False
+        self._engraving_prompt_open = False
+        self._command_ready = True
         self._seed_set = SeedSet.derive(config.seed)
         self._legal_actions = tuple(
             LegalAction(
@@ -309,6 +311,8 @@ class NleEnvironment:
         self._pickup_menu_open = False
         self._drop_prompt_open = False
         self._look_menu_open = False
+        self._engraving_prompt_open = False
+        self._command_ready = not bool(np.any(observation["misc"]))
         self._state = EnvironmentState.RUNNING
         return NleObservation.from_nle(observation)
 
@@ -324,8 +328,20 @@ class NleEnvironment:
                 f"action_index must be between 0 and {len(self._legal_actions) - 1}"
             )
 
+        engraving = (
+            self._config.task.action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
+            and (
+                self._engraving_prompt_open
+                or (
+                    self._command_ready
+                    and self._legal_actions[action_index].command
+                    == int(nethack.Command.ENGRAVE)
+                )
+            )
+        )
         pickup = (
             self._config.task.action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
+            and not engraving
             and (
                 self._legal_actions[action_index].command == int(nethack.Command.PICKUP)
                 or self._pickup_menu_open
@@ -333,6 +349,7 @@ class NleEnvironment:
         )
         drop = (
             self._config.task.action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
+            and not engraving
             and (
                 self._drop_prompt_open
                 or (
@@ -349,6 +366,7 @@ class NleEnvironment:
         )
         look = (
             self._config.task.action_profile is ActionProfile.NLE_SURVIVAL_ACTIONS
+            and not engraving
             and (
                 self._look_menu_open
                 or self._legal_actions[action_index].command
@@ -356,10 +374,10 @@ class NleEnvironment:
             )
         )
         allow_all_modes = self._raw_environment._allow_all_modes
-        if pickup or drop or look:
-            # Preserve reviewed pickup/drop/look pages. Other actions remain
-            # atomic until public blstats are refreshed; ttyrec retains every
-            # intermediate message/page, including temple-entry speech.
+        if pickup or drop or look or engraving:
+            # Preserve reviewed pickup/drop/look pages and the complete native
+            # engraving dialogue, including every MORE before and during getlin.
+            # Unrelated commands retain NLE's atomic prompt handling.
             self._raw_environment._allow_all_modes = True
         try:
             observation, reward, terminated, truncated, information = (
@@ -374,6 +392,8 @@ class NleEnvironment:
             b"What do you want to drop?"
         )
         self._look_menu_open = look and bool(observation["misc"][2])
+        self._engraving_prompt_open = engraving and bool(np.any(observation["misc"]))
+        self._command_ready = not bool(np.any(observation["misc"]))
         self._step_index += 1
         if terminated or truncated:
             self._state = EnvironmentState.TERMINAL

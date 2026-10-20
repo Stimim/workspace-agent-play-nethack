@@ -19,6 +19,50 @@ verified ration instead of cancelling and reopening `EAT` at zero game turns
 `oracle-regression-v2` pin the active policy while all old suite definitions
 and reports stay unchanged.
 
+### Isolated candidate 0057 (not qualified)
+
+This worktree adds only combat Elbereth disengagement: at one-third HP with
+prayer unavailable, or after an HP prayer while the same encounter remains,
+the deterministic recovery skill writes dust Elbereth, verifies it with LOOK,
+and waits one turn at a time until the recovery target or a safety/budget exit.
+It does not add quiet rest or retreat movement. Unsafe or unsupported
+conditions fall back to existing behavior with an explicit recorded reason.
+Hungry stops recovery, and every failed write, prompt step and elapsed turn
+spends a persistent bounded budget. Only verified protection inhibits attacks.
+After exact protection readback, recovery remains combat-triggered even when
+the attackers flee out of sight. A separate established-recovery latch survives
+LOOK and repair, without treating a pending readback as verified protection.
+Publicly peaceful creatures are not attacking threats and do not interrupt
+this recovery. No prior combat trigger still means no wounded quiet-rest rule.
+
+The engraving transaction owns tool selection, optional overwrite, each text
+byte, submission and every MORE page. `disengage_action_error` is shared by
+selection, the runtime action gate, structural step validation and public
+event replay; command-letter collisions cannot become movement or EAT.
+The environment preserves only the owned native engraving prompts and LOOK
+pages. Native 3.6.7 Elbereth does not protect against distant attacks, immune
+monsters, or blind monsters; dust can be corrupted on creation and erodes.
+The existing policy labels and historical suites are retained pending a
+separate frozen qualification decision; light probes are diagnosis only.
+
+Chosen diagnostic defaults remain one-third entry HP, 75% recovery target,
+200 elapsed turns, two repair retries and 24 prompt steps per transaction.
+The higher joint arm (40%/80%) saved none of the eight selected deaths and
+did not justify widening the approved trigger. These probes do not establish
+an optimal target or cap. Recovery is limited to reviewed reachable branches
+(main dungeon, Mines and Sokoban) and non-polymorphed heroes below Overtaxed,
+outside shops/temples. Threat eligibility now follows NetHack 3.6.7's own
+Elbereth-immunity predicate from public glyph/description data: immune iff
+the glyph's species is the @ class, a minion-flagged celestial, a named
+unique (minotaur, shopkeeper, guard, priest, Wizard of Yendor, Riders), or
+its description names a shop/guard/priest role; unknown or undescribed
+glyphs are also excluded. Passive-attack species (gas spore, floating eye,
+the four colored molds, acid blob, blue/spotted jelly, shrieker) are never
+a threat and never interrupt recovery merely by being visible; they are
+never attacked from the protected square either. Known incoming ranged
+damage or damage during a protected wait disables stationary recovery;
+a monster the public log reports as blinded this encounter is excluded.
+
 ## System context
 ```mermaid
 flowchart LR
