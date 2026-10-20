@@ -44,18 +44,14 @@ Status and working notes for the next coding agent (for example Claude Code,
    budget, qualified as one unit) needs a recorded ADR 0007 exception to "one
    rule per qualification". The alternatives are the optional gate amendment
    (`TODO_LIST.md` order item 3) or a different roadmap item.
-2. **Commit provenance for Claude Code.** AGENTS.md rule 9 requires
-   `_agents/skills/omp-commit/scripts/omp_commit.py`. It finds the conversation
-   UUID of a running OMP client; if it is not run from inside OMP, it uses the
-   single live OMP session it can find. Commit `5892159` (the 0055 evidence
-   record, made by Claude Code) therefore carries the OMP orchestrator's
-   `OMP-Conversation` trailer, although no OMP session created it. While an
-   OMP session is open, the script will attribute Claude Code's commits to it;
-   when none is open, it refuses. The owner must choose a replacement rule,
-   for example a Claude Code session trailer or manual commits. Until then,
-   do not invent a trailer and keep the script's checks: ruff, plus the commit
-   guard requiring a staged qualification note or a `Qualification-Exempt:`
-   trailer for `nethack-agent/src/` changes.
+2. **Commit provenance for Claude Code: decided.** Claude Code commits by
+   itself (owner decision, 2026-10-20): stage, run
+   `_agents/skills/omp-commit/scripts/omp_commit.py guard --message-file FILE`,
+   then `git commit -F FILE`, keeping its `Co-Authored-By:` trailer (AGENTS.md
+   rule 9, `_agents/skills/omp-commit/SKILL.md`). Never use `omp_commit.py
+   commit` from Claude Code: outside OMP it falls back to the single live OMP
+   session. That is why commit `5892159` (the 0055 evidence record, made by
+   Claude Code) carries the OMP orchestrator's `OMP-Conversation` trailer.
 3. **Optional cleanups:** fix Markdown list formatting in 18 older docs (ADR
    0004, notes 0044/0049/0050, ...); trim README "Project status" history.
 
