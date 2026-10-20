@@ -42,6 +42,7 @@ The 2026-10-19 analysis covered **148 baseline deaths** plus the unqualified sta
 - Healing costs about **170 turns** per heal (`allmain.c:505`); food remains a constraint until stalls stop consuming it.
 - Optional ADR 0007 amendment: keep objectives nondecreasing but align the per-rule death gate with milestone acceptance (starvation and Weak-or-worse deaths nonincreasing). This would **not** rescue measured 0054: 4 of its 7 new deaths were Weak or worse.
 - Lycanthropy evidence currently only stops jackal/fox/coyote corpse eating; seed 6's cure came from prayer for another reason. Public infection message is “You feel feverish.” NetHack 3.6.7 prayer semantics are confirmed: `src/pray.c:207-208` checks `if (u.ulycn >= LOW_PM) return TROUBLE_LYCANTHROPE;` in the major-trouble block after `critically_low_hp`; `src/pray.c:466-467` handles `case TROUBLE_LYCANTHROPE: you_unwere(TRUE);`. The cure message is “You feel purified.” in `src/were.c`. Vault-guard compliance after involuntary relocation is motivated by seed 1377.
+- Compact per-death record (148 baseline and 7 candidate rows, regeneration scripts and commands): [evidence/0055/](evidence/0055/).
 
 ## Milestone 3 — Phase 4 food
 

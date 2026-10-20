@@ -1,0 +1,62 @@
+{"header":{
+ "record": "0055 death analysis: unqualified 0054 stall-budget candidate rerun (T=400, C=20), one row per death",
+ "suite": "death-diagnosis-0054-candidate (~/nethack-evidence/0055-death-analysis/suite.json), not qualification evidence",
+ "candidate_branch": "rule-0054-no-progress-budget",
+ "baseline_outcome": "oracle-diag seeds from 0052-base-or-reg, minetown-diag from 0052-base-mt-reg, 537 from 0051 run2 base-or-fresh",
+ "base_commit": "22d0a5f",
+ "policy_version": "hierarchical-survival-hp-prayer-burden-look-ration-v1",
+ "model": "scripted-development",
+ "diagnosis_only": true,
+ "class_definition": "summarize.py klass(): A hunger Weak+/starved; B >=3 unseen-attack msgs or blind; C entry HP <50%; D healthy entry, fight <=10 turns; E healthy entry, fight >10 turns",
+ "derived_fields": {
+  "hunger_at_death": "deaths.py `hunger`",
+  "max_nearby_speed": "max of deaths.py `nearby_speeds` (hostiles within 2 cells during the fight), 0 if none",
+  "last_live_*": "lastsec.py; null for hunger (class A) deaths, which lastsec.py skips"
+ },
+ "regenerate": [
+  "cd <checkout>  # deaths.py imports nethack_agent, so run it through the repo's uv project",
+  "uv run --project nethack-agent python docs/notes/evidence/0055/scripts/deaths.py OUT/baseline-deaths.json ~/nethack-evidence/0052/0052-base-mt-reg ~/nethack-evidence/0052/0052-base-or-reg ~/nethack-evidence/0052/0052-base-d5-reg ~/nethack-evidence/0052/0052-base-mt-fresh ~/nethack-evidence/0052/0052-base-or-fresh",
+  "uv run --project nethack-agent python docs/notes/evidence/0055/scripts/deaths.py OUT/cand-deaths.json ~/nethack-evidence/0055-death-analysis/cand",
+  "python3 -I docs/notes/evidence/0055/scripts/lastsec.py OUT/baseline-deaths.json OUT/lastsec.json",
+  "python3 -I docs/notes/evidence/0055/scripts/summarize.py OUT/baseline-deaths.json",
+  "python3 -I docs/notes/evidence/0055/scripts/build_record.py OUT docs/notes/evidence/0055",
+  "python3 -I docs/notes/evidence/0055/scripts/verify.py docs/notes/evidence/0055",
+  "python3 -I docs/notes/evidence/0055/scripts/prayers.py docs/notes/evidence/0055/baseline-deaths.json"
+ ],
+ "script_changes": "deaths.py, lastsec.py, summarize.py copied unchanged from ~/nethack-evidence/0055-death-analysis; imports resolve as-is (summarize via the script directory, nethack_agent via uv). Regenerated outputs were byte-identical to the originals on 2026-10-20.",
+ "inputs": [
+  {
+   "path": "~/nethack-evidence/0055-death-analysis/cand-deaths.json",
+   "sha256": "bbec20ad7205ea1f7eebec980307ab212a0765a0470059eb239c02e94791fd51"
+  },
+  {
+   "path": "~/nethack-evidence/0055-death-analysis/suite.json",
+   "sha256": "9908413d08a938699d605990dfd39ac615feda6420e345cb393faf4d5527e1be"
+  },
+  {
+   "path": "~/nethack-evidence/0055-death-analysis/cand/reports/death-diagnosis-0054-candidate-development-20261019T005851Z.json",
+   "sha256": "305909d5e47d895d4f3a653b208148f02d1df2c6e9feaaf6a99e723835f35951"
+  },
+  {
+   "path": "~/nethack-evidence/0052/0052-base-or-reg/reports/oracle-regression-v2-development-20261018T075922Z.json",
+   "sha256": "0de4cefbed101642f59cba4ed8e660e6530aedf4abecf63c8a7768e4ac27c98f"
+  },
+  {
+   "path": "~/nethack-evidence/0052/0052-base-mt-reg/reports/minetown-regression-v2-development-20261018T075922Z.json",
+   "sha256": "36a105b91c2b228034d54d2d1a7e5792ff2aebfe9c8e339a77e80d623590a366"
+  },
+  {
+   "path": "~/nethack-evidence/0051/run2/base-or-fresh/reports/oracle-fresh-v1-development-20261012T143742Z.json",
+   "sha256": "5a1e98aa1cb9d2dfd1af60c7a4262cf83f19b98ed263e6c85180a349a55f97c5"
+  }
+ ]
+},
+"rows":[
+{"arm":"cand","case":"minetown-diag","seed":1362,"cause":"poisoned by a killer bee","hunger_at_death":"not_hungry","level":[2,4],"depth":7,"xl":6,"maxhp":55,"ac":6,"death_turn":9592,"fight_turns":26,"hp_entry":55,"frac_entry":1.0,"pray_ok_entry":true,"prayed_in_fight":true,"turns_until_prayer_entry":0,"up_dist":39,"max_nearby_speed":18,"attackers":["garter snake","giant ant","killer bee","newt","rabid rat","rock mole","snake","straw golem"],"unseen_attack_msgs":0,"blind":false,"food_items":1,"last_live_hp":null,"last_live_max":null,"last_live_critical":null,"class":"E","baseline_outcome":"truncated"},
+{"arm":"cand","case":"minetown-diag","seed":1376,"cause":"killed by a giant ant","hunger_at_death":"fainting","level":[0,4],"depth":4,"xl":6,"maxhp":68,"ac":6,"death_turn":7042,"fight_turns":20,"hp_entry":68,"frac_entry":1.0,"pray_ok_entry":false,"prayed_in_fight":false,"turns_until_prayer_entry":35,"up_dist":12,"max_nearby_speed":18,"attackers":["giant ant"],"unseen_attack_msgs":0,"blind":false,"food_items":0,"last_live_hp":null,"last_live_max":null,"last_live_critical":null,"class":"A","baseline_outcome":"truncated"},
+{"arm":"cand","case":"oracle-diag","seed":6,"cause":"killed by a pony","hunger_at_death":"hungry","level":[0,5],"depth":5,"xl":5,"maxhp":57,"ac":6,"death_turn":4877,"fight_turns":14,"hp_entry":20,"frac_entry":0.351,"pray_ok_entry":true,"prayed_in_fight":true,"turns_until_prayer_entry":0,"up_dist":42,"max_nearby_speed":18,"attackers":["iguana","pony"],"unseen_attack_msgs":0,"blind":false,"food_items":1,"last_live_hp":null,"last_live_max":null,"last_live_critical":null,"class":"C","baseline_outcome":"death"},
+{"arm":"cand","case":"oracle-diag","seed":537,"cause":"killed by a rothe","hunger_at_death":"weak","level":[0,6],"depth":6,"xl":6,"maxhp":49,"ac":6,"death_turn":5814,"fight_turns":8,"hp_entry":49,"frac_entry":1.0,"pray_ok_entry":false,"prayed_in_fight":false,"turns_until_prayer_entry":7,"up_dist":37,"max_nearby_speed":9,"attackers":["rothe"],"unseen_attack_msgs":0,"blind":false,"food_items":0,"last_live_hp":null,"last_live_max":null,"last_live_critical":null,"class":"A","baseline_outcome":"truncated"},
+{"arm":"cand","case":"oracle-diag","seed":924,"cause":"killed by a giant ant","hunger_at_death":"hungry","level":[0,4],"depth":4,"xl":4,"maxhp":45,"ac":6,"death_turn":1099,"fight_turns":1,"hp_entry":3,"frac_entry":0.067,"pray_ok_entry":false,"prayed_in_fight":false,"turns_until_prayer_entry":664,"up_dist":29,"max_nearby_speed":18,"attackers":["giant ant"],"unseen_attack_msgs":0,"blind":false,"food_items":1,"last_live_hp":null,"last_live_max":null,"last_live_critical":null,"class":"C","baseline_outcome":"truncated"},
+{"arm":"cand","case":"oracle-diag","seed":1369,"cause":"died of starvation","hunger_at_death":"fainting","level":[0,2],"depth":2,"xl":5,"maxhp":16,"ac":6,"death_turn":8045,"fight_turns":270,"hp_entry":9,"frac_entry":1.0,"pray_ok_entry":false,"prayed_in_fight":false,"turns_until_prayer_entry":494,"up_dist":92,"max_nearby_speed":9,"attackers":["orc zombie"],"unseen_attack_msgs":0,"blind":false,"food_items":0,"last_live_hp":null,"last_live_max":null,"last_live_critical":null,"class":"A","baseline_outcome":"death"},
+{"arm":"cand","case":"oracle-diag","seed":1379,"cause":"killed by an orc zombie","hunger_at_death":"fainting","level":[0,6],"depth":6,"xl":5,"maxhp":58,"ac":6,"death_turn":3930,"fight_turns":17,"hp_entry":47,"frac_entry":0.81,"pray_ok_entry":false,"prayed_in_fight":false,"turns_until_prayer_entry":348,"up_dist":7,"max_nearby_speed":12,"attackers":["grid bug"],"unseen_attack_msgs":0,"blind":false,"food_items":0,"last_live_hp":null,"last_live_max":null,"last_live_critical":null,"class":"A","baseline_outcome":"truncated"}
+]}
