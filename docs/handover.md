@@ -45,13 +45,16 @@ Status and working notes for the next coding agent (for example Claude Code,
    rule per qualification". The alternatives are the optional gate amendment
    (`TODO_LIST.md` order item 3) or a different roadmap item.
 2. **Commit provenance for Claude Code: decided.** Claude Code commits by
-   itself (owner decision, 2026-10-20): stage, run
-   `_agents/skills/omp-commit/scripts/omp_commit.py guard --message-file FILE`,
-   then `git commit -F FILE`, keeping its `Co-Authored-By:` trailer (AGENTS.md
-   rule 9, `_agents/skills/omp-commit/SKILL.md`). Never use `omp_commit.py
-   commit` from Claude Code: outside OMP it falls back to the single live OMP
-   session. That is why commit `5892159` (the 0055 evidence record, made by
-   Claude Code) carries the OMP orchestrator's `OMP-Conversation` trailer.
+   itself (owner decision, 2026-10-20) with
+   `_agents/skills/omp-commit/scripts/omp_commit.py claude-commit
+   --message-file FILE`. It runs the guard and checks and adds one
+   `Claude-Session: <id>` trailer beside `Co-Authored-By:`, so `claude
+   --resume <id>` reopens the conversation (AGENTS.md rule 9,
+   `_agents/skills/omp-commit/SKILL.md`). `omp_commit.py commit` refuses to
+   run inside Claude Code: outside OMP it falls back to the single live OMP
+   session. That is why commit `5892159` (the 0055 evidence record) carries
+   the OMP orchestrator's `OMP-Conversation` trailer; it was actually made by
+   Claude Code session `ebfd92cf-38da-48d2-b9b3-fb2d860347f9`.
 3. **Optional cleanups:** fix Markdown list formatting in 18 older docs (ADR
    0004, notes 0044/0049/0050, ...); trim README "Project status" history.
 

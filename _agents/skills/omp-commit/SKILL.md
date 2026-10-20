@@ -33,11 +33,12 @@ Use `commit --dry-run` to run the checks and print the normalized message withou
 
 ## Sessions outside OMP (Claude Code)
 
-A session not running inside OMP must not use `commit`: outside an OMP ancestor the script falls back to the single live OMP client and would attribute the commit to that unrelated session. Instead, stage the intended changes, write the message to a file outside the worktree, then run:
+A session not running inside OMP must not use `commit`: outside an OMP ancestor the script falls back to the single live OMP client and would attribute the commit to that unrelated session. `commit` therefore refuses to run when `CLAUDE_CODE_SESSION_ID` is set. Instead, stage the intended changes, write the message (ending with Claude Code's `Co-Authored-By:` trailer) to a file outside the worktree, then run:
 
 ```bash
-_agents/skills/omp-commit/scripts/omp_commit.py guard --message-file /path/to/message
-git commit -F /path/to/message
+_agents/skills/omp-commit/scripts/omp_commit.py claude-commit --message-file /path/to/message
 ```
 
-`guard` applies the same staged-source qualification guard and ruff checks as `commit`, without resolving or writing an `OMP-Conversation` trailer. Keep Claude Code's `Co-Authored-By:` trailer. The orchestrating-session and worker-verification rules above still apply.
+`claude-commit` reads `CLAUDE_CODE_SESSION_ID`, which Claude Code exports to every command it runs, and requires it to be a UUID with exactly one transcript `~/.claude/projects/*/<id>.jsonl`; otherwise it fails without committing. It refuses a message without a `Co-Authored-By: Claude` line, removes any `Claude-Session` or `OMP-Conversation` lines, and adds exactly one `Claude-Session: <id>` trailer to the `Co-Authored-By` trailer block. It then applies the same staged-source qualification guard, commit-argument restrictions and ruff checks as `commit`; `--dry-run` prints the final message instead. Resume the conversation that made a commit with `claude --resume <id>` from the repository. `--claude-root` exists for tests; normal use must retain its default.
+
+`guard --message-file FILE` runs only the qualification guard and checks, without committing. The orchestrating-session and worker-verification rules above still apply.

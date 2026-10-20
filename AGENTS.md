@@ -41,11 +41,12 @@ Before changing behavior, read:
    - OMP sessions commit with `omp_commit.py commit`, which runs the checks
      and writes exactly one `OMP-Conversation: <conversation-uuid>` trailer
      from process/session evidence.
-   - Claude Code sessions commit directly with `git commit` after
-     `omp_commit.py guard --message-file FILE` passes on the staged index.
-     They must not use `omp_commit.py commit` (it would attribute the commit
-     to whatever OMP session is open) and keep Claude Code's
-     `Co-Authored-By:` trailer.
+   - Claude Code sessions commit with `omp_commit.py claude-commit`, which
+     runs the same checks and writes exactly one `Claude-Session:
+     <session-uuid>` trailer from `CLAUDE_CODE_SESSION_ID` and its
+     transcript, beside Claude Code's required `Co-Authored-By:` trailer.
+     `omp_commit.py commit` refuses to run inside Claude Code (it would
+     attribute the commit to whatever OMP session is open).
    Never invent or manually substitute an identifier.
 10. Only the orchestrating session commits. Subagents and worker sessions
     hand over a branch or patch file and never commit. Before committing,

@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Create a checked Git commit with the active OMP conversation trailer."""
+"""Create a checked Git commit with the active OMP conversation trailer.
+
+`claude-commit` does the same for Claude Code sessions with a validated
+`Claude-Session` trailer.
+"""
 
 from __future__ import annotations
 
@@ -18,6 +22,11 @@ _UUID = re.compile(
     re.IGNORECASE,
 )
 _TRAILER = re.compile(r"^OMP-Conversation\s*:", re.IGNORECASE)
+_CLAUDE_TRAILER = re.compile(r"^Claude-Session\s*:", re.IGNORECASE)
+_CLAUDE_CO_AUTHOR = re.compile(r"^Co-Authored-By:\s*Claude\b", re.IGNORECASE)
+# Claude Code exports its session ID to every command it runs; the same ID
+# names the transcript and resumes the conversation (`claude --resume ID`).
+_CLAUDE_SESSION_ENV = "CLAUDE_CODE_SESSION_ID"
 _EXEMPT_TRAILER = re.compile(r"^Qualification-Exempt:\s*(\S.*)$")
 _DECISION_HEADING = re.compile(
     r"^#{2,3} .*(Decision|decision|QUALIFIED|Qualified|REJECT|Rejected|disposition)"
@@ -220,6 +229,23 @@ def active_conversation_uuid(repository: Path, omp_root: Path, proc_root: Path) 
     return conversation
 
 
+def active_claude_session(claude_root: Path, environ: dict[str, str]) -> str:
+    session = environ.get(_CLAUDE_SESSION_ENV, "")
+    if not _UUID.fullmatch(session):
+        raise CommitSkillError(
+            f"{_CLAUDE_SESSION_ENV} is missing or not a UUID; "
+            "claude-commit must run from a Claude Code session"
+        )
+    projects = claude_root / "projects"
+    transcripts = sorted(projects.glob(f"*/{session}.jsonl"))
+    if len(transcripts) != 1:
+        raise CommitSkillError(
+            f"expected exactly one Claude Code transcript {session}.jsonl "
+            f"under {projects}, found {len(transcripts)}"
+        )
+    return session
+
+
 def _run_checks(repository: Path) -> None:
     product = repository / "nethack-agent"
     if not (product / "pyproject.toml").is_file():
@@ -325,6 +351,45 @@ def _message_with_trailer(message: str, conversation: str) -> str:
     return normalized
 
 
+def _message_with_claude_trailer(repository: Path, message: str, session: str) -> str:
+    kept = [
+        line
+        for line in message.splitlines()
+        if not (_TRAILER.match(line) or _CLAUDE_TRAILER.match(line))
+    ]
+    if not any(_CLAUDE_CO_AUTHOR.match(line) for line in kept):
+        raise CommitSkillError(
+            "Claude Code commits must keep their Co-Authored-By: Claude trailer"
+        )
+    trailer = f"Claude-Session: {session}"
+    # interpret-trailers appends to the existing Co-Authored-By block, so Git
+    # still parses both lines as trailers.
+    normalized = subprocess.run(
+        ["git", "-C", str(repository), "interpret-trailers", "--trailer", trailer],
+        input="\n".join(kept).rstrip() + "\n",
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    parsed = subprocess.run(
+        ["git", "-C", str(repository), "interpret-trailers", "--parse"],
+        input=normalized,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+    sessions = [line for line in normalized.splitlines() if _CLAUDE_TRAILER.match(line)]
+    if (
+        sessions != [trailer]
+        or trailer not in parsed
+        or not any(_CLAUDE_CO_AUTHOR.match(line) for line in parsed)
+    ):
+        raise CommitSkillError(
+            "failed to produce one Claude-Session trailer beside Co-Authored-By"
+        )
+    return normalized
+
+
 def _validate_commit_args(arguments: list[str]) -> list[str]:
     if arguments[:1] == ["--"]:
         arguments = arguments[1:]
@@ -376,6 +441,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--repo", type=Path, default=Path.cwd())
     parser.add_argument("--omp-root", type=Path, default=Path.home() / ".omp")
     parser.add_argument("--proc-root", type=Path, default=Path("/proc"))
+    parser.add_argument("--claude-root", type=Path, default=Path.home() / ".claude")
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("resolve")
     subparsers.add_parser("checks")
@@ -387,7 +453,51 @@ def _parser() -> argparse.ArgumentParser:
     commit.add_argument("--message-file", required=True, type=Path)
     commit.add_argument("--dry-run", action="store_true")
     commit.add_argument("git_arguments", nargs=argparse.REMAINDER)
+    claude = subparsers.add_parser(
+        "claude-commit", help="commit from Claude Code with its session trailer"
+    )
+    claude.add_argument("--message-file", required=True, type=Path)
+    claude.add_argument("--dry-run", action="store_true")
+    claude.add_argument("git_arguments", nargs=argparse.REMAINDER)
     return parser
+
+
+def _commit(
+    repository: Path,
+    message: str,
+    normalized: str,
+    git_arguments: list[str],
+    dry_run: bool,
+) -> int:
+    _qualification_guard(repository, message)
+    commit_arguments = _validate_commit_args(git_arguments)
+    _run_checks(repository)
+    if dry_run:
+        sys.stdout.write(normalized)
+        return 0
+    with tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", prefix="omp-commit-", delete=False
+    ) as message_file:
+        message_file.write(normalized)
+        temporary_message = Path(message_file.name)
+    try:
+        completed = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repository),
+                "commit",
+                *commit_arguments,
+                "-F",
+                str(temporary_message),
+            ],
+            check=False,
+        )
+    finally:
+        temporary_message.unlink(missing_ok=True)
+    if completed.returncode:
+        raise CommitSkillError(f"git commit failed with status {completed.returncode}")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -405,6 +515,24 @@ def main(argv: list[str] | None = None) -> int:
             _run_checks(repository)
             print("guard and checks passed")
             return 0
+        if arguments.command == "claude-commit":
+            session = active_claude_session(arguments.claude_root, dict(os.environ))
+            message = arguments.message_file.read_text(encoding="utf-8")
+            normalized = _message_with_claude_trailer(repository, message, session)
+            return _commit(
+                repository,
+                message,
+                normalized,
+                arguments.git_arguments,
+                arguments.dry_run,
+            )
+        if arguments.command == "commit" and os.environ.get(_CLAUDE_SESSION_ENV):
+            # Outside OMP, resolution falls back to whichever OMP session is
+            # open and would misattribute the commit.
+            raise CommitSkillError(
+                f"{_CLAUDE_SESSION_ENV} is set: this is a Claude Code session; "
+                "use claude-commit"
+            )
         conversation = active_conversation_uuid(
             repository, arguments.omp_root, arguments.proc_root
         )
@@ -414,37 +542,13 @@ def main(argv: list[str] | None = None) -> int:
 
         message = arguments.message_file.read_text(encoding="utf-8")
         normalized = _message_with_trailer(message, conversation)
-        _qualification_guard(repository, message)
-        commit_arguments = _validate_commit_args(arguments.git_arguments)
-        _run_checks(repository)
-        if arguments.dry_run:
-            sys.stdout.write(normalized)
-            return 0
-        with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", prefix="omp-commit-", delete=False
-        ) as message_file:
-            message_file.write(normalized)
-            temporary_message = Path(message_file.name)
-        try:
-            completed = subprocess.run(
-                [
-                    "git",
-                    "-C",
-                    str(repository),
-                    "commit",
-                    *commit_arguments,
-                    "-F",
-                    str(temporary_message),
-                ],
-                check=False,
-            )
-        finally:
-            temporary_message.unlink(missing_ok=True)
-        if completed.returncode:
-            raise CommitSkillError(
-                f"git commit failed with status {completed.returncode}"
-            )
-        return 0
+        return _commit(
+            repository,
+            message,
+            normalized,
+            arguments.git_arguments,
+            arguments.dry_run,
+        )
     except (CommitSkillError, OSError, UnicodeError) as error:
         print(f"omp-commit: {error}", file=sys.stderr)
         return 2

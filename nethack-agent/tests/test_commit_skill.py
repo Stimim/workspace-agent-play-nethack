@@ -16,6 +16,8 @@ SCRIPT = (
 )
 CONVERSATION = "01a0dd35-4ec8-76dd-9c86-bcac1fdb25c5"
 OTHER_CONVERSATION = "12345678-1234-4123-8123-123456789abc"
+CLAUDE_SESSION = "ebfd92cf-38da-48d2-b9b3-fb2d860347f9"
+CO_AUTHOR = "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 
 def _add_client(
@@ -125,6 +127,8 @@ def _scratch_repository(tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
     )
     fake_uv.chmod(0o755)
     environment = os.environ.copy()
+    # These tests may themselves run inside Claude Code.
+    environment.pop("CLAUDE_CODE_SESSION_ID", None)
     environment["PATH"] = f"{binary_directory}{os.pathsep}{environment['PATH']}"
     environment["CHECK_LOG"] = str(check_log)
     return repository, check_log, environment
@@ -533,3 +537,164 @@ def test_refuses_commit_arguments_that_bypass_staged_index(
         ).returncode
         != 0
     )
+
+
+def _claude_commit(
+    tmp_path: Path,
+    message_text: str,
+    *,
+    session: str | None = CLAUDE_SESSION,
+    transcripts: tuple[str, ...] = ("-home-user-repository",),
+    stage_source: bool = False,
+    extra: tuple[str, ...] = (),
+) -> tuple[subprocess.CompletedProcess[str], Path, Path]:
+    repository, check_log, environment = _scratch_repository(tmp_path)
+    if stage_source:
+        _stage(repository, "nethack-agent/src/change.py", "change = True\n")
+    claude_root = tmp_path / "claude"
+    for project in transcripts:
+        transcript = claude_root / "projects" / project / f"{CLAUDE_SESSION}.jsonl"
+        transcript.parent.mkdir(parents=True)
+        transcript.write_text("{}\n", encoding="utf-8")
+    if session is not None:
+        environment["CLAUDE_CODE_SESSION_ID"] = session
+    message = tmp_path / "message.txt"
+    message.write_text(message_text, encoding="utf-8")
+    completed = _skill(
+        repository,
+        tmp_path / "omp",
+        tmp_path / "proc",
+        "--claude-root",
+        str(claude_root),
+        "claude-commit",
+        "--message-file",
+        str(message),
+        *extra,
+        env=environment,
+    )
+    return completed, repository, check_log
+
+
+def _has_head(repository: Path) -> bool:
+    return (
+        subprocess.run(
+            ["git", "-C", str(repository), "rev-parse", "--verify", "HEAD"],
+            capture_output=True,
+            check=False,
+        ).returncode
+        == 0
+    )
+
+
+def test_claude_commit_writes_one_session_trailer_beside_co_author(
+    tmp_path: Path,
+) -> None:
+    original = (
+        "Explain the change\n\n"
+        "Body text.\n\n"
+        "Claude-Session: 00000000-0000-4000-8000-000000000000\n"
+        "OMP-Conversation: 11111111-1111-4111-8111-111111111111\n"
+        f"{CO_AUTHOR}\n"
+    )
+    completed, repository, check_log = _claude_commit(tmp_path, original)
+
+    assert completed.returncode == 0, completed.stderr
+    message = subprocess.run(
+        ["git", "-C", str(repository), "log", "-1", "--format=%B"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert message.count("Claude-Session:") == 1
+    assert "OMP-Conversation" not in message
+    trailers = subprocess.run(
+        ["git", "-C", str(repository), "log", "-1", "--format=%(trailers:only)"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+    assert CO_AUTHOR in trailers
+    assert f"Claude-Session: {CLAUDE_SESSION}" in trailers
+    assert len(check_log.read_text().splitlines()) == 2
+
+
+def test_claude_commit_dry_run_prints_message_without_committing(
+    tmp_path: Path,
+) -> None:
+    completed, repository, _ = _claude_commit(
+        tmp_path, f"Dry run\n\n{CO_AUTHOR}\n", extra=("--dry-run",)
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout == (
+        f"Dry run\n\n{CO_AUTHOR}\nClaude-Session: {CLAUDE_SESSION}\n"
+    )
+    assert not _has_head(repository)
+
+
+@pytest.mark.parametrize(
+    ("session", "transcripts", "error"),
+    [
+        (None, ("-home-user-repository",), "CLAUDE_CODE_SESSION_ID is missing"),
+        ("not-a-uuid", ("-home-user-repository",), "not a UUID"),
+        (CLAUDE_SESSION, (), "found 0"),
+        (CLAUDE_SESSION, ("-home-user-a", "-home-user-b"), "found 2"),
+    ],
+)
+def test_claude_commit_hard_fails_without_unique_session_evidence(
+    tmp_path: Path, session: str | None, transcripts: tuple[str, ...], error: str
+) -> None:
+    completed, repository, check_log = _claude_commit(
+        tmp_path,
+        f"Must not commit\n\n{CO_AUTHOR}\n",
+        session=session,
+        transcripts=transcripts,
+    )
+
+    assert completed.returncode == 2
+    assert error in completed.stderr
+    assert not _has_head(repository)
+    assert not check_log.exists()
+
+
+def test_claude_commit_requires_the_co_author_trailer(tmp_path: Path) -> None:
+    completed, repository, _ = _claude_commit(tmp_path, "No attribution\n")
+
+    assert completed.returncode == 2
+    assert "Co-Authored-By: Claude" in completed.stderr
+    assert not _has_head(repository)
+
+
+def test_claude_commit_keeps_the_qualification_guard(tmp_path: Path) -> None:
+    completed, repository, _ = _claude_commit(
+        tmp_path, f"Product change\n\n{CO_AUTHOR}\n", stage_source=True
+    )
+
+    assert completed.returncode == 2
+    assert "nethack-agent/src/change.py" in completed.stderr
+    assert not _has_head(repository)
+
+
+def test_omp_commit_refuses_inside_claude_code(tmp_path: Path) -> None:
+    repository, check_log, environment = _scratch_repository(tmp_path)
+    omp_root = tmp_path / "omp"
+    proc_root = tmp_path / "proc"
+    _add_client(omp_root, proc_root, repository, pid=701, conversation=CONVERSATION)
+    environment["CLAUDE_CODE_SESSION_ID"] = CLAUDE_SESSION
+    message = tmp_path / "message.txt"
+    message.write_text("Wrong provenance\n", encoding="utf-8")
+
+    completed = _skill(
+        repository,
+        omp_root,
+        proc_root,
+        "commit",
+        "--message-file",
+        str(message),
+        env=environment,
+    )
+
+    assert completed.returncode == 2
+    assert "use claude-commit" in completed.stderr
+    assert not _has_head(repository)
+    assert not check_log.exists()
