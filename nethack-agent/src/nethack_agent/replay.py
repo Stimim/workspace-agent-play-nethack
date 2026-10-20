@@ -70,14 +70,18 @@ def stair_target(goal: Goal) -> StairTarget | None:
     return goal.target if isinstance(goal, STAIR_GOAL_TYPES) else None
 
 
-def legacy_rearm(goal: Goal) -> bool:
+def legacy_rearm(goal: Goal, memory: LevelMemory) -> bool:
     """Whether a stuck re-arm starts another legacy search round.
 
-    It matches the exploration skill's own dispatch: a goal without a stair
-    target (explore, temple, altar and Oracle goals) explores with the
-    round-based legacy search, which only a new round can widen.
+    It matches the exploration skill's own dispatch
+    (`navigation_budget.legacy_navigation`): a goal without a stair target
+    (explore, temple, altar and Oracle goals), or stair travel whose time
+    budget is spent, explores with the round-based legacy search, which
+    only a new round can widen.
     """
-    return stair_target(goal) is None
+    from nethack_agent.navigation_budget import legacy_navigation
+
+    return legacy_navigation(memory, stair_target(goal))
 
 
 def routine_actions(legal_actions: Iterable[LegalAction]) -> dict[str, LegalAction]:
@@ -317,7 +321,7 @@ class ExplorationReplay:
             )
         if decision is not None:
             if stuck_consulted and decision.skill is Skill.EXPLORE_LEVEL:
-                memory.rearm(legacy=legacy_rearm(goal))
+                memory.rearm(legacy=legacy_rearm(goal, memory))
             self._skill_selected = True
         if problem is None:
             problem = kick_action_error(payload.action.name, payload.selection, memory)

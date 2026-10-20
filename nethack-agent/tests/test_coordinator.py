@@ -2014,3 +2014,95 @@ def test_native_runtime_evaluator_and_replay_share_navigation_budget(
         assert consulted
     finally:
         agent.stop()
+
+
+def test_evaluator_mirrors_a_stuck_minetown_rearm(tmp_path: Path) -> None:
+    # 0059 development smoke, Minetown seed 1367: the hero reaches Minetown
+    # (Mines 3), exploration gets stuck and the scripted model re-arms it.
+    # The evaluator's own level memory must re-arm at the same step, or every
+    # later search is scored invalid against stale abandoned goals.
+    task = GOAL_PRESETS["minetown"]
+    steps = 1300
+    agent = coordinator(
+        tmp_path, ScriptedDevelopmentModel(), seed=1367, max_steps=steps, task=task
+    )
+    initial = agent.start()
+    initial_goal = agent.snapshot().current_goal
+    agent.resume()
+    try:
+        records = []
+        for _ in range(steps):
+            step = agent.advance()
+            assert step is not None
+            records.append(step)
+            if step.outcome is not None:
+                break
+        assert records[-1].outcome is not None
+        consults = [
+            index
+            for index, record in enumerate(records)
+            if record.skill_model_decision is not None
+        ]
+        assert len(consults) >= 2
+        assert records[consults[1]].after.player.dungeon_number == 2
+        assert any(
+            record.action.name == "Command.SEARCH" for record in records[consults[1] :]
+        )
+
+        suite = load_suite(
+            Path(__file__).resolve().parents[1]
+            / "evaluation"
+            / "minetown-fresh-v1.json"
+        )
+        case = replace(suite.cases[0], task=task, max_episode_steps=steps)
+        timestamp = "2026-10-21T00:00:00+00:00"
+        run = RunRecord(
+            id="seed-1367-minetown-rearm",
+            created_at=timestamp,
+            updated_at=timestamp,
+            state=RunState.TERMINAL,
+            outcome=records[-1].outcome,
+            environment=task.environment.value,
+            character=suite.character,
+            suite_seed=1367,
+            core_seed=1367,
+            display_seed=1367,
+            level_seed=1367,
+            max_episode_steps=steps,
+            model="scripted",
+            policy_version="policy",
+            knowledge_version="knowledge",
+            nle_version="1.3.0",
+            ollama_num_ctx=8192,
+            ollama_version=None,
+            ttyrec_path=str(agent.ttyrec_files[0]),
+            error=None,
+            task=task,
+        )
+        events = [
+            RunEvent(
+                0,
+                timestamp,
+                EventKind.RUN_STARTED,
+                RunStartedPayload(initial, agent.legal_actions, initial_goal, None),
+            ),
+            *(
+                RunEvent(index, timestamp, EventKind.STEP, step_payload(step))
+                for index, step in enumerate(records, start=1)
+            ),
+        ]
+        result = summarize_run(
+            run,
+            events,
+            suite=suite,
+            case=case,
+            seed=1367,
+            ended_by="episode_end",
+            wall_seconds=0.0,
+            data_directory=tmp_path,
+        )
+        assert result.invalid_actions == 0
+        assert result.gate_rejections == 0
+        assert result.integrity_problems == ()
+    finally:
+        agent.stop()

@@ -114,6 +114,7 @@ from nethack_agent.replay import (
     ExplorationReplay,
     derive_action_record,
     kick_action_error,
+    legacy_rearm,
 )
 from nethack_agent.run_manager import POLICY_VERSION, ModelFactory, RunManager
 from nethack_agent.skills import item_selection_commands
@@ -1835,6 +1836,9 @@ def summarize_run(
     kill_count = 0
     pending_prayer: PrayerEvidence | None = None
     prayer_memory = DungeonMemory()
+    # Mirrors ExplorationReplay: the first model skill decision is initial
+    # selection; later ones are stuck consultations that re-arm exploration.
+    skill_selected = False
     corpse_kills: dict[tuple[LevelKey, int, int], CorpseKill] = {}
     consumed_corpses: set[tuple[LevelKey, int, int, int | None]] = set()
     pending_corpse: CorpseEvidence | None = None
@@ -1890,6 +1894,20 @@ def summarize_run(
                         else (last_prayer_turn + PRAYER_REPEAT_WAIT_TURNS),
                     ),
                 )
+            if payload.skill_decision is not None:
+                if (
+                    skill_selected
+                    and payload.skill_decision.skill is Skill.EXPLORE_LEVEL
+                    and prayer_memory.current.level is not None
+                ):
+                    # The coordinator re-arms before choosing this action, so
+                    # its search and recovery evidence is checked after it.
+                    prayer_memory.current.rearm(
+                        legacy=legacy_rearm(
+                            payload.selection.goal, prayer_memory.current
+                        )
+                    )
+                skill_selected = True
             valid = _action_is_valid(
                 payload,
                 legal_actions,

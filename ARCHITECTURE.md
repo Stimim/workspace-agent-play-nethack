@@ -383,7 +383,9 @@ hero has been adjacent to, search coverage, learned blocked moves, locked
 doors, kicks, peaceful monster glyphs, stair identities and links, and whether
 exploration exhausted it; these persist across visits. Abandoned goals,
 suspect edges, position history, search coverage, blocker waits, and local
-elapsed no-progress time also persist across model re-arms and revisits. Only
+elapsed no-progress time also persist across revisits; search coverage, waits
+and the clock also persist across model re-arms, while every re-arm forgives
+the suspected quarantine (abandoned goals, suspect edges, history). Only
 newly observed terrain/structural knowledge resets the no-progress clock and transient routing quarantine; time spent on
 another level is excluded. Local-recovery departure is judged by the
 level's peak no-progress time (`navigation_spent`), not the current clock:
@@ -474,13 +476,21 @@ search or blocker waiting. This per-candidate cap and per-level no-progress
 clock share one public-evidence predicate across skill selection,
 `ActionGate`, `StepPayload`, and evaluator replay. Blocker waits consume that
 same clock and their persistent eight-action allowance. A model's
-`explore_level` consultation on a place objective only reconsiders the
-existing destination: unlike the explicit leg, it never starts a new round,
-widens the cap, or clears quarantine/waits.
+`explore_level` consultation on unspent stair travel reconsiders the
+destination and forgives suspected quarantine (moves that failed in a trap
+would otherwise block every exit), but never starts a new round, widens the
+cap, or clears waits. Once the clock is spent, a level with a local-recovery
+permit is left by the planner before exploration runs; elsewhere (a hidden
+Dlvl 1 downstairs, `reach_level`) search and blocker waits fall back to the
+legacy round algorithm and its re-arms (`navigation_budget.legacy_navigation`,
+`replay.legacy_rearm`, shared by skill, coordinator, replay and evaluator),
+so the hero keeps searching instead of waiting.
 Routing that dithers among at most six cells for 12 moves, or 100 routed moves
 without new knowledge, quarantines its goal until actual map progress.
-Spending this finite budget yields `navigation_budget_exhausted`, never
-`search_exhausted`/explored/completed credit on a place objective.
+Spending the finite cap before the clock yields
+`navigation_budget_exhausted`, never explored/completed credit; after the
+clock, the legacy rounds report `search_exhausted` as they do on the explicit
+leg.
 
 The existing Minetown/Oracle objective planner may use a separate
 `local_recovery` intent permit to continue its normal goal-compatible stair

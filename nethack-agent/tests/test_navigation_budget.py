@@ -139,20 +139,23 @@ def test_rearm_forgives_failed_moves_from_a_trap(template, actions):
         memory.record(ActionRecord(ActionKind.MOVE, origin, (origin[0] + 1, origin[1])))
         memory.observe(sketch(template, lines, step=step))
     memory.navigation_turns = memory.navigation_progress_turns + NO_PROGRESS_TURN_LIMIT
+    for point in route_tree(memory).distances:
+        for cell in _search_targets(memory, point):
+            memory.search_coverage[cell] = SEARCH_CANDIDATE_CAP
     skill = ExploreLevelSkill()
     stuck = skill.select_action(memory, actions, STAND_ON_DOWNSTAIRS.target)
     assert stuck.action is None
-    assert stuck.stuck is StuckReason.NAVIGATION_BUDGET_EXHAUSTED
     memory.rearm()
     resumed = skill.select_action(memory, actions, STAND_ON_DOWNSTAIRS.target)
     assert resumed.action is not None
     assert resumed.action.record.kind is ActionKind.MOVE
 
 
-def test_goals_without_stair_targets_rearm_like_the_legacy_search():
+def test_goals_without_stair_targets_rearm_like_the_legacy_search(template):
     # 0059 development pass, Minetown 901 and 1367: temple and altar goals
     # explore with the round-based legacy search, so a stuck re-arm must
     # start another round for them, not only for explore_dungeon legs.
+    memory = remembered(template, ROOM)
     minetown = LevelKey(2, 3)
     for goal in (
         ExploreLevelGoal(minetown),
@@ -160,8 +163,25 @@ def test_goals_without_stair_targets_rearm_like_the_legacy_search():
         OccupyAltarGoal(minetown),
         ApproachOracleGoal(LevelKey(0, 6)),
     ):
-        assert legacy_rearm(goal)
-    assert not legacy_rearm(STAND_ON_DOWNSTAIRS)
+        assert legacy_rearm(goal, memory)
+    assert not legacy_rearm(STAND_ON_DOWNSTAIRS, memory)
+    # Spent stair travel searches like the legacy algorithm too.
+    memory.navigation_turns = memory.navigation_progress_turns + NO_PROGRESS_TURN_LIMIT
+    assert legacy_rearm(STAND_ON_DOWNSTAIRS, memory)
+
+
+def test_spent_stair_travel_keeps_searching_for_a_hidden_exit(template, actions):
+    # 0059 development pass, Minetown seed 1: the Dlvl 1 downstairs is
+    # hidden and there is nowhere to depart to. A spent budget must not
+    # turn search into waiting until truncation.
+    memory = remembered(template, ROOM)
+    memory.navigation_turns = memory.navigation_progress_turns + NO_PROGRESS_TURN_LIMIT
+    result = ExploreLevelSkill().select_action(
+        memory, actions, STAND_ON_DOWNSTAIRS.target
+    )
+    assert result.action is not None
+    assert result.action.record.kind in (ActionKind.SEARCH, ActionKind.MOVE)
+    assert result.stuck is None
 
 
 def test_frontier_precedes_search_even_after_time_budget(template, actions):
@@ -189,9 +209,11 @@ def test_wait_limits_and_frontier_preference(template, actions):
     assert proposal.intent.navigation == evidence
     memory.monster_waits = MONSTER_WAIT_LIMIT
     assert wait_evidence(memory, blocker, STAND_ON_DOWNSTAIRS.target) is None
-    memory.monster_waits = 0
+    # A spent budget falls back to the legacy blocker wait and its limit.
     memory.navigation_turns = memory.navigation_progress_turns + NO_PROGRESS_TURN_LIMIT
     assert wait_evidence(memory, blocker, STAND_ON_DOWNSTAIRS.target) is None
+    memory.monster_waits = 0
+    assert wait_evidence(memory, blocker, STAND_ON_DOWNSTAIRS.target) is not None
 
 
 def test_blocked_stairs_defer_to_reachable_frontier(template, actions):
@@ -205,11 +227,17 @@ def test_blocked_stairs_defer_to_reachable_frontier(template, actions):
     assert result.action.record.kind is ActionKind.MOVE
 
 
-def test_elapsed_game_turns_suppress_search_not_defense(template, actions):
+def test_elapsed_game_turns_switch_search_to_legacy_rounds(template, actions):
     memory = remembered(template, ROOM)
     memory.navigation_turns = memory.navigation_progress_turns + NO_PROGRESS_TURN_LIMIT
+    for point in route_tree(memory).distances:
+        for cell in _search_targets(memory, point):
+            memory.search_coverage[cell] = SEARCH_BATCH_SIZE
     result = ExploreLevelSkill().select_action(memory, actions)
-    assert result.stuck is StuckReason.NAVIGATION_BUDGET_EXHAUSTED
+    assert result.stuck is StuckReason.SEARCH_EXHAUSTED
+    memory.navigation_turns = memory.navigation_progress_turns
+    result = ExploreLevelSkill().select_action(memory, actions)
+    assert result.action is not None
     hostile = remembered(template, ("------", "|@j..|", "------"))
     hostile.navigation_turns = (
         hostile.navigation_progress_turns + NO_PROGRESS_TURN_LIMIT
@@ -433,9 +461,10 @@ def test_legacy_explore_dungeon_leg_grows_on_rearm_ignoring_turn_limit(
     # never does.
     rearmed = skill.select_action(memory, actions, None)
     assert rearmed.action is not None
+    # Spent stair travel searches with the same legacy rounds.
     assert (
-        skill.select_action(memory, actions, STAND_ON_DOWNSTAIRS.target).stuck
-        is StuckReason.NAVIGATION_BUDGET_EXHAUSTED
+        skill.select_action(memory, actions, STAND_ON_DOWNSTAIRS.target).action
+        is not None
     )
 
 

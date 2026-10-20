@@ -1171,7 +1171,7 @@ class AgentCoordinator:
             if model_skill.skill is Skill.EXPLORE_LEVEL:
                 # The re-arm is kept even if a later pause discards this step;
                 # it only widens the deterministic search budget.
-                memory.rearm(legacy=legacy_rearm(goal))
+                memory.rearm(legacy=legacy_rearm(goal, memory))
                 rearmed = self._exploration.select_action(
                     memory, actions, stair_target(goal)
                 )

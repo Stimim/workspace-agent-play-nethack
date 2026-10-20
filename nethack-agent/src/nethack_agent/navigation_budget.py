@@ -58,6 +58,18 @@ def navigation_available(memory: LevelMemory) -> bool:
     return memory.navigation_elapsed < navigation_turn_limit(memory)
 
 
+def legacy_navigation(memory: LevelMemory, target: StairTarget | None) -> bool:
+    """Whether the round-based legacy search and blocker waits govern.
+
+    They govern explore_dungeon legs (no stair target) and stair travel
+    whose time budget is spent. A spent level with a departure permit is
+    left by the planner before exploration runs; one without (a hidden
+    downstairs on Dlvl 1, a reach_level task) would otherwise wait
+    forever instead of searching (0059 development pass, Minetown seed 1).
+    """
+    return target is None or not navigation_available(memory)
+
+
 def navigation_spent(memory: LevelMemory) -> bool:
     """The level's time budget has run out at least once.
 
@@ -263,9 +275,9 @@ def _evidence(
 def search_evidence(
     memory: LevelMemory, target: StairTarget | None = None
 ) -> NavigationEvidence | None:
-    if target is None:
+    if legacy_navigation(memory, target):
         return legacy_search_evidence(memory)
-    if not navigation_available(memory) or _ordinary_route(memory, target):
+    if _ordinary_route(memory, target):
         return None
     candidate = search_candidate(memory, route_tree(memory))
     if candidate is None or candidate[0] != memory.position:
@@ -276,11 +288,10 @@ def search_evidence(
 def wait_evidence(
     memory: LevelMemory, blocker: Point, target: StairTarget | None = None
 ) -> NavigationEvidence | None:
-    if target is None:
+    if legacy_navigation(memory, target):
         return legacy_wait_evidence(memory, blocker)
     if (
-        not navigation_available(memory)
-        or memory.monster_waits >= MONSTER_WAIT_LIMIT
+        memory.monster_waits >= MONSTER_WAIT_LIMIT
         or _ordinary_route(memory, target)
         or blocker not in memory.monsters
         or memory.hostile_blocker(blocker) is not None

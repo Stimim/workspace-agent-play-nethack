@@ -48,8 +48,8 @@ from nethack_agent.navigation import (
 )
 from nethack_agent.navigation_budget import (
     SEARCH_CANDIDATE_CAP,
+    legacy_navigation,
     legacy_search_candidate,
-    navigation_available,
     search_candidate,
     search_evidence,
     wait_evidence,
@@ -304,7 +304,7 @@ class ExploreLevelSkill:
         algorithm governs search/wait instead of the place-objective's
         finite, non-refillable navigation budget.
         """
-        legacy = target is None
+        legacy = legacy_navigation(memory, target)
         defense = _attack_adjacent_hostile(memory, actions_by_name, None)
         if defense is not None:
             return ExploreResult(defense, None)
@@ -1131,14 +1131,12 @@ def _search(
     search = actions_by_name.get("Command.SEARCH")
     if search is None:
         return None
-    if target is None:
+    if legacy_navigation(memory, target):
         candidate = legacy_search_candidate(memory, tree)
         if candidate is None:
             return None
         spot, targets, budget = candidate
     else:
-        if not navigation_available(memory):
-            return None
         candidate = search_candidate(memory, tree)
         if candidate is None:
             return None
