@@ -281,6 +281,34 @@ def test_non_target_spent_branch_candidate_routes_without_exploration_credit(tem
     assert not leg_complete(ExploreDungeonLeg(2), dungeon)
 
 
+def test_spent_departure_survives_knowledge_found_on_the_way_out(template):
+    # 0059 Minetown 1362 smoke: walking to the exit revealed cells, the clock
+    # restarted, and the permit flipped back to the branch search.
+    def at(lines, step, turn):
+        observation = sketch(template, lines, step=step, dungeon_level=2)
+        return replace(observation, player=replace(observation.player, turn=turn))
+
+    dungeon = DungeonMemory()
+    planner = ObjectivePlanner(Objective((EnterMinetownTempleLeg(),)))
+    memory = dungeon.observe(at(ROOM, 0, 1))
+    memory = dungeon.observe(at(ROOM, 1, 1 + NO_PROGRESS_TURN_LIMIT))
+    assert not navigation_available(memory)
+    spent = planner.plan(0, dungeon)
+    assert spent.goal.target.direction is StairDirection.DOWN
+    assert spent.local_recovery is not None
+    memory.record(ActionRecord(ActionKind.MOVE, memory.position, (4, 2)))
+    walked = (*ROOM[:2], " |..@| ", *ROOM[3:])
+    memory = dungeon.observe(at(walked, 2, 2 + NO_PROGRESS_TURN_LIMIT))
+    assert memory.navigation_elapsed == 0
+    assert navigation_available(memory)
+    planned = planner.plan(0, dungeon)
+    assert planned.goal == spent.goal
+    assert planned.local_recovery is not None
+    assert planned.local_recovery == local_recovery_evidence(
+        memory, "enter_minetown_temple"
+    )
+
+
 def test_local_recovery_marker_only_covers_stair_navigation(template, actions):
     dungeon = DungeonMemory()
     memory = dungeon.observe(sketch(template, ROOM, dungeon_level=2))

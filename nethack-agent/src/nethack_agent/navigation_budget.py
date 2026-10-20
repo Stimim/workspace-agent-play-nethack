@@ -58,6 +58,17 @@ def navigation_available(memory: LevelMemory) -> bool:
     return memory.navigation_elapsed < navigation_turn_limit(memory)
 
 
+def navigation_spent(memory: LevelMemory) -> bool:
+    """The level's time budget has run out at least once.
+
+    Departure uses this, not `navigation_available`: walking to the exit
+    reveals cells, which restarts the clock and would otherwise withdraw the
+    permit and send the hero back to searching (0059 Minetown 1362 smoke).
+    """
+    peak = max(memory.navigation_elapsed_peak, memory.navigation_elapsed)
+    return peak >= navigation_turn_limit(memory)
+
+
 def search_pass_complete(memory: LevelMemory) -> bool:
     """Every reachable candidate hit the finite place-objective cap.
 
@@ -421,7 +432,7 @@ def local_recovery_evidence(
     if protected and (not coverage_complete or not search_pass_complete(memory)):
         return None
     spent = (
-        not navigation_available(memory)
+        navigation_spent(memory)
         or (bool(targets) and coverage_complete)
         or memory.monster_waits >= MONSTER_WAIT_LIMIT
     )

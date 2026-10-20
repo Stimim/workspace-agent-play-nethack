@@ -385,7 +385,10 @@ exploration exhausted it; these persist across visits. Abandoned goals,
 suspect edges, position history, search coverage, blocker waits, and local
 elapsed no-progress time also persist across model re-arms and revisits. Only
 newly observed terrain/structural knowledge resets the no-progress clock and transient routing quarantine; time spent on
-another level is excluded. Pending actions and live occupants reset on entry;
+another level is excluded. Local-recovery departure is judged by the
+level's peak no-progress time (`navigation_spent`), not the current clock:
+once the budget has run out, cells revealed while walking to the exit
+restart the clock but do not withdraw the departure permit. Pending actions and live occupants reset on entry;
 everything resets on `start`. The look-here messages
 "There is a staircase down/up here." mark a
 staircase hidden under an object. A stair action followed by a level change

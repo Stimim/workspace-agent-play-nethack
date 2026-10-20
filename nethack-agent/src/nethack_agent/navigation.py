@@ -297,6 +297,10 @@ class LevelMemory:
         self._structural_progress = False
         self.navigation_turns = 0
         self.navigation_progress_turns = 0
+        # The longest no-progress spell so far. A level whose budget ran out
+        # stays spent for departure even after walking to the exit reveals
+        # a few cells and restarts the clock.
+        self.navigation_elapsed_peak = 0
         # Only an explicit explore_dungeon leg's unbounded round-based search
         # grows this; place-objective travel never refills via rearm.
         self.search_round = 0
@@ -436,6 +440,9 @@ class LevelMemory:
             self.stale_moves = 0
         elif routed:
             self.stale_moves += 1
+        self.navigation_elapsed_peak = max(
+            self.navigation_elapsed_peak, self.navigation_elapsed
+        )
         self.history.append((self.position, self.knowledge, routed))
         from nethack_agent.targets import update_target_evidence
 
