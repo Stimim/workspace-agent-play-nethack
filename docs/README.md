@@ -29,6 +29,7 @@
 - Milestone 3 Phase 4: the rejected canonical slime-mold reserve rule and its consumed fresh sample are recorded in [note 0052](notes/0052-canonical-slime-mold-qualification.md).
 - Roadmap consolidation and preserved roadmap-only facts, diagnosis, and deferred-work dispositions: [note 0056](notes/0056-roadmap-consolidation.md).
 - Milestone 3 Phase 3: the rejected combat-only Elbereth disengage rule, its development history, consumed fresh sample and per-seed evidence: [note 0057](notes/0057-elbereth-disengage-qualification.md).
+- Milestone 3 Phase 2: branch-stair identity diagnosis, closed without a rule (the Mines `>` detour costs 2 turns): [note 0058](notes/0058-branch-stair-identity-diagnosis.md).
 - [`external/`](external/): instructions for large external source material that is not committed.
 - [`../_agents/`](../_agents/): repository-specific coding-agent procedures and tools.
 - [`../nethack-agent/knowledge/`](../nethack-agent/knowledge/): reviewed knowledge made available to the local playing agent.

@@ -1,0 +1,51 @@
+{"header":{
+ "record": "0058 branch-stair diagnosis: Oracle baseline runs that took the Gnomish Mines downstairs, one row per run",
+ "source_arm": "~/nethack-evidence/0052/0052-base-or-reg (suite oracle-regression-v2, 67 seeds)",
+ "report": {
+  "path": "~/nethack-evidence/0052/0052-base-or-reg/reports/oracle-regression-v2-development-20261018T075922Z.json",
+  "sha256": "0de4cefbed101642f59cba4ed8e660e6530aedf4abecf63c8a7768e4ac27c98f"
+ },
+ "base_commit": "22d0a5f",
+ "policy_version": "hierarchical-survival-hp-prayer-burden-look-ration-v1",
+ "model": "scripted-development",
+ "diagnosis_only": true,
+ "fields": {
+  "path": "dungeon_number:dungeon_level of each consecutive level segment (0 = Dungeons of Doom, 2 = Gnomish Mines; 0:0 is the post-death screen)",
+  "mines_steps": "step events observed in dungeon 2",
+  "descended_main_after_return": "path reaches main Dlvl branch+1 after the Mines visit"
+ },
+ "regenerate": [
+  "python3 -I docs/notes/evidence/0058/scripts/mines_timeline.py DB REPORT OUT.json",
+  "python3 -I docs/notes/evidence/0058/scripts/detour_cost.py DB REPORT",
+  "python3 -I docs/notes/evidence/0058/scripts/after_return.py DB REPORT",
+  "DB=~/nethack-evidence/0052/0052-base-or-reg/runs.sqlite3 (opened mode=ro); rows here are OUT.json reduced to the listed fields"
+ ]
+},
+"rows":[
+{"case":"catalog-only-historical","seed":53,"outcome":"death","success":false,"death_cause":"killed by a giant ant","hunger_at_death":"not_hungry","branch_dlvl":4,"mines_entries":1,"mines_steps":1,"died_in_mines":false,"max_main_dlvl":5,"path":["0:1","0:2","0:3","0:4","2:1","0:4","0:5","0:0"],"descended_main_after_return":true},
+{"case":"catalog-only-historical","seed":824,"outcome":"death","success":false,"death_cause":"killed by a lizard","hunger_at_death":"fainting","branch_dlvl":4,"mines_entries":1,"mines_steps":1,"died_in_mines":false,"max_main_dlvl":7,"path":["0:1","0:2","0:3","0:4","2:1","0:4","0:5","0:6","0:7","0:0"],"descended_main_after_return":true},
+{"case":"descend-d5-fresh-historical","seed":296200318,"outcome":"death","success":false,"death_cause":"killed by a jaguar","hunger_at_death":"not_hungry","branch_dlvl":4,"mines_entries":1,"mines_steps":1,"died_in_mines":false,"max_main_dlvl":7,"path":["0:1","0:2","0:3","0:4","2:1","0:4","0:5","0:6","0:7","0:0"],"descended_main_after_return":true},
+{"case":"descend-d5-fresh-historical","seed":799362204,"outcome":"death","success":false,"death_cause":"poisoned by a rabid rat","hunger_at_death":"not_hungry","branch_dlvl":4,"mines_entries":1,"mines_steps":1,"died_in_mines":false,"max_main_dlvl":5,"path":["0:1","0:2","0:3","0:4","2:1","0:4","0:5","0:0"],"descended_main_after_return":true},
+{"case":"descend-d5-fresh-historical","seed":1003301977,"outcome":"death","success":false,"death_cause":"killed by a hill orc","hunger_at_death":"fainting","branch_dlvl":3,"mines_entries":1,"mines_steps":1,"died_in_mines":false,"max_main_dlvl":5,"path":["0:1","0:2","0:3","2:1","0:3","0:4","0:5","0:0"],"descended_main_after_return":true},
+{"case":"descend-d5-fresh-historical","seed":1063911084,"outcome":"death","success":false,"death_cause":"killed by a gnome mummy","hunger_at_death":"fainting","branch_dlvl":3,"mines_entries":1,"mines_steps":1,"died_in_mines":false,"max_main_dlvl":5,"path":["0:1","0:2","0:3","2:1","0:3","0:4","0:5","0:0"],"descended_main_after_return":true},
+{"case":"descend-d5-fresh-historical","seed":2065672237,"outcome":"objective_complete","success":true,"death_cause":"unknown","hunger_at_death":null,"branch_dlvl":3,"mines_entries":1,"mines_steps":1,"died_in_mines":false,"max_main_dlvl":6,"path":["0:1","0:2","0:3","2:1","0:3","0:4","0:5","0:6"],"descended_main_after_return":true},
+{"case":"descend-d5-fresh-historical","seed":2105401147,"outcome":"death","success":false,"death_cause":"killed by a giant bat","hunger_at_death":"fainting","branch_dlvl":3,"mines_entries":1,"mines_steps":1,"died_in_mines":false,"max_main_dlvl":6,"path":["0:1","0:2","0:3","2:1","0:3","0:4","0:5","0:6","0:0"],"descended_main_after_return":true},
+{"case":"eat-historical","seed":921,"outcome":"objective_complete","success":true,"death_cause":"unknown","hunger_at_death":null,"branch_dlvl":2,"mines_entries":1,"mines_steps":1,"died_in_mines":false,"max_main_dlvl":5,"path":["0:1","0:2","2:1","0:2","0:3","0:4","0:5"],"descended_main_after_return":true},
+{"case":"eat-historical","seed":924,"outcome":"truncated","success":false,"death_cause":"unknown","hunger_at_death":null,"branch_dlvl":2,"mines_entries":1,"mines_steps":1,"died_in_mines":false,"max_main_dlvl":4,"path":["0:1","0:2","2:1","0:2","0:3","0:4"],"descended_main_after_return":true},
+{"case":"note-0035-probes","seed":1360,"outcome":"objective_complete","success":true,"death_cause":"unknown","hunger_at_death":null,"branch_dlvl":3,"mines_entries":1,"mines_steps":1,"died_in_mines":false,"max_main_dlvl":5,"path":["0:1","0:2","0:3","2:1","0:3","0:4","0:5"],"descended_main_after_return":true},
+{"case":"note-0035-probes","seed":1361,"outcome":"death","success":false,"death_cause":"killed by a pony","hunger_at_death":"not_hungry","branch_dlvl":3,"mines_entries":1,"mines_steps":1,"died_in_mines":false,"max_main_dlvl":5,"path":["0:1","0:2","0:3","2:1","0:3","0:4","0:5","0:0"],"descended_main_after_return":true},
+{"case":"note-0035-probes","seed":1366,"outcome":"death","success":false,"death_cause":"killed by a pony","hunger_at_death":"not_hungry","branch_dlvl":2,"mines_entries":1,"mines_steps":1,"died_in_mines":false,"max_main_dlvl":5,"path":["0:1","0:2","2:1","0:2","0:3","0:4","0:5","0:0"],"descended_main_after_return":true},
+{"case":"note-0035-probes","seed":1367,"outcome":"death","success":false,"death_cause":"killed by a straw golem","hunger_at_death":"fainting","branch_dlvl":2,"mines_entries":1,"mines_steps":1,"died_in_mines":false,"max_main_dlvl":5,"path":["0:1","0:2","2:1","0:2","0:3","0:4","0:5","0:0"],"descended_main_after_return":true},
+{"case":"note-0035-probes","seed":1370,"outcome":"death","success":false,"death_cause":"killed by a fox","hunger_at_death":"fainting","branch_dlvl":4,"mines_entries":1,"mines_steps":1,"died_in_mines":false,"max_main_dlvl":5,"path":["0:1","0:2","0:3","0:4","2:1","0:4","0:5","0:0"],"descended_main_after_return":true},
+{"case":"note-0035-probes","seed":1371,"outcome":"death","success":false,"death_cause":"killed by a raven","hunger_at_death":"not_hungry","branch_dlvl":3,"mines_entries":1,"mines_steps":1,"died_in_mines":false,"max_main_dlvl":7,"path":["0:1","0:2","0:3","2:1","0:3","0:4","0:5","0:6","0:7","0:0"],"descended_main_after_return":true},
+{"case":"note-0035-probes","seed":1372,"outcome":"objective_complete","success":true,"death_cause":"unknown","hunger_at_death":null,"branch_dlvl":3,"mines_entries":1,"mines_steps":1,"died_in_mines":false,"max_main_dlvl":5,"path":["0:1","0:2","0:3","2:1","0:3","0:4","0:5"],"descended_main_after_return":true},
+{"case":"note-0035-probes","seed":1373,"outcome":"death","success":false,"death_cause":"killed by a giant ant","hunger_at_death":"not_hungry","branch_dlvl":2,"mines_entries":1,"mines_steps":1,"died_in_mines":false,"max_main_dlvl":5,"path":["0:1","0:2","2:1","0:2","0:3","0:4","0:5","0:0"],"descended_main_after_return":true},
+{"case":"scout-historical","seed":902,"outcome":"death","success":false,"death_cause":"killed by a garter snake","hunger_at_death":"hungry","branch_dlvl":3,"mines_entries":1,"mines_steps":1,"died_in_mines":false,"max_main_dlvl":4,"path":["0:1","0:2","0:3","2:1","0:3","0:4","0:0"],"descended_main_after_return":true},
+{"case":"scout-historical","seed":904,"outcome":"death","success":false,"death_cause":"killed by an iguana","hunger_at_death":"fainting","branch_dlvl":4,"mines_entries":1,"mines_steps":1,"died_in_mines":false,"max_main_dlvl":5,"path":["0:1","0:2","0:3","0:4","2:1","0:4","0:5","0:0"],"descended_main_after_return":true},
+{"case":"staircase-historical","seed":1,"outcome":"death","success":false,"death_cause":"killed by a pony","hunger_at_death":"fainting","branch_dlvl":4,"mines_entries":1,"mines_steps":1,"died_in_mines":false,"max_main_dlvl":5,"path":["0:1","0:2","0:3","0:4","2:1","0:4","0:5","0:0"],"descended_main_after_return":true},
+{"case":"staircase-historical","seed":4,"outcome":"death","success":false,"death_cause":"killed by a little dog","hunger_at_death":"not_hungry","branch_dlvl":2,"mines_entries":1,"mines_steps":1,"died_in_mines":false,"max_main_dlvl":5,"path":["0:1","0:2","2:1","0:2","0:3","0:4","0:5","0:0"],"descended_main_after_return":true},
+{"case":"staircase-historical","seed":7,"outcome":"death","success":false,"death_cause":"killed by a jaguar","hunger_at_death":"not_hungry","branch_dlvl":2,"mines_entries":1,"mines_steps":1,"died_in_mines":false,"max_main_dlvl":6,"path":["0:1","0:2","2:1","0:2","0:3","0:4","0:5","0:6","0:0"],"descended_main_after_return":true},
+{"case":"staircase-historical","seed":10,"outcome":"death","success":false,"death_cause":"killed by a wolf","hunger_at_death":"not_hungry","branch_dlvl":4,"mines_entries":1,"mines_steps":1,"died_in_mines":false,"max_main_dlvl":6,"path":["0:1","0:2","0:3","0:4","2:1","0:4","0:5","0:6","0:0"],"descended_main_after_return":true},
+{"case":"traversal-historical","seed":702,"outcome":"death","success":false,"death_cause":"killed by a giant ant","hunger_at_death":"satiated","branch_dlvl":3,"mines_entries":1,"mines_steps":1,"died_in_mines":false,"max_main_dlvl":5,"path":["0:1","0:2","0:3","2:1","0:3","0:4","0:5","0:0"],"descended_main_after_return":true},
+{"case":"traversal-historical","seed":703,"outcome":"death","success":false,"death_cause":"killed by a gas spore's explosion","hunger_at_death":"not_hungry","branch_dlvl":3,"mines_entries":1,"mines_steps":1,"died_in_mines":false,"max_main_dlvl":3,"path":["0:1","0:2","0:3","2:1","0:3","0:0"],"descended_main_after_return":false}
+]}

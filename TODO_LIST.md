@@ -46,7 +46,7 @@ Done: Minetown/Oracle objective planning, peaceful adjacency/attack conduct, dev
 
 ### Phase 2 — F: navigation
 
-- [ ] Fix downward branch-stair identity: stop mistaking the Mines `>` for main-dungeon descent; qualify against the Oracle baseline failures ([0050](docs/notes/0050-phase1-objectives-baselines-detector-audit.md)).
+- [x] Downward branch-stair identity: closed without a rule; the Mines `>` detour costs 2 turns and no objectives in the shipped baseline, and recovery via the recorded branch link already works ([0058](docs/notes/0058-branch-stair-identity-diagnosis.md)).
 - [ ] Diagnose exit discovery with true-map evidence on every stalled level, including milestone-2 failures; turn recurring blockers into qualified rules ([0056] seed/evidence list).
 - [ ] Requalify stall breaker 0054 after disengagement: fix `stuck_consult_step` crash/re-consult replay rejection, probe budget, then qualify strategy changes for unknown/blocked exits ([0056] candidate/mechanisms/failed probes).
 - [ ] Qualify Mines cave navigation (no secret doors, narrow diagonals, boulders) and branch identity down/back up ([ADR 0007](docs/decisions/0007-mines-minetown-and-oracle.md)).
