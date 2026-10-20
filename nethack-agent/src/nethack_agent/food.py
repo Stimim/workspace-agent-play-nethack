@@ -24,6 +24,7 @@ SAFE_COMESTIBLES: Final = frozenset(
         "carrot",
         "sprig of wolfsbane",
         "clove of garlic",
+        "slime mold",
     }
 )
 _PLURALS: Final = {
@@ -38,7 +39,7 @@ _NOUNS: Final = "|".join(
 _DESCRIPTION: Final = re.compile(
     r"^(?:a|an|the|[1-9]\d*) "
     r"(?:(?:blessed|uncursed|cursed|partly eaten|greased|[+-]\d+) )*"
-    rf"(?P<name>{_NOUNS})(?: (?:named|called) .+| \([^\n]*\))?$"
+    rf"(?P<name>{_NOUNS})(?P<suffix> (?:named|called) .+| \([^\n]*\))?$"
 )
 _FLOOR_PROMPT: Final = re.compile(
     r"^There (?:is |are )(?P<description>.+) here; eat (?:it|one)\? "
@@ -55,6 +56,10 @@ def food_description_name(description: str) -> str | None:
     if match is None:
         return None
     name = match.group("name")
+    # Fruit-option names can themselves imitate an annotated canonical name.
+    # Only the new canonical fruit identity is reviewed, not such aliases.
+    if name in ("slime mold", "slime molds") and match.group("suffix") is not None:
+        return None
     return _PLURALS.get(name, name)
 
 

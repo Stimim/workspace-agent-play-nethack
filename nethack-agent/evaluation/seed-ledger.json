@@ -362,6 +362,12 @@
       "seeds": [],
       "ranges": [[511, 540]],
       "note": "Frozen minetown-fresh-v1 and oracle-fresh-v1 sample for the note 0051 ration live-lock qualification. Development-only; consumed, never reused. See note0051."
+    },
+    {
+      "source": "note-0052-canonical-slime-mold-qualification",
+      "seeds": [],
+      "ranges": [[541, 570]],
+      "note": "Reserved before either note0052 arm: paired minetown-fresh-v2 and oracle-fresh-v2, canonical slime-mold reserve rule. Development-only; all launches and failures consume this sample. Main checkout deliberately unchanged."
     }
   ]
 }

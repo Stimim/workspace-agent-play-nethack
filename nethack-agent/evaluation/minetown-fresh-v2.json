@@ -1,0 +1,67 @@
+{
+  "schema_version": 2,
+  "suite_id": "minetown-fresh-v2",
+  "character": "val-dwa-law",
+  "policy_version": "hierarchical-survival-hp-prayer-burden-look-ration-slime-qualification-v1",
+  "knowledge_bundle_id": "survival-reviewed-v3",
+  "seed_selection": "Development-only frozen paired sample for note 0052: seeds 541-570, reserved before either arm. No held-out or acceptance claim.",
+  "step_cap_rationale": "Provisional 10000 action steps, matching the regression suites; ADR 0007 section 4 probes fix the acceptance cap later.",
+  "cases": [
+    {
+      "case_id": "fresh-sample",
+      "task": {
+        "environment": "NetHackScore-v0",
+        "action_profile": "nle-survival-actions",
+        "objective": {
+          "legs": [
+            {
+              "kind": "enter_minetown_temple"
+            }
+          ]
+        }
+      },
+      "seeds": [
+        541,
+        542,
+        543,
+        544,
+        545,
+        546,
+        547,
+        548,
+        549,
+        550,
+        551,
+        552,
+        553,
+        554,
+        555,
+        556,
+        557,
+        558,
+        559,
+        560,
+        561,
+        562,
+        563,
+        564,
+        565,
+        566,
+        567,
+        568,
+        569,
+        570
+      ],
+      "max_episode_steps": 10000,
+      "acceptance": {
+        "min_successes": 1,
+        "required_success_seeds": []
+      }
+    }
+  ],
+  "acceptance": {
+    "max_invalid_actions": 0,
+    "max_gate_rejections": 0,
+    "require_complete_records": true
+  }
+}

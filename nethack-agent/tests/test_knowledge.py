@@ -86,6 +86,26 @@ def test_reviewed_bundle_is_deterministic_and_manifest_ordered() -> None:
     )
 
 
+def test_slime_mold_bundle_versions_only_the_nutrition_review() -> None:
+    previous = load_knowledge_bundle(
+        KNOWLEDGE_DIRECTORY, bundle_id="survival-reviewed-v2"
+    )
+    candidate = load_knowledge_bundle(
+        KNOWLEDGE_DIRECTORY, bundle_id="survival-reviewed-v3"
+    )
+    assert candidate.cards[:-1] == previous.cards[:-1]
+    assert previous.cards[-1].card_id == "nutrition-foraging"
+    assert candidate.cards[-1].card_id == "nutrition-foraging-v2"
+    assert candidate.character_count <= 6_000
+    assert candidate.estimated_tokens <= 1_500
+    review = candidate.cards[-1]
+    assert "250 nutrition" in review.actionable_facts
+    assert "Renamed fruit text is not a reviewed identity" in review.actionable_facts
+    assert "2026-03-14T02:38:01Z" in review.uncertainty
+    assert "NetHack-3.6.7_Released/src/objects.c#L773-L785" in review.uncertainty
+    assert any(s.url.endswith("/Slime_mold") for s in review.sources)
+
+
 def test_named_survival_bundle_preserves_default_and_stays_bounded(
     tmp_path: Path,
 ) -> None:

@@ -1,0 +1,4121 @@
+{
+  "header": {
+    "note": "0052",
+    "parent_commit": "22d0a5f74569277b4e030aa9a7d9427b7ecda7d9",
+    "source": "Retained runs.sqlite3 public events; count-slime-actions.py, no new episodes.",
+    "definitions": {
+      "route_steps": "deterministic skill decisions carrying slime-mold FoodEvidence and a path",
+      "pickup_initiations": "deterministic Command.PICKUP with slime-mold FoodEvidence",
+      "acquisition_actions": "food-intent actions that visibly increase canonical slime inventory units",
+      "acquired_units": "sum of those positive canonical inventory-unit deltas",
+      "inventory_meal_answers": "accepted canonical slime item letters at the exact EAT item prompt",
+      "floor_meal_answers": "yes answers to an exact canonical slime floor EAT offer",
+      "completed_inventory_units": "visible canonical inventory-unit loss on a slime item-answer action"
+    },
+    "unit_caveat": "Acquired units are positive inventory-unit deltas, including recovery of previously stolen food, not necessarily distinct generated items. Meal units are observed consumption, not a claim of 250 effective nutrition each; rotten meals occurred.",
+    "row_coverage": "Only episodes with canonical-slime FoodEvidence; all baseline counts are explicitly zero in arm_counts.",
+    "arm_counts": {
+      "0052-base-mt-reg": {
+        "meal_answers": 0,
+        "runs_with_rule_activation": 0,
+        "runs_with_pickup": 0,
+        "runs_with_meal": 0
+      },
+      "0052-cand-mt-reg": {
+        "meal_answers": 7,
+        "runs_with_rule_activation": 12,
+        "runs_with_pickup": 11,
+        "runs_with_meal": 5,
+        "food_intent_steps": 48,
+        "route_steps": 35,
+        "pickup_initiations": 11,
+        "acquisition_actions": 11,
+        "acquired_units": 15,
+        "inventory_meal_answers": 7,
+        "completed_inventory_units": 7
+      },
+      "0052-base-or-reg": {
+        "meal_answers": 0,
+        "runs_with_rule_activation": 0,
+        "runs_with_pickup": 0,
+        "runs_with_meal": 0
+      },
+      "0052-cand-or-reg": {
+        "meal_answers": 5,
+        "runs_with_rule_activation": 12,
+        "runs_with_pickup": 12,
+        "runs_with_meal": 5,
+        "food_intent_steps": 53,
+        "route_steps": 40,
+        "pickup_initiations": 13,
+        "acquisition_actions": 13,
+        "acquired_units": 16,
+        "inventory_meal_answers": 5,
+        "completed_inventory_units": 5
+      },
+      "0052-base-d5-reg": {
+        "meal_answers": 0,
+        "runs_with_rule_activation": 0,
+        "runs_with_pickup": 0,
+        "runs_with_meal": 0
+      },
+      "0052-cand-d5-reg": {
+        "meal_answers": 1,
+        "runs_with_rule_activation": 7,
+        "runs_with_pickup": 7,
+        "runs_with_meal": 1,
+        "food_intent_steps": 31,
+        "route_steps": 24,
+        "pickup_initiations": 7,
+        "acquisition_actions": 7,
+        "acquired_units": 9,
+        "inventory_meal_answers": 1,
+        "completed_inventory_units": 1
+      },
+      "0052-base-mt-fresh": {
+        "meal_answers": 0,
+        "runs_with_rule_activation": 0,
+        "runs_with_pickup": 0,
+        "runs_with_meal": 0
+      },
+      "0052-cand-mt-fresh": {
+        "meal_answers": 7,
+        "runs_with_rule_activation": 6,
+        "runs_with_pickup": 6,
+        "runs_with_meal": 5,
+        "food_intent_steps": 22,
+        "route_steps": 13,
+        "pickup_initiations": 7,
+        "acquisition_actions": 7,
+        "acquired_units": 8,
+        "inventory_meal_answers": 7,
+        "completed_inventory_units": 7
+      },
+      "0052-base-or-fresh": {
+        "meal_answers": 0,
+        "runs_with_rule_activation": 0,
+        "runs_with_pickup": 0,
+        "runs_with_meal": 0
+      },
+      "0052-cand-or-fresh": {
+        "meal_answers": 1,
+        "runs_with_rule_activation": 2,
+        "runs_with_pickup": 2,
+        "runs_with_meal": 1,
+        "food_intent_steps": 10,
+        "route_steps": 7,
+        "pickup_initiations": 3,
+        "acquisition_actions": 3,
+        "acquired_units": 3,
+        "inventory_meal_answers": 1,
+        "completed_inventory_units": 1
+      }
+    },
+    "totals": {
+      "meal_answers": 21,
+      "runs_with_rule_activation": 39,
+      "runs_with_pickup": 38,
+      "runs_with_meal": 17,
+      "food_intent_steps": 164,
+      "route_steps": 119,
+      "pickup_initiations": 41,
+      "acquisition_actions": 41,
+      "acquired_units": 51,
+      "inventory_meal_answers": 21,
+      "completed_inventory_units": 21
+    }
+  },
+  "rows": [
+    {
+      "arm": "0052-cand-mt-reg",
+      "seed": 3,
+      "counts": {
+        "food_intent_steps": 6,
+        "route_steps": 3,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 2,
+        "meal_answers": 0,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 0
+      },
+      "first_food_intent": {
+        "sequence": 1940,
+        "step": 1939,
+        "turn": 1961,
+        "level": [
+          2,
+          4
+        ],
+        "xy": [
+          49,
+          7
+        ],
+        "hp": [
+          37,
+          71
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.S",
+        "command": 106,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "You kill the goblin!",
+        "message_after": "",
+        "turn_after": 1962,
+        "hp_after": [
+          37,
+          71
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 1949,
+          "step": 1948,
+          "turn": 1978,
+          "level": [
+            2,
+            4
+          ],
+          "xy": [
+            49,
+            8
+          ],
+          "hp": [
+            39,
+            71
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "",
+          "message_after": "",
+          "turn_after": 1978,
+          "hp_after": [
+            39,
+            71
+          ],
+          "hunger_after": 1
+        },
+        {
+          "sequence": 1951,
+          "step": 1950,
+          "turn": 1978,
+          "level": [
+            2,
+            4
+          ],
+          "xy": [
+            49,
+            8
+          ],
+          "hp": [
+            39,
+            71
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "MiscAction.MORE",
+          "command": 13,
+          "source": "deterministic_prompt",
+          "rationale": "Answer only the exact reviewed floor food offer.",
+          "message_before": "",
+          "message_after": "l - 2 slime molds.",
+          "turn_after": 1979,
+          "hp_after": [
+            39,
+            71
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-mt-reg",
+      "seed": 7,
+      "counts": {
+        "food_intent_steps": 1,
+        "route_steps": 1,
+        "meal_answers": 0,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 0,
+        "runs_with_meal": 0
+      },
+      "first_food_intent": {
+        "sequence": 880,
+        "step": 879,
+        "turn": 891,
+        "level": [
+          2,
+          4
+        ],
+        "xy": [
+          46,
+          15
+        ],
+        "hp": [
+          36,
+          45
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.W",
+        "command": 104,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "The door opens.",
+        "message_after": "\"Velkommen, Agent!  Welcome to Tjiwidej's delicatessen!\"",
+        "turn_after": 892,
+        "hp_after": [
+          36,
+          45
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": []
+    },
+    {
+      "arm": "0052-cand-mt-reg",
+      "seed": 10,
+      "counts": {
+        "food_intent_steps": 2,
+        "route_steps": 1,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 1,
+        "inventory_meal_answers": 1,
+        "completed_inventory_units": 1,
+        "meal_answers": 1,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 1
+      },
+      "first_food_intent": {
+        "sequence": 3612,
+        "step": 3611,
+        "turn": 3637,
+        "level": [
+          0,
+          3
+        ],
+        "xy": [
+          21,
+          6
+        ],
+        "hp": [
+          43,
+          43
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.S",
+        "command": 106,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "",
+        "message_after": "You see here a slime mold.",
+        "turn_after": 3638,
+        "hp_after": [
+          43,
+          43
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 3613,
+          "step": 3612,
+          "turn": 3638,
+          "level": [
+            0,
+            3
+          ],
+          "xy": [
+            21,
+            7
+          ],
+          "hp": [
+            43,
+            43
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here a slime mold.",
+          "message_after": "k - a slime mold.",
+          "turn_after": 3639,
+          "hp_after": [
+            43,
+            43
+          ],
+          "hunger_after": 1
+        },
+        {
+          "sequence": 4568,
+          "step": 4567,
+          "turn": 4596,
+          "level": [
+            0,
+            4
+          ],
+          "xy": [
+            54,
+            14
+          ],
+          "hp": [
+            56,
+            56
+          ],
+          "hunger": 2,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "CompassDirection.N",
+          "command": 107,
+          "source": "deterministic_prompt",
+          "rationale": "Select the verified food ration in inventory slot k.",
+          "message_before": "What do you want to eat? [km or ?*] ",
+          "message_after": "My, this is a yummy slime mold!",
+          "turn_after": 4597,
+          "hp_after": [
+            56,
+            56
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-mt-reg",
+      "seed": 53,
+      "counts": {
+        "food_intent_steps": 3,
+        "route_steps": 2,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 2,
+        "inventory_meal_answers": 1,
+        "completed_inventory_units": 1,
+        "meal_answers": 1,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 1
+      },
+      "first_food_intent": {
+        "sequence": 3478,
+        "step": 3477,
+        "turn": 3579,
+        "level": [
+          0,
+          3
+        ],
+        "xy": [
+          19,
+          5
+        ],
+        "hp": [
+          39,
+          43
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.NW",
+        "command": 121,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "",
+        "message_after": "",
+        "turn_after": 3580,
+        "hp_after": [
+          39,
+          43
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 3480,
+          "step": 3479,
+          "turn": 3581,
+          "level": [
+            0,
+            3
+          ],
+          "xy": [
+            17,
+            4
+          ],
+          "hp": [
+            39,
+            43
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here 2 slime molds.",
+          "message_after": "h - 2 slime molds.",
+          "turn_after": 3582,
+          "hp_after": [
+            39,
+            43
+          ],
+          "hunger_after": 1
+        },
+        {
+          "sequence": 3571,
+          "step": 3570,
+          "turn": 3671,
+          "level": [
+            0,
+            3
+          ],
+          "xy": [
+            49,
+            10
+          ],
+          "hp": [
+            43,
+            43
+          ],
+          "hunger": 2,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "CompassDirection.W",
+          "command": 104,
+          "source": "deterministic_prompt",
+          "rationale": "Select the verified food ration in inventory slot h.",
+          "message_before": "What do you want to eat? [h or ?*] ",
+          "message_after": "My, this is a yummy slime mold!",
+          "turn_after": 3672,
+          "hp_after": [
+            43,
+            43
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-mt-reg",
+      "seed": 279714031,
+      "counts": {
+        "food_intent_steps": 3,
+        "route_steps": 2,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 1,
+        "meal_answers": 0,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 0
+      },
+      "first_food_intent": {
+        "sequence": 421,
+        "step": 420,
+        "turn": 432,
+        "level": [
+          0,
+          2
+        ],
+        "xy": [
+          58,
+          4
+        ],
+        "hp": [
+          18,
+          18
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.E",
+        "command": 108,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "You kill the kobold!",
+        "message_after": "You see here a slime mold.",
+        "turn_after": 433,
+        "hp_after": [
+          18,
+          18
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 422,
+          "step": 421,
+          "turn": 433,
+          "level": [
+            0,
+            2
+          ],
+          "xy": [
+            59,
+            4
+          ],
+          "hp": [
+            18,
+            18
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here a slime mold.",
+          "message_after": "e - a slime mold.",
+          "turn_after": 434,
+          "hp_after": [
+            18,
+            18
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-mt-reg",
+      "seed": 1009099699,
+      "counts": {
+        "food_intent_steps": 6,
+        "route_steps": 5,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 1,
+        "inventory_meal_answers": 1,
+        "completed_inventory_units": 1,
+        "meal_answers": 1,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 1
+      },
+      "first_food_intent": {
+        "sequence": 1825,
+        "step": 1824,
+        "turn": 1877,
+        "level": [
+          0,
+          3
+        ],
+        "xy": [
+          30,
+          7
+        ],
+        "hp": [
+          24,
+          24
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.N",
+        "command": 107,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "",
+        "message_after": "You hear someone counting money.",
+        "turn_after": 1878,
+        "hp_after": [
+          24,
+          24
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 1830,
+          "step": 1829,
+          "turn": 1882,
+          "level": [
+            0,
+            3
+          ],
+          "xy": [
+            29,
+            2
+          ],
+          "hp": [
+            24,
+            24
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here a slime mold.",
+          "message_after": "g - a slime mold.",
+          "turn_after": 1883,
+          "hp_after": [
+            24,
+            24
+          ],
+          "hunger_after": 1
+        },
+        {
+          "sequence": 3157,
+          "step": 3156,
+          "turn": 3221,
+          "level": [
+            2,
+            3
+          ],
+          "xy": [
+            62,
+            7
+          ],
+          "hp": [
+            30,
+            47
+          ],
+          "hunger": 2,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.RUSH",
+          "command": 103,
+          "source": "deterministic_prompt",
+          "rationale": "Select the verified food ration in inventory slot g.",
+          "message_before": "What do you want to eat? [g or ?*] ",
+          "message_after": "My, this is a yummy slime mold!",
+          "turn_after": 3222,
+          "hp_after": [
+            30,
+            47
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-mt-reg",
+      "seed": 1528054415,
+      "counts": {
+        "food_intent_steps": 3,
+        "route_steps": 2,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 1,
+        "meal_answers": 0,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 0
+      },
+      "first_food_intent": {
+        "sequence": 45,
+        "step": 44,
+        "turn": 43,
+        "level": [
+          0,
+          1
+        ],
+        "xy": [
+          30,
+          6
+        ],
+        "hp": [
+          15,
+          18
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.N",
+        "command": 107,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "The kitten picks up an orcish helm.",
+        "message_after": "You swap places with your kitten.  The kitten drops an orcish helm.",
+        "turn_after": 44,
+        "hp_after": [
+          15,
+          18
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 47,
+          "step": 46,
+          "turn": 45,
+          "level": [
+            0,
+            1
+          ],
+          "xy": [
+            29,
+            5
+          ],
+          "hp": [
+            16,
+            18
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "There is an open door here.  You see here a slime mold.",
+          "message_after": "e - a slime mold.",
+          "turn_after": 46,
+          "hp_after": [
+            16,
+            18
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-mt-reg",
+      "seed": 296200318,
+      "counts": {
+        "food_intent_steps": 4,
+        "route_steps": 3,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 2,
+        "inventory_meal_answers": 2,
+        "completed_inventory_units": 2,
+        "meal_answers": 2,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 1
+      },
+      "first_food_intent": {
+        "sequence": 610,
+        "step": 609,
+        "turn": 610,
+        "level": [
+          0,
+          2
+        ],
+        "xy": [
+          65,
+          6
+        ],
+        "hp": [
+          18,
+          18
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.E",
+        "command": 108,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "",
+        "message_after": "",
+        "turn_after": 611,
+        "hp_after": [
+          18,
+          18
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 613,
+          "step": 612,
+          "turn": 613,
+          "level": [
+            0,
+            2
+          ],
+          "xy": [
+            68,
+            6
+          ],
+          "hp": [
+            18,
+            18
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here 2 slime molds.",
+          "message_after": "g - 2 slime molds.",
+          "turn_after": 614,
+          "hp_after": [
+            18,
+            18
+          ],
+          "hunger_after": 1
+        },
+        {
+          "sequence": 5085,
+          "step": 5084,
+          "turn": 5130,
+          "level": [
+            0,
+            3
+          ],
+          "xy": [
+            61,
+            17
+          ],
+          "hp": [
+            52,
+            52
+          ],
+          "hunger": 2,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.RUSH",
+          "command": 103,
+          "source": "deterministic_prompt",
+          "rationale": "Select the verified food ration in inventory slot g.",
+          "message_before": "What do you want to eat? [g or ?*] ",
+          "message_after": "My, this is a yummy slime mold!",
+          "turn_after": 5131,
+          "hp_after": [
+            52,
+            52
+          ],
+          "hunger_after": 1
+        },
+        {
+          "sequence": 5336,
+          "step": 5335,
+          "turn": 5380,
+          "level": [
+            0,
+            3
+          ],
+          "xy": [
+            60,
+            17
+          ],
+          "hp": [
+            52,
+            52
+          ],
+          "hunger": 2,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.RUSH",
+          "command": 103,
+          "source": "deterministic_prompt",
+          "rationale": "Select the verified food ration in inventory slot g.",
+          "message_before": "What do you want to eat? [g or ?*] ",
+          "message_after": "My, this is a yummy slime mold!",
+          "turn_after": 5381,
+          "hp_after": [
+            52,
+            52
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-mt-reg",
+      "seed": 2094095407,
+      "counts": {
+        "food_intent_steps": 6,
+        "route_steps": 5,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 2,
+        "inventory_meal_answers": 2,
+        "completed_inventory_units": 2,
+        "meal_answers": 2,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 1
+      },
+      "first_food_intent": {
+        "sequence": 185,
+        "step": 184,
+        "turn": 183,
+        "level": [
+          0,
+          1
+        ],
+        "xy": [
+          21,
+          7
+        ],
+        "hp": [
+          13,
+          18
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.N",
+        "command": 107,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "There is a doorway here.  You see here a kobold corpse.",
+        "message_after": "",
+        "turn_after": 184,
+        "hp_after": [
+          13,
+          18
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 193,
+          "step": 192,
+          "turn": 191,
+          "level": [
+            0,
+            1
+          ],
+          "xy": [
+            17,
+            2
+          ],
+          "hp": [
+            12,
+            18
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here 2 slime molds.",
+          "message_after": "f - 2 slime molds.",
+          "turn_after": 192,
+          "hp_after": [
+            12,
+            18
+          ],
+          "hunger_after": 1
+        },
+        {
+          "sequence": 4906,
+          "step": 4905,
+          "turn": 4976,
+          "level": [
+            0,
+            2
+          ],
+          "xy": [
+            63,
+            13
+          ],
+          "hp": [
+            59,
+            59
+          ],
+          "hunger": 2,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.FIRE",
+          "command": 102,
+          "source": "deterministic_prompt",
+          "rationale": "Select the verified food ration in inventory slot f.",
+          "message_before": "What do you want to eat? [f or ?*] ",
+          "message_after": "My, this is a yummy slime mold!",
+          "turn_after": 4977,
+          "hp_after": [
+            59,
+            59
+          ],
+          "hunger_after": 1
+        },
+        {
+          "sequence": 5172,
+          "step": 5171,
+          "turn": 5243,
+          "level": [
+            0,
+            2
+          ],
+          "xy": [
+            63,
+            13
+          ],
+          "hp": [
+            59,
+            59
+          ],
+          "hunger": 2,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.FIRE",
+          "command": 102,
+          "source": "deterministic_prompt",
+          "rationale": "Select the verified food ration in inventory slot f.",
+          "message_before": "What do you want to eat? [f or ?*] ",
+          "message_after": "My, this is a yummy slime mold!",
+          "turn_after": 5244,
+          "hp_after": [
+            59,
+            59
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-mt-reg",
+      "seed": 1365,
+      "counts": {
+        "food_intent_steps": 3,
+        "route_steps": 2,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 1,
+        "meal_answers": 0,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 0
+      },
+      "first_food_intent": {
+        "sequence": 22,
+        "step": 21,
+        "turn": 21,
+        "level": [
+          0,
+          2
+        ],
+        "xy": [
+          45,
+          18
+        ],
+        "hp": [
+          18,
+          18
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.NW",
+        "command": 121,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "",
+        "message_after": "",
+        "turn_after": 22,
+        "hp_after": [
+          18,
+          18
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 24,
+          "step": 23,
+          "turn": 23,
+          "level": [
+            0,
+            2
+          ],
+          "xy": [
+            43,
+            16
+          ],
+          "hp": [
+            18,
+            18
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here a slime mold.",
+          "message_after": "f - a slime mold.",
+          "turn_after": 24,
+          "hp_after": [
+            18,
+            18
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-mt-reg",
+      "seed": 1374,
+      "counts": {
+        "food_intent_steps": 6,
+        "route_steps": 5,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 1,
+        "meal_answers": 0,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 0
+      },
+      "first_food_intent": {
+        "sequence": 61,
+        "step": 60,
+        "turn": 60,
+        "level": [
+          0,
+          1
+        ],
+        "xy": [
+          45,
+          5
+        ],
+        "hp": [
+          18,
+          18
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.S",
+        "command": 106,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "",
+        "message_after": "",
+        "turn_after": 61,
+        "hp_after": [
+          18,
+          18
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 66,
+          "step": 65,
+          "turn": 65,
+          "level": [
+            0,
+            1
+          ],
+          "xy": [
+            45,
+            10
+          ],
+          "hp": [
+            18,
+            18
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here a slime mold.",
+          "message_after": "e - a slime mold.",
+          "turn_after": 66,
+          "hp_after": [
+            18,
+            18
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-mt-reg",
+      "seed": 1379,
+      "counts": {
+        "food_intent_steps": 5,
+        "route_steps": 4,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 1,
+        "meal_answers": 0,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 0
+      },
+      "first_food_intent": {
+        "sequence": 195,
+        "step": 194,
+        "turn": 194,
+        "level": [
+          0,
+          1
+        ],
+        "xy": [
+          17,
+          7
+        ],
+        "hp": [
+          18,
+          18
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.N",
+        "command": 107,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "",
+        "message_after": "",
+        "turn_after": 195,
+        "hp_after": [
+          18,
+          18
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 199,
+          "step": 198,
+          "turn": 198,
+          "level": [
+            0,
+            1
+          ],
+          "xy": [
+            20,
+            3
+          ],
+          "hp": [
+            18,
+            18
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here a slime mold.",
+          "message_after": "f - a slime mold.",
+          "turn_after": 199,
+          "hp_after": [
+            18,
+            18
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-or-reg",
+      "seed": 6,
+      "counts": {
+        "food_intent_steps": 2,
+        "route_steps": 1,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 1,
+        "inventory_meal_answers": 1,
+        "completed_inventory_units": 1,
+        "meal_answers": 1,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 1
+      },
+      "first_food_intent": {
+        "sequence": 4776,
+        "step": 4775,
+        "turn": 4773,
+        "level": [
+          0,
+          5
+        ],
+        "xy": [
+          53,
+          3
+        ],
+        "hp": [
+          23,
+          57
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.W",
+        "command": 104,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "You kill the rabid rat!",
+        "message_after": "You see here a slime mold.",
+        "turn_after": 4774,
+        "hp_after": [
+          24,
+          57
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 4777,
+          "step": 4776,
+          "turn": 4774,
+          "level": [
+            0,
+            5
+          ],
+          "xy": [
+            52,
+            3
+          ],
+          "hp": [
+            24,
+            57
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here a slime mold.",
+          "message_after": "r - a slime mold.",
+          "turn_after": 4775,
+          "hp_after": [
+            24,
+            57
+          ],
+          "hunger_after": 1
+        },
+        {
+          "sequence": 5521,
+          "step": 5520,
+          "turn": 5520,
+          "level": [
+            0,
+            5
+          ],
+          "xy": [
+            53,
+            3
+          ],
+          "hp": [
+            57,
+            57
+          ],
+          "hunger": 2,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.READ",
+          "command": 114,
+          "source": "deterministic_prompt",
+          "rationale": "Select the verified food ration in inventory slot r.",
+          "message_before": "What do you want to eat? [r or ?*] ",
+          "message_after": "My, this is a yummy slime mold!",
+          "turn_after": 5521,
+          "hp_after": [
+            57,
+            57
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-or-reg",
+      "seed": 904,
+      "counts": {
+        "food_intent_steps": 2,
+        "route_steps": 1,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 1,
+        "meal_answers": 0,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 0
+      },
+      "first_food_intent": {
+        "sequence": 1896,
+        "step": 1895,
+        "turn": 1911,
+        "level": [
+          0,
+          5
+        ],
+        "xy": [
+          56,
+          13
+        ],
+        "hp": [
+          45,
+          45
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.E",
+        "command": 108,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "",
+        "message_after": "You see here a slime mold.",
+        "turn_after": 1912,
+        "hp_after": [
+          45,
+          45
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 1897,
+          "step": 1896,
+          "turn": 1912,
+          "level": [
+            0,
+            5
+          ],
+          "xy": [
+            57,
+            13
+          ],
+          "hp": [
+            45,
+            45
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here a slime mold.",
+          "message_after": "m - a slime mold.",
+          "turn_after": 1913,
+          "hp_after": [
+            45,
+            45
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-or-reg",
+      "seed": 824,
+      "counts": {
+        "food_intent_steps": 6,
+        "route_steps": 4,
+        "pickup_initiations": 2,
+        "acquisition_actions": 2,
+        "acquired_units": 2,
+        "meal_answers": 0,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 0
+      },
+      "first_food_intent": {
+        "sequence": 739,
+        "step": 738,
+        "turn": 744,
+        "level": [
+          0,
+          5
+        ],
+        "xy": [
+          11,
+          8
+        ],
+        "hp": [
+          19,
+          23
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.W",
+        "command": 104,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "",
+        "message_after": "",
+        "turn_after": 745,
+        "hp_after": [
+          19,
+          23
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 742,
+          "step": 741,
+          "turn": 747,
+          "level": [
+            0,
+            5
+          ],
+          "xy": [
+            8,
+            8
+          ],
+          "hp": [
+            19,
+            23
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here a slime mold.",
+          "message_after": "l - a slime mold.",
+          "turn_after": 748,
+          "hp_after": [
+            20,
+            23
+          ],
+          "hunger_after": 1
+        },
+        {
+          "sequence": 1985,
+          "step": 1984,
+          "turn": 2004,
+          "level": [
+            0,
+            6
+          ],
+          "xy": [
+            35,
+            15
+          ],
+          "hp": [
+            49,
+            49
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here a slime mold.",
+          "message_after": "l - a slime mold.",
+          "turn_after": 2005,
+          "hp_after": [
+            49,
+            49
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-or-reg",
+      "seed": 1195605202,
+      "counts": {
+        "food_intent_steps": 2,
+        "route_steps": 1,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 2,
+        "meal_answers": 0,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 0
+      },
+      "first_food_intent": {
+        "sequence": 2826,
+        "step": 2825,
+        "turn": 2865,
+        "level": [
+          0,
+          6
+        ],
+        "xy": [
+          45,
+          10
+        ],
+        "hp": [
+          43,
+          71
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.N",
+        "command": 107,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "You kill the sewer rat!",
+        "message_after": "You see here 2 slime molds.",
+        "turn_after": 2866,
+        "hp_after": [
+          43,
+          71
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 2827,
+          "step": 2826,
+          "turn": 2866,
+          "level": [
+            0,
+            6
+          ],
+          "xy": [
+            45,
+            9
+          ],
+          "hp": [
+            43,
+            71
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here 2 slime molds.",
+          "message_after": "n - 2 slime molds.",
+          "turn_after": 2867,
+          "hp_after": [
+            43,
+            71
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-or-reg",
+      "seed": 1009099699,
+      "counts": {
+        "food_intent_steps": 6,
+        "route_steps": 5,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 1,
+        "inventory_meal_answers": 1,
+        "completed_inventory_units": 1,
+        "meal_answers": 1,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 1
+      },
+      "first_food_intent": {
+        "sequence": 220,
+        "step": 219,
+        "turn": 237,
+        "level": [
+          0,
+          3
+        ],
+        "xy": [
+          30,
+          7
+        ],
+        "hp": [
+          18,
+          18
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.N",
+        "command": 107,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "",
+        "message_after": "",
+        "turn_after": 238,
+        "hp_after": [
+          18,
+          18
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 225,
+          "step": 224,
+          "turn": 242,
+          "level": [
+            0,
+            3
+          ],
+          "xy": [
+            29,
+            2
+          ],
+          "hp": [
+            18,
+            18
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here a slime mold.",
+          "message_after": "f - a slime mold.",
+          "turn_after": 243,
+          "hp_after": [
+            18,
+            18
+          ],
+          "hunger_after": 1
+        },
+        {
+          "sequence": 2969,
+          "step": 2968,
+          "turn": 3014,
+          "level": [
+            0,
+            6
+          ],
+          "xy": [
+            8,
+            16
+          ],
+          "hp": [
+            60,
+            60
+          ],
+          "hunger": 2,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.FIRE",
+          "command": 102,
+          "source": "deterministic_prompt",
+          "rationale": "Select the verified food ration in inventory slot f.",
+          "message_before": "What do you want to eat? [f or ?*] ",
+          "message_after": "My, this is a yummy slime mold!",
+          "turn_after": 3015,
+          "hp_after": [
+            60,
+            60
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-or-reg",
+      "seed": 1528054415,
+      "counts": {
+        "food_intent_steps": 3,
+        "route_steps": 2,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 1,
+        "meal_answers": 0,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 0
+      },
+      "first_food_intent": {
+        "sequence": 45,
+        "step": 44,
+        "turn": 43,
+        "level": [
+          0,
+          1
+        ],
+        "xy": [
+          30,
+          6
+        ],
+        "hp": [
+          15,
+          18
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.N",
+        "command": 107,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "The kitten picks up an orcish helm.",
+        "message_after": "You swap places with your kitten.  The kitten drops an orcish helm.",
+        "turn_after": 44,
+        "hp_after": [
+          15,
+          18
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 47,
+          "step": 46,
+          "turn": 45,
+          "level": [
+            0,
+            1
+          ],
+          "xy": [
+            29,
+            5
+          ],
+          "hp": [
+            16,
+            18
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "There is an open door here.  You see here a slime mold.",
+          "message_after": "e - a slime mold.",
+          "turn_after": 46,
+          "hp_after": [
+            16,
+            18
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-or-reg",
+      "seed": 2105401147,
+      "counts": {
+        "food_intent_steps": 10,
+        "route_steps": 9,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 1,
+        "inventory_meal_answers": 1,
+        "completed_inventory_units": 1,
+        "meal_answers": 1,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 1
+      },
+      "first_food_intent": {
+        "sequence": 1509,
+        "step": 1508,
+        "turn": 1515,
+        "level": [
+          0,
+          5
+        ],
+        "xy": [
+          45,
+          3
+        ],
+        "hp": [
+          42,
+          51
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [
+          "stunned"
+        ],
+        "action": "CompassDirection.E",
+        "command": 108,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "The door opens.  KABOOM!!  The door was booby-trapped!  You stagger...",
+        "message_after": "",
+        "turn_after": 1516,
+        "hp_after": [
+          42,
+          51
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 1518,
+          "step": 1517,
+          "turn": 1524,
+          "level": [
+            0,
+            5
+          ],
+          "xy": [
+            48,
+            2
+          ],
+          "hp": [
+            43,
+            51
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here a slime mold.",
+          "message_after": "g - a slime mold.",
+          "turn_after": 1525,
+          "hp_after": [
+            43,
+            51
+          ],
+          "hunger_after": 1
+        },
+        {
+          "sequence": 1960,
+          "step": 1959,
+          "turn": 1962,
+          "level": [
+            0,
+            5
+          ],
+          "xy": [
+            51,
+            8
+          ],
+          "hp": [
+            51,
+            51
+          ],
+          "hunger": 2,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.RUSH",
+          "command": 103,
+          "source": "deterministic_prompt",
+          "rationale": "Select the verified food ration in inventory slot g.",
+          "message_before": "What do you want to eat? [g or ?*] ",
+          "message_after": "My, this is a yummy slime mold!",
+          "turn_after": 1963,
+          "hp_after": [
+            51,
+            51
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-or-reg",
+      "seed": 2094095407,
+      "counts": {
+        "food_intent_steps": 6,
+        "route_steps": 5,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 2,
+        "meal_answers": 0,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 0
+      },
+      "first_food_intent": {
+        "sequence": 185,
+        "step": 184,
+        "turn": 183,
+        "level": [
+          0,
+          1
+        ],
+        "xy": [
+          21,
+          7
+        ],
+        "hp": [
+          13,
+          18
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.N",
+        "command": 107,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "There is a doorway here.  You see here a kobold corpse.",
+        "message_after": "",
+        "turn_after": 184,
+        "hp_after": [
+          13,
+          18
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 193,
+          "step": 192,
+          "turn": 191,
+          "level": [
+            0,
+            1
+          ],
+          "xy": [
+            17,
+            2
+          ],
+          "hp": [
+            12,
+            18
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here 2 slime molds.",
+          "message_after": "f - 2 slime molds.",
+          "turn_after": 192,
+          "hp_after": [
+            12,
+            18
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-or-reg",
+      "seed": 1362,
+      "counts": {
+        "food_intent_steps": 2,
+        "route_steps": 1,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 2,
+        "meal_answers": 0,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 0
+      },
+      "first_food_intent": {
+        "sequence": 805,
+        "step": 804,
+        "turn": 813,
+        "level": [
+          0,
+          4
+        ],
+        "xy": [
+          50,
+          11
+        ],
+        "hp": [
+          26,
+          26
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.S",
+        "command": 106,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "You kill the iguana!",
+        "message_after": "You see here 2 slime molds.",
+        "turn_after": 814,
+        "hp_after": [
+          26,
+          26
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 806,
+          "step": 805,
+          "turn": 814,
+          "level": [
+            0,
+            4
+          ],
+          "xy": [
+            50,
+            12
+          ],
+          "hp": [
+            26,
+            26
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here 2 slime molds.",
+          "message_after": "i - 2 slime molds.",
+          "turn_after": 815,
+          "hp_after": [
+            26,
+            26
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-or-reg",
+      "seed": 1365,
+      "counts": {
+        "food_intent_steps": 3,
+        "route_steps": 2,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 1,
+        "inventory_meal_answers": 1,
+        "completed_inventory_units": 1,
+        "meal_answers": 1,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 1
+      },
+      "first_food_intent": {
+        "sequence": 22,
+        "step": 21,
+        "turn": 21,
+        "level": [
+          0,
+          2
+        ],
+        "xy": [
+          45,
+          18
+        ],
+        "hp": [
+          18,
+          18
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.NW",
+        "command": 121,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "",
+        "message_after": "",
+        "turn_after": 22,
+        "hp_after": [
+          18,
+          18
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 24,
+          "step": 23,
+          "turn": 23,
+          "level": [
+            0,
+            2
+          ],
+          "xy": [
+            43,
+            16
+          ],
+          "hp": [
+            18,
+            18
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here a slime mold.",
+          "message_after": "f - a slime mold.",
+          "turn_after": 24,
+          "hp_after": [
+            18,
+            18
+          ],
+          "hunger_after": 1
+        },
+        {
+          "sequence": 2198,
+          "step": 2197,
+          "turn": 2215,
+          "level": [
+            0,
+            5
+          ],
+          "xy": [
+            72,
+            4
+          ],
+          "hp": [
+            43,
+            43
+          ],
+          "hunger": 2,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.FIRE",
+          "command": 102,
+          "source": "deterministic_prompt",
+          "rationale": "Select the verified food ration in inventory slot f.",
+          "message_before": "What do you want to eat? [fg or ?*] ",
+          "message_after": "Blecch!  Rotten food!  You feel rather light headed.",
+          "turn_after": 2216,
+          "hp_after": [
+            43,
+            43
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-or-reg",
+      "seed": 1374,
+      "counts": {
+        "food_intent_steps": 6,
+        "route_steps": 5,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 1,
+        "meal_answers": 0,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 0
+      },
+      "first_food_intent": {
+        "sequence": 61,
+        "step": 60,
+        "turn": 60,
+        "level": [
+          0,
+          1
+        ],
+        "xy": [
+          45,
+          5
+        ],
+        "hp": [
+          18,
+          18
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.S",
+        "command": 106,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "",
+        "message_after": "",
+        "turn_after": 61,
+        "hp_after": [
+          18,
+          18
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 66,
+          "step": 65,
+          "turn": 65,
+          "level": [
+            0,
+            1
+          ],
+          "xy": [
+            45,
+            10
+          ],
+          "hp": [
+            18,
+            18
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here a slime mold.",
+          "message_after": "e - a slime mold.",
+          "turn_after": 66,
+          "hp_after": [
+            18,
+            18
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-or-reg",
+      "seed": 1379,
+      "counts": {
+        "food_intent_steps": 5,
+        "route_steps": 4,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 1,
+        "inventory_meal_answers": 1,
+        "completed_inventory_units": 1,
+        "meal_answers": 1,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 1
+      },
+      "first_food_intent": {
+        "sequence": 195,
+        "step": 194,
+        "turn": 194,
+        "level": [
+          0,
+          1
+        ],
+        "xy": [
+          17,
+          7
+        ],
+        "hp": [
+          18,
+          18
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.N",
+        "command": 107,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "",
+        "message_after": "",
+        "turn_after": 195,
+        "hp_after": [
+          18,
+          18
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 199,
+          "step": 198,
+          "turn": 198,
+          "level": [
+            0,
+            1
+          ],
+          "xy": [
+            20,
+            3
+          ],
+          "hp": [
+            18,
+            18
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here a slime mold.",
+          "message_after": "f - a slime mold.",
+          "turn_after": 199,
+          "hp_after": [
+            18,
+            18
+          ],
+          "hunger_after": 1
+        },
+        {
+          "sequence": 1734,
+          "step": 1733,
+          "turn": 1734,
+          "level": [
+            0,
+            3
+          ],
+          "xy": [
+            28,
+            14
+          ],
+          "hp": [
+            18,
+            18
+          ],
+          "hunger": 2,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.FIRE",
+          "command": 102,
+          "source": "deterministic_prompt",
+          "rationale": "Select the verified food ration in inventory slot f.",
+          "message_before": "What do you want to eat? [fh or ?*] ",
+          "message_after": "My, this is a yummy slime mold!",
+          "turn_after": 1735,
+          "hp_after": [
+            18,
+            18
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-d5-reg",
+      "seed": 1009099699,
+      "counts": {
+        "food_intent_steps": 6,
+        "route_steps": 5,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 1,
+        "meal_answers": 0,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 0
+      },
+      "first_food_intent": {
+        "sequence": 220,
+        "step": 219,
+        "turn": 237,
+        "level": [
+          0,
+          3
+        ],
+        "xy": [
+          30,
+          7
+        ],
+        "hp": [
+          18,
+          18
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.N",
+        "command": 107,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "",
+        "message_after": "",
+        "turn_after": 238,
+        "hp_after": [
+          18,
+          18
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 225,
+          "step": 224,
+          "turn": 242,
+          "level": [
+            0,
+            3
+          ],
+          "xy": [
+            29,
+            2
+          ],
+          "hp": [
+            18,
+            18
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here a slime mold.",
+          "message_after": "f - a slime mold.",
+          "turn_after": 243,
+          "hp_after": [
+            18,
+            18
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-d5-reg",
+      "seed": 1528054415,
+      "counts": {
+        "food_intent_steps": 3,
+        "route_steps": 2,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 1,
+        "meal_answers": 0,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 0
+      },
+      "first_food_intent": {
+        "sequence": 45,
+        "step": 44,
+        "turn": 43,
+        "level": [
+          0,
+          1
+        ],
+        "xy": [
+          30,
+          6
+        ],
+        "hp": [
+          15,
+          18
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.N",
+        "command": 107,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "The kitten picks up an orcish helm.",
+        "message_after": "You swap places with your kitten.  The kitten drops an orcish helm.",
+        "turn_after": 44,
+        "hp_after": [
+          15,
+          18
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 47,
+          "step": 46,
+          "turn": 45,
+          "level": [
+            0,
+            1
+          ],
+          "xy": [
+            29,
+            5
+          ],
+          "hp": [
+            16,
+            18
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "There is an open door here.  You see here a slime mold.",
+          "message_after": "e - a slime mold.",
+          "turn_after": 46,
+          "hp_after": [
+            16,
+            18
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-d5-reg",
+      "seed": 2094095407,
+      "counts": {
+        "food_intent_steps": 6,
+        "route_steps": 5,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 2,
+        "meal_answers": 0,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 0
+      },
+      "first_food_intent": {
+        "sequence": 185,
+        "step": 184,
+        "turn": 183,
+        "level": [
+          0,
+          1
+        ],
+        "xy": [
+          21,
+          7
+        ],
+        "hp": [
+          13,
+          18
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.N",
+        "command": 107,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "There is a doorway here.  You see here a kobold corpse.",
+        "message_after": "",
+        "turn_after": 184,
+        "hp_after": [
+          13,
+          18
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 193,
+          "step": 192,
+          "turn": 191,
+          "level": [
+            0,
+            1
+          ],
+          "xy": [
+            17,
+            2
+          ],
+          "hp": [
+            12,
+            18
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here 2 slime molds.",
+          "message_after": "f - 2 slime molds.",
+          "turn_after": 192,
+          "hp_after": [
+            12,
+            18
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-d5-reg",
+      "seed": 1362,
+      "counts": {
+        "food_intent_steps": 2,
+        "route_steps": 1,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 2,
+        "meal_answers": 0,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 0
+      },
+      "first_food_intent": {
+        "sequence": 809,
+        "step": 808,
+        "turn": 813,
+        "level": [
+          0,
+          4
+        ],
+        "xy": [
+          50,
+          11
+        ],
+        "hp": [
+          26,
+          26
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.S",
+        "command": 106,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "You kill the iguana!",
+        "message_after": "You see here 2 slime molds.",
+        "turn_after": 814,
+        "hp_after": [
+          26,
+          26
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 810,
+          "step": 809,
+          "turn": 814,
+          "level": [
+            0,
+            4
+          ],
+          "xy": [
+            50,
+            12
+          ],
+          "hp": [
+            26,
+            26
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here 2 slime molds.",
+          "message_after": "i - 2 slime molds.",
+          "turn_after": 815,
+          "hp_after": [
+            26,
+            26
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-d5-reg",
+      "seed": 1365,
+      "counts": {
+        "food_intent_steps": 3,
+        "route_steps": 2,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 1,
+        "meal_answers": 0,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 0
+      },
+      "first_food_intent": {
+        "sequence": 22,
+        "step": 21,
+        "turn": 21,
+        "level": [
+          0,
+          2
+        ],
+        "xy": [
+          45,
+          18
+        ],
+        "hp": [
+          18,
+          18
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.NW",
+        "command": 121,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "",
+        "message_after": "",
+        "turn_after": 22,
+        "hp_after": [
+          18,
+          18
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 24,
+          "step": 23,
+          "turn": 23,
+          "level": [
+            0,
+            2
+          ],
+          "xy": [
+            43,
+            16
+          ],
+          "hp": [
+            18,
+            18
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here a slime mold.",
+          "message_after": "f - a slime mold.",
+          "turn_after": 24,
+          "hp_after": [
+            18,
+            18
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-d5-reg",
+      "seed": 1374,
+      "counts": {
+        "food_intent_steps": 6,
+        "route_steps": 5,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 1,
+        "meal_answers": 0,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 0
+      },
+      "first_food_intent": {
+        "sequence": 61,
+        "step": 60,
+        "turn": 60,
+        "level": [
+          0,
+          1
+        ],
+        "xy": [
+          45,
+          5
+        ],
+        "hp": [
+          18,
+          18
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.S",
+        "command": 106,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "",
+        "message_after": "",
+        "turn_after": 61,
+        "hp_after": [
+          18,
+          18
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 66,
+          "step": 65,
+          "turn": 65,
+          "level": [
+            0,
+            1
+          ],
+          "xy": [
+            45,
+            10
+          ],
+          "hp": [
+            18,
+            18
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here a slime mold.",
+          "message_after": "e - a slime mold.",
+          "turn_after": 66,
+          "hp_after": [
+            18,
+            18
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-d5-reg",
+      "seed": 1379,
+      "counts": {
+        "food_intent_steps": 5,
+        "route_steps": 4,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 1,
+        "inventory_meal_answers": 1,
+        "completed_inventory_units": 1,
+        "meal_answers": 1,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 1
+      },
+      "first_food_intent": {
+        "sequence": 195,
+        "step": 194,
+        "turn": 194,
+        "level": [
+          0,
+          1
+        ],
+        "xy": [
+          17,
+          7
+        ],
+        "hp": [
+          18,
+          18
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.N",
+        "command": 107,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "",
+        "message_after": "",
+        "turn_after": 195,
+        "hp_after": [
+          18,
+          18
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 199,
+          "step": 198,
+          "turn": 198,
+          "level": [
+            0,
+            1
+          ],
+          "xy": [
+            20,
+            3
+          ],
+          "hp": [
+            18,
+            18
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here a slime mold.",
+          "message_after": "f - a slime mold.",
+          "turn_after": 199,
+          "hp_after": [
+            18,
+            18
+          ],
+          "hunger_after": 1
+        },
+        {
+          "sequence": 1734,
+          "step": 1733,
+          "turn": 1734,
+          "level": [
+            0,
+            3
+          ],
+          "xy": [
+            28,
+            14
+          ],
+          "hp": [
+            18,
+            18
+          ],
+          "hunger": 2,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.FIRE",
+          "command": 102,
+          "source": "deterministic_prompt",
+          "rationale": "Select the verified food ration in inventory slot f.",
+          "message_before": "What do you want to eat? [fh or ?*] ",
+          "message_after": "My, this is a yummy slime mold!",
+          "turn_after": 1735,
+          "hp_after": [
+            18,
+            18
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-mt-fresh",
+      "seed": 549,
+      "counts": {
+        "food_intent_steps": 3,
+        "route_steps": 2,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 1,
+        "meal_answers": 0,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 0
+      },
+      "first_food_intent": {
+        "sequence": 4329,
+        "step": 4328,
+        "turn": 4369,
+        "level": [
+          0,
+          4
+        ],
+        "xy": [
+          36,
+          4
+        ],
+        "hp": [
+          52,
+          59
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.SE",
+        "command": 110,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "",
+        "message_after": "",
+        "turn_after": 4370,
+        "hp_after": [
+          52,
+          59
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 4331,
+          "step": 4330,
+          "turn": 4371,
+          "level": [
+            0,
+            4
+          ],
+          "xy": [
+            38,
+            6
+          ],
+          "hp": [
+            52,
+            59
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here a slime mold.",
+          "message_after": "v - a slime mold.",
+          "turn_after": 4372,
+          "hp_after": [
+            52,
+            59
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-mt-fresh",
+      "seed": 551,
+      "counts": {
+        "food_intent_steps": 2,
+        "route_steps": 1,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 1,
+        "inventory_meal_answers": 1,
+        "completed_inventory_units": 1,
+        "meal_answers": 1,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 1
+      },
+      "first_food_intent": {
+        "sequence": 1187,
+        "step": 1186,
+        "turn": 1210,
+        "level": [
+          0,
+          2
+        ],
+        "xy": [
+          40,
+          7
+        ],
+        "hp": [
+          37,
+          41
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.E",
+        "command": 108,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "",
+        "message_after": "There is a doorway here.  You see here a slime mold.",
+        "turn_after": 1211,
+        "hp_after": [
+          37,
+          41
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 1188,
+          "step": 1187,
+          "turn": 1211,
+          "level": [
+            0,
+            2
+          ],
+          "xy": [
+            41,
+            7
+          ],
+          "hp": [
+            37,
+            41
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "There is a doorway here.  You see here a slime mold.",
+          "message_after": "f - a slime mold.",
+          "turn_after": 1212,
+          "hp_after": [
+            37,
+            41
+          ],
+          "hunger_after": 1
+        },
+        {
+          "sequence": 3885,
+          "step": 3884,
+          "turn": 3912,
+          "level": [
+            0,
+            2
+          ],
+          "xy": [
+            28,
+            11
+          ],
+          "hp": [
+            41,
+            41
+          ],
+          "hunger": 2,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.FIRE",
+          "command": 102,
+          "source": "deterministic_prompt",
+          "rationale": "Select the verified food ration in inventory slot f.",
+          "message_before": "What do you want to eat? [f or ?*] ",
+          "message_after": "My, this is a yummy slime mold!",
+          "turn_after": 3913,
+          "hp_after": [
+            41,
+            41
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-mt-fresh",
+      "seed": 552,
+      "counts": {
+        "food_intent_steps": 6,
+        "route_steps": 2,
+        "pickup_initiations": 2,
+        "acquisition_actions": 2,
+        "acquired_units": 2,
+        "inventory_meal_answers": 2,
+        "completed_inventory_units": 2,
+        "meal_answers": 2,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 1
+      },
+      "first_food_intent": {
+        "sequence": 1249,
+        "step": 1248,
+        "turn": 1255,
+        "level": [
+          0,
+          2
+        ],
+        "xy": [
+          55,
+          13
+        ],
+        "hp": [
+          28,
+          28
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.E",
+        "command": 108,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "You kill the goblin!  Welcome to experience level 2.",
+        "message_after": "",
+        "turn_after": 1256,
+        "hp_after": [
+          28,
+          28
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 1250,
+          "step": 1249,
+          "turn": 1256,
+          "level": [
+            0,
+            2
+          ],
+          "xy": [
+            56,
+            13
+          ],
+          "hp": [
+            28,
+            28
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "",
+          "message_after": "",
+          "turn_after": 1256,
+          "hp_after": [
+            28,
+            28
+          ],
+          "hunger_after": 1
+        },
+        {
+          "sequence": 1252,
+          "step": 1251,
+          "turn": 1256,
+          "level": [
+            0,
+            2
+          ],
+          "xy": [
+            56,
+            13
+          ],
+          "hp": [
+            28,
+            28
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "MiscAction.MORE",
+          "command": 13,
+          "source": "deterministic_prompt",
+          "rationale": "Answer only the exact reviewed floor food offer.",
+          "message_before": "",
+          "message_after": "j - a slime mold.",
+          "turn_after": 1257,
+          "hp_after": [
+            28,
+            28
+          ],
+          "hunger_after": 1
+        },
+        {
+          "sequence": 2290,
+          "step": 2289,
+          "turn": 2309,
+          "level": [
+            0,
+            3
+          ],
+          "xy": [
+            19,
+            6
+          ],
+          "hp": [
+            34,
+            35
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here a slime mold.",
+          "message_after": "j - a slime mold.",
+          "turn_after": 2310,
+          "hp_after": [
+            34,
+            35
+          ],
+          "hunger_after": 1
+        },
+        {
+          "sequence": 5206,
+          "step": 5205,
+          "turn": 5234,
+          "level": [
+            2,
+            4
+          ],
+          "xy": [
+            15,
+            10
+          ],
+          "hp": [
+            63,
+            63
+          ],
+          "hunger": 2,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "CompassDirection.S",
+          "command": 106,
+          "source": "deterministic_prompt",
+          "rationale": "Select the verified food ration in inventory slot j.",
+          "message_before": "What do you want to eat? [jk or ?*] ",
+          "message_after": "My, this is a yummy slime mold!",
+          "turn_after": 5235,
+          "hp_after": [
+            63,
+            63
+          ],
+          "hunger_after": 1
+        },
+        {
+          "sequence": 5457,
+          "step": 5456,
+          "turn": 5484,
+          "level": [
+            2,
+            4
+          ],
+          "xy": [
+            15,
+            10
+          ],
+          "hp": [
+            63,
+            63
+          ],
+          "hunger": 2,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "CompassDirection.S",
+          "command": 106,
+          "source": "deterministic_prompt",
+          "rationale": "Select the verified food ration in inventory slot j.",
+          "message_before": "What do you want to eat? [jk or ?*] ",
+          "message_after": "My, this is a yummy slime mold!",
+          "turn_after": 5485,
+          "hp_after": [
+            63,
+            63
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-mt-fresh",
+      "seed": 565,
+      "counts": {
+        "food_intent_steps": 3,
+        "route_steps": 2,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 1,
+        "inventory_meal_answers": 1,
+        "completed_inventory_units": 1,
+        "meal_answers": 1,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 1
+      },
+      "first_food_intent": {
+        "sequence": 2986,
+        "step": 2985,
+        "turn": 3024,
+        "level": [
+          0,
+          2
+        ],
+        "xy": [
+          56,
+          11
+        ],
+        "hp": [
+          47,
+          47
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.N",
+        "command": 107,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "You kill the lichen!",
+        "message_after": "You see here a slime mold.  The iguana bites!",
+        "turn_after": 3025,
+        "hp_after": [
+          44,
+          47
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 2990,
+          "step": 2989,
+          "turn": 3028,
+          "level": [
+            0,
+            2
+          ],
+          "xy": [
+            56,
+            10
+          ],
+          "hp": [
+            44,
+            47
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here a slime mold.",
+          "message_after": "i - a slime mold.",
+          "turn_after": 3029,
+          "hp_after": [
+            44,
+            47
+          ],
+          "hunger_after": 1
+        },
+        {
+          "sequence": 4108,
+          "step": 4107,
+          "turn": 4150,
+          "level": [
+            0,
+            2
+          ],
+          "xy": [
+            57,
+            12
+          ],
+          "hp": [
+            47,
+            47
+          ],
+          "hunger": 2,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.INVENTORY",
+          "command": 105,
+          "source": "deterministic_prompt",
+          "rationale": "Select the verified food ration in inventory slot i.",
+          "message_before": "What do you want to eat? [i or ?*] ",
+          "message_after": "My, this is a yummy slime mold!",
+          "turn_after": 4151,
+          "hp_after": [
+            47,
+            47
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-mt-fresh",
+      "seed": 566,
+      "counts": {
+        "food_intent_steps": 6,
+        "route_steps": 5,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 2,
+        "inventory_meal_answers": 2,
+        "completed_inventory_units": 2,
+        "meal_answers": 2,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 1
+      },
+      "first_food_intent": {
+        "sequence": 888,
+        "step": 887,
+        "turn": 921,
+        "level": [
+          2,
+          3
+        ],
+        "xy": [
+          26,
+          7
+        ],
+        "hp": [
+          33,
+          33
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.N",
+        "command": 107,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "",
+        "message_after": "",
+        "turn_after": 922,
+        "hp_after": [
+          33,
+          33
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 893,
+          "step": 892,
+          "turn": 926,
+          "level": [
+            2,
+            3
+          ],
+          "xy": [
+            28,
+            2
+          ],
+          "hp": [
+            33,
+            33
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here 2 slime molds.",
+          "message_after": "j - 2 slime molds.",
+          "turn_after": 927,
+          "hp_after": [
+            33,
+            33
+          ],
+          "hunger_after": 1
+        },
+        {
+          "sequence": 1236,
+          "step": 1235,
+          "turn": 1279,
+          "level": [
+            2,
+            3
+          ],
+          "xy": [
+            69,
+            4
+          ],
+          "hp": [
+            25,
+            33
+          ],
+          "hunger": 2,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "CompassDirection.S",
+          "command": 106,
+          "source": "deterministic_prompt",
+          "rationale": "Select the verified food ration in inventory slot j.",
+          "message_before": "What do you want to eat? [jk or ?*] ",
+          "message_after": "My, this is a yummy slime mold!",
+          "turn_after": 1280,
+          "hp_after": [
+            25,
+            33
+          ],
+          "hunger_after": 1
+        },
+        {
+          "sequence": 1505,
+          "step": 1504,
+          "turn": 1546,
+          "level": [
+            2,
+            3
+          ],
+          "xy": [
+            7,
+            5
+          ],
+          "hp": [
+            38,
+            38
+          ],
+          "hunger": 2,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "CompassDirection.S",
+          "command": 106,
+          "source": "deterministic_prompt",
+          "rationale": "Select the verified food ration in inventory slot j.",
+          "message_before": "What do you want to eat? [jk or ?*] ",
+          "message_after": "Blecch!  Rotten food!",
+          "turn_after": 1547,
+          "hp_after": [
+            38,
+            38
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-mt-fresh",
+      "seed": 568,
+      "counts": {
+        "food_intent_steps": 2,
+        "route_steps": 1,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 1,
+        "inventory_meal_answers": 1,
+        "completed_inventory_units": 1,
+        "meal_answers": 1,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 1
+      },
+      "first_food_intent": {
+        "sequence": 756,
+        "step": 755,
+        "turn": 766,
+        "level": [
+          0,
+          2
+        ],
+        "xy": [
+          6,
+          10
+        ],
+        "hp": [
+          18,
+          18
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.SW",
+        "command": 98,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "",
+        "message_after": "You see here a slime mold.",
+        "turn_after": 767,
+        "hp_after": [
+          18,
+          18
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 757,
+          "step": 756,
+          "turn": 767,
+          "level": [
+            0,
+            2
+          ],
+          "xy": [
+            5,
+            11
+          ],
+          "hp": [
+            18,
+            18
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here a slime mold.",
+          "message_after": "g - a slime mold.",
+          "turn_after": 768,
+          "hp_after": [
+            18,
+            18
+          ],
+          "hunger_after": 1
+        },
+        {
+          "sequence": 3082,
+          "step": 3081,
+          "turn": 3116,
+          "level": [
+            2,
+            3
+          ],
+          "xy": [
+            39,
+            4
+          ],
+          "hp": [
+            45,
+            45
+          ],
+          "hunger": 2,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.RUSH",
+          "command": 103,
+          "source": "deterministic_prompt",
+          "rationale": "Select the verified food ration in inventory slot g.",
+          "message_before": "What do you want to eat? [gj or ?*] ",
+          "message_after": "My, this is a yummy slime mold!",
+          "turn_after": 3117,
+          "hp_after": [
+            45,
+            45
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-or-fresh",
+      "seed": 549,
+      "counts": {
+        "food_intent_steps": 3,
+        "route_steps": 2,
+        "pickup_initiations": 1,
+        "acquisition_actions": 1,
+        "acquired_units": 1,
+        "meal_answers": 0,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 0
+      },
+      "first_food_intent": {
+        "sequence": 810,
+        "step": 809,
+        "turn": 819,
+        "level": [
+          0,
+          4
+        ],
+        "xy": [
+          36,
+          4
+        ],
+        "hp": [
+          33,
+          36
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.SE",
+        "command": 110,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "",
+        "message_after": "",
+        "turn_after": 820,
+        "hp_after": [
+          33,
+          36
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 812,
+          "step": 811,
+          "turn": 821,
+          "level": [
+            0,
+            4
+          ],
+          "xy": [
+            38,
+            6
+          ],
+          "hp": [
+            33,
+            36
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here a slime mold.",
+          "message_after": "i - a slime mold.",
+          "turn_after": 822,
+          "hp_after": [
+            33,
+            36
+          ],
+          "hunger_after": 1
+        }
+      ]
+    },
+    {
+      "arm": "0052-cand-or-fresh",
+      "seed": 558,
+      "counts": {
+        "food_intent_steps": 7,
+        "route_steps": 5,
+        "pickup_initiations": 2,
+        "acquisition_actions": 2,
+        "acquired_units": 2,
+        "inventory_meal_answers": 1,
+        "completed_inventory_units": 1,
+        "meal_answers": 1,
+        "runs_with_rule_activation": 1,
+        "runs_with_pickup": 1,
+        "runs_with_meal": 1
+      },
+      "first_food_intent": {
+        "sequence": 1008,
+        "step": 1007,
+        "turn": 1023,
+        "level": [
+          0,
+          4
+        ],
+        "xy": [
+          51,
+          6
+        ],
+        "hp": [
+          28,
+          28
+        ],
+        "hunger": 1,
+        "encumbrance": 0,
+        "conditions": [],
+        "action": "CompassDirection.E",
+        "command": 108,
+        "source": "deterministic_skill",
+        "rationale": "Approach the reviewed non-shop slime mold within five steps.",
+        "message_before": "This food really hits the spot!  You finish eating the food ration.",
+        "message_after": "",
+        "turn_after": 1024,
+        "hp_after": [
+          28,
+          28
+        ],
+        "hunger_after": 1
+      },
+      "pickup_and_meal_events": [
+        {
+          "sequence": 1013,
+          "step": 1012,
+          "turn": 1028,
+          "level": [
+            0,
+            4
+          ],
+          "xy": [
+            56,
+            3
+          ],
+          "hp": [
+            28,
+            28
+          ],
+          "hunger": 1,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here a slime mold.",
+          "message_after": "i - a slime mold.",
+          "turn_after": 1029,
+          "hp_after": [
+            28,
+            28
+          ],
+          "hunger_after": 1
+        },
+        {
+          "sequence": 1943,
+          "step": 1942,
+          "turn": 1958,
+          "level": [
+            0,
+            5
+          ],
+          "xy": [
+            57,
+            17
+          ],
+          "hp": [
+            56,
+            61
+          ],
+          "hunger": 3,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.PICKUP",
+          "command": 44,
+          "source": "deterministic_skill",
+          "rationale": "Recover the reviewed non-shop slime mold underfoot.",
+          "message_before": "You see here a slime mold.",
+          "message_after": "i - a slime mold.",
+          "turn_after": 1959,
+          "hp_after": [
+            56,
+            61
+          ],
+          "hunger_after": 3
+        },
+        {
+          "sequence": 1945,
+          "step": 1944,
+          "turn": 1959,
+          "level": [
+            0,
+            5
+          ],
+          "xy": [
+            57,
+            17
+          ],
+          "hp": [
+            56,
+            61
+          ],
+          "hunger": 3,
+          "encumbrance": 0,
+          "conditions": [],
+          "action": "Command.INVENTORY",
+          "command": 105,
+          "source": "deterministic_prompt",
+          "rationale": "Select the verified food ration in inventory slot i.",
+          "message_before": "What do you want to eat? [i or ?*] ",
+          "message_after": "My, this is a yummy slime mold!",
+          "turn_after": 1960,
+          "hp_after": [
+            57,
+            61
+          ],
+          "hunger_after": 1
+        }
+      ]
+    }
+  ]
+}

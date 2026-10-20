@@ -2520,3 +2520,261 @@ def test_burden_prompt_runtime_gate_and_audit_reject_wrong_item_or_count(
             gate.resolve(
                 action.index, selection=selection, before=before, burden=recovery
             )
+
+
+@pytest.mark.parametrize(
+    ("description", "recognized"),
+    [
+        ("a slime mold", True),
+        ("2 slime molds", True),
+        ("a partly eaten slime mold", True),
+        ("a paddle cactus", False),
+        ("2 dwarven roots", False),
+        ("a food ration", False),
+        ("a slime mold potion", False),
+        ("a slime mold named paddle cactus", False),
+        ("2 slime molds called fruit", False),
+        ("a slime mold (for sale, 17 zorkmids)", False),
+        ("a slime mold (unpaid, 17 zorkmids)", False),
+    ],
+)
+def test_slime_mold_inventory_requires_canonical_text_and_matching_glyph(
+    template: ProjectedObservation, description: str, recognized: bool
+) -> None:
+    from nethack_agent.food import known_inventory_food, safe_inventory_food
+
+    fruit = next(
+        index
+        for index in range(nethack.NUM_OBJECTS)
+        if nethack.OBJ_NAME(nethack.objclass(index)) == "slime mold"
+    )
+    item = replace(
+        _ration(template, description=description, buc=BucStatus.UNKNOWN),
+        glyph=nethack.GLYPH_OBJ_OFF + fruit,
+    )
+    assert (known_inventory_food(item) == "slime mold") is recognized
+    observation = replace(template, inventory=(item,))
+    assert bool(safe_inventory_food(observation)) is recognized
+    if recognized:
+        # A description-only implementation would accept a different food glyph.
+        assert known_inventory_food(replace(item, glyph=_GLYPHS["%"])) is None
+
+
+@pytest.mark.parametrize(
+    ("encumbrance", "hunger", "shop", "hallucinating", "expected"),
+    [
+        (0, 1, False, False, "Command.PICKUP"),
+        (1, 1, False, False, None),
+        (1, 2, False, False, "Command.EAT"),
+        (0, 2, True, False, None),
+        (0, 2, False, True, None),
+    ],
+)
+def test_slime_mold_collection_keeps_shop_burden_and_runtime_audit_gates(
+    template: ProjectedObservation,
+    encumbrance: int,
+    hunger: int,
+    shop: bool,
+    hallucinating: bool,
+    expected: str | None,
+) -> None:
+    from nethack_agent.coordinator import ActionGate, ActionGateError
+    from nethack_agent.decision import (
+        ActionSelection,
+        FoodEvidence,
+        SkillSelectionSource,
+    )
+    from nethack_agent.evaluation import _action_is_valid
+    from nethack_agent.events import StepPayload
+    from nethack_agent.foraging import FoodPermit
+    from nethack_agent.tasks import ActionProfile
+    from nethack_agent.traversal import STAND_ON_DOWNSTAIRS
+
+    profile = ActionProfile.NLE_SURVIVAL_ACTIONS
+    legal = tuple(
+        LegalAction(i, int(a), f"{type(a).__name__}.{a.name}")
+        for i, a in enumerate(profile.actions)
+    )
+    by_name = {a.name: a for a in legal}
+    by_command = {a.command: a for a in legal}
+    before = sketch(
+        template, ("-----", "|.@.|", "-----"), message="You see here 2 slime molds."
+    )
+    before = replace(
+        before,
+        player=replace(
+            before.player,
+            encumbrance=encumbrance,
+            hunger=hunger,
+            conditions=("hallucinating",) if hallucinating else (),
+        ),
+    )
+    dungeon = DungeonMemory()
+    memory = dungeon.observe(before)
+    if shop:
+        memory.shop_cells.add(memory.position)
+    proposal = FoodSkill.select_action(before, memory, by_name, by_command)
+    assert (None if proposal is None else legal[proposal.action_index].name) == expected
+
+    # An unsafe caller must not bypass the skill's refusal with a forged pickup.
+    evidence = FoodEvidence("slime mold", MapCell(*memory.position))
+    action = by_name[expected or "Command.PICKUP"]
+    selection = ActionSelection(
+        ActionSelectionSource.DETERMINISTIC_SKILL,
+        STAND_ON_DOWNSTAIRS,
+        Skill.HUNGER,
+        SkillSelectionSource.ARBITER,
+        None,
+        action.index,
+        "Acquire only this verified canonical non-shop fruit.",
+        ActionIntent(None, None, None, level=memory.level, food=evidence),
+    )
+    payload = StepPayload(
+        selection,
+        None,
+        None,
+        None,
+        None,
+        action,
+        0.0,
+        False,
+        False,
+        0,
+        False,
+        None,
+        replace(before, step_index=1),
+    )
+    assert _action_is_valid(
+        payload, legal, before, True, profile, dungeon_memory=dungeon
+    ) is (expected is not None)
+    gate = ActionGate(legal, profile)
+    permit = FoodPermit(evidence)
+    if expected is not None:
+        assert (
+            gate.resolve(
+                action.index,
+                selection=selection,
+                before=before,
+                memory=memory,
+                food_permit=permit,
+            )
+            == action
+        )
+    else:
+        with pytest.raises(ActionGateError):
+            gate.resolve(
+                action.index,
+                selection=selection,
+                before=before,
+                memory=memory,
+                food_permit=permit,
+            )
+
+
+def test_slime_mold_pickup_prompt_matches_stack_not_renamed_fruit(
+    template: ProjectedObservation,
+) -> None:
+    from nethack_agent.decision import FoodEvidence
+    from nethack_agent.foraging import food_prompt_command
+    from nethack_agent.menus import PickupChoice, PickupMenu
+
+    before = sketch(template, ("-----", "|.@.|", "-----"))
+    before = replace(
+        before,
+        player=replace(before.player, encumbrance=0),
+        prompt=PromptState(False, False, True),
+        pickup_menu=PickupMenu(
+            (
+                PickupChoice("a", "2 slime molds", False),
+                PickupChoice("b", "a paddle cactus", False),
+            )
+        ),
+    )
+    memory = LevelMemory()
+    memory.observe(before)
+    evidence = FoodEvidence("slime mold", MapCell(*memory.position))
+    assert food_prompt_command(before, evidence, memory) == ord("a")
+    wrong_selected = replace(
+        before,
+        pickup_menu=PickupMenu((PickupChoice("b", "a paddle cactus", True),)),
+    )
+    assert food_prompt_command(wrong_selected, evidence, memory) == 27
+    renamed_only = replace(
+        before,
+        pickup_menu=PickupMenu((PickupChoice("b", "a paddle cactus", False),)),
+    )
+    assert food_prompt_command(renamed_only, evidence, memory) == 27
+
+
+def test_native_canonical_slime_mold_pickup_then_verified_inventory_meal(
+    tmp_path: Path,
+) -> None:
+    from nethack_agent.food import known_inventory_food
+    from nethack_agent.tasks import ActionProfile, NleTask, TaskSpec
+    from nethack_agent.traversal import FindOracleLeg, Objective
+
+    task = TaskSpec(
+        NleTask.SCORE,
+        ActionProfile.NLE_SURVIVAL_ACTIONS,
+        Objective((FindOracleLeg(),)),
+    )
+    agent = AgentCoordinator(
+        NleEnvironment(
+            ScenarioConfig(
+                seed=1365,
+                artifact_directory=tmp_path,
+                max_episode_steps=120,
+                task=task,
+            )
+        ),
+        ObservationProjector(),
+        ScriptedDevelopmentModel(),
+    )
+    try:
+        agent.start()
+        agent.resume()
+        pickup = None
+        for _ in range(100):
+            record = agent.advance()
+            assert record is not None and record.outcome is None
+            held = tuple(
+                item
+                for item in record.after.inventory
+                if known_inventory_food(item) == "slime mold"
+            )
+            if held:
+                pickup = record
+                break
+        assert pickup is not None
+        assert pickup.selection.skill is Skill.HUNGER
+        assert pickup.action.name == "Command.PICKUP"
+        assert pickup.before.player.encumbrance == 0
+        assert pickup.before.player.hunger < 2
+
+        # Isolate the meal trigger/choice, not world generation: the fruit,
+        # pickup, EAT prompt, offered letter and consumption are all real NLE.
+        # Native inventory still contains the initial ration; it must survive.
+        agent._observation = replace(
+            pickup.after,
+            player=replace(pickup.after.player, hunger=2),
+            inventory=held,
+        )
+        opened = agent.advance()
+        assert opened is not None
+        assert opened.action.name == "Command.EAT"
+        assert opened.after.prompt.single_character_choice
+        answered = agent.advance()
+        assert answered is not None
+        assert answered.action.command == ord(held[0].letter)
+        assert answered.selection.source is ActionSelectionSource.DETERMINISTIC_PROMPT
+        assert not any(
+            known_inventory_food(item) == "slime mold"
+            for item in answered.after.inventory
+        )
+        assert any(
+            known_inventory_food(item) == "food ration"
+            for item in answered.after.inventory
+        )
+        assert answered.after.player.turn > pickup.after.player.turn
+    finally:
+        agent.stop()
