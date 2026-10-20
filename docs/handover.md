@@ -60,14 +60,16 @@ Status and working notes for the next coding agent (for example Claude Code,
 
 ## 3. Work in flight (not in `main`)
 
-Candidate code lives in git worktrees outside the repository. **It is
-uncommitted**, so it is not backed up anywhere. Commit or push these branches
-before deleting directories or reinstalling the machine.
+Candidate code lives in git worktrees outside the repository. Each branch is
+committed locally (2026-10-21) with a `Qualification-Exempt` trailer, but
+nothing is pushed: back up `.git` or push the branches before deleting
+directories or reinstalling the machine.
 
 | Worktree | Branch (base `22d0a5f`) | State | Record |
 | --- | --- | --- | --- |
 | `~/nethack-evidence/0057/candidate` | `rule-0057-elbereth-disengage` | rejected, frozen | note 0057 |
-| `~/nethack-evidence/0054/candidate` | `rule-0054-no-progress-budget` | unqualified; two blocking bugs fixed | `~/nethack-evidence/0054/STATUS.md` |
+| `~/nethack-evidence/0059-rest-stall/candidate` | `rule-0059-rest-plus-stall-budget` (merge of 0054 `4822092` and 0057 `fba7813`) | built, unqualified; awaits the ADR 0007 exception | commit `800e05d` message |
+| `~/nethack-evidence/0054/candidate` | `rule-0054-no-progress-budget` | unqualified; two blocking bugs fixed (`4822092`) | `~/nethack-evidence/0054/STATUS.md` |
 | `~/nethack-evidence/0053/candidate` | `rule-0053-ranged-clearance` | paused (needs ammunition) | note 0056, `implementation-report.json` |
 | `~/nethack-evidence/0052/candidate` | `qualify-0052-slime-mold` | rejected | note 0052 |
 | `~/nethack-evidence/0052/baseline` | detached at `22d0a5f` | shipped baseline with its own `.venv` | reused by 0057 |
