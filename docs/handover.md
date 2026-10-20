@@ -40,10 +40,11 @@ Status and working notes for the next coding agent (for example Claude Code,
 
 ## 2. Decisions waiting for the project owner
 
-1. **Next gameplay step.** A combined candidate (0057 resting + 0054 stall
-   budget, qualified as one unit) needs a recorded ADR 0007 exception to "one
-   rule per qualification". The alternatives are the optional gate amendment
-   (`TODO_LIST.md` order item 3) or a different roadmap item.
+1. **Next gameplay step: decided** (owner, 2026-10-21). Candidate 0059
+   (0057 resting + 0054 stall budget) qualifies as one unit under the
+   process decision recorded at the end of ADR 0007. A development pass on
+   the three regression suites runs before preregistration; fresh seeds
+   635-664 are the next unused range.
 2. **Commit provenance for Claude Code: decided.** Claude Code commits by
    itself (owner decision, 2026-10-20) with
    `_agents/skills/omp-commit/scripts/omp_commit.py claude-commit

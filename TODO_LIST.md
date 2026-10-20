@@ -22,7 +22,7 @@ Process rules (milestone-2 lessons, notes 0037-0046, and [ADR 0007 process decis
 
 Order of work (current 2026-10-19; supersedes 10-06/10-18; diagnosis/history in [0056]):
 
-1. Disengage-and-rest rule (Phase 3): REJECTED ([0057](docs/notes/0057-elbereth-disengage-qualification.md)); fewer deaths, but objectives fell and fresh Weak-or-worse deaths rose. Next step pending a decision: a combined rest + stall-budget candidate (needs an ADR 0007 exception to one rule per qualification) or item 3.
+1. Disengage-and-rest rule (Phase 3): REJECTED ([0057](docs/notes/0057-elbereth-disengage-qualification.md)); fewer deaths, but objectives fell and fresh Weak-or-worse deaths rose. Next step decided 2026-10-21: combined rest + stall-budget candidate 0059 qualifies as one unit under the recorded [ADR 0007 exception](docs/decisions/0007-mines-minetown-and-oracle.md#process-decision-2026-10-21-combined-candidate-0059); development pass in progress.
 2. Requalify stall-budget candidate 0054 (Phase 2); its two blocking bugs are fixed on its branch.
 3. Optional ADR 0007 gate amendment: objectives not lower, starvation/Weak-or-worse deaths not higher; this would not rescue measured 0054 or 0057.
 

@@ -303,6 +303,20 @@ They refine §4 and do not change targets, detectors, or acceptance gates.
 - **Model role.** This milestone stays deterministic (ADR 0002). Model-owned
   choices are revisited after it.
 
+## Process decision (2026-10-21): combined candidate 0059
+
+The project owner approved one exception to §4.1's "each product rule
+qualifies separately": candidate 0059, the 0057 disengage-and-rest rule plus
+the 0054 no-progress navigation budget (branch
+`rule-0059-rest-plus-stall-budget`), qualifies as one unit. Neither rule
+qualified alone, and the death analysis (note 0056, Phase 3) found that rest
+and stall reduction appear to need each other. Everything else in §4.1
+stands: one frozen 30-seed fresh sample per target, the same gates, every lost
+success and new death diagnosed, no replacement of failures. A pass ships the
+two rules together; a failure rejects both as a unit, and neither rule may
+then be requalified alone on the same fresh sample. The exception covers this
+pair only.
+
 [src-mines]: https://github.com/NetHack/NetHack/blob/NetHack-3.6.7_Released/dat/mines.des#L55-L128
 [src-special]: https://github.com/NetHack/NetHack/blob/NetHack-3.6.7_Released/src/sp_lev.c#L2073-L2127
 [src-hack]: https://github.com/NetHack/NetHack/blob/NetHack-3.6.7_Released/src/hack.c#L2523-L2524
