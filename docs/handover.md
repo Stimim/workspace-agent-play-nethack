@@ -11,8 +11,10 @@ Status and working notes for the next coding agent (for example Claude Code,
   (commit `22d0a5f`, note 0051), knowledge `survival-reviewed-v2`. Later
   commits changed tooling and docs only.
 - **Milestones:** 1 accepted; 2 evaluated, acceptance failed (notes 0036, 0046);
-  **3 in progress** (ADR 0007): enter the Minetown temple, and stand next to the
-  peaceful Oracle, in two separate suites.
+  3 (ADR 0007: enter the Minetown temple, and stand next to the peaceful
+  Oracle, in two separate suites) **paused** for **3A in progress** (ADR 0008,
+  2026-10-25): reach the next staircase without single-level stalls over
+  1,000 turns.
 - **Current numbers** (scripted development model):
 
   | Suite | Objectives | Deaths | Weak-or-worse deaths |
@@ -44,16 +46,14 @@ Status and working notes for the next coding agent (for example Claude Code,
 
 ## 2. Decisions waiting for the project owner
 
-1. **Next gameplay step: open.** Candidate 0059 (0057 resting + 0054 stall
-   budget, one unit under the ADR 0007 exception) was recorded NOT QUALIFIED
-   by the owner on 2026-10-25 (note 0059). Its remaining defect is the 0054
-   search-stand ranking and no-progress clock (note 0059, "Remaining
-   mechanism"). A successor combining the rules needs a new exception.
-   Fresh seeds 635-664 remain the next unused range.
-2. **Verification process: open.** The representative-seed catalog check
-   missed all three navigation bugs found in 0059 (note 0059,
-   "Disposition"). The owner will review whether to add long-cap Minetown
-   and Oracle seeds and loop counters.
+1. **Next gameplay step: decided** (owner, 2026-10-25). Milestone 3A
+   (ADR 0008) starts with the Phase 1 stall diagnosis. Candidate 0059 was
+   recorded NOT QUALIFIED (note 0059). Fresh seeds 635-664 remain the next
+   unused range.
+2. **Verification process: decided** (ADR 0008 §4, Phase 2): stall
+   diagnostics in `compare.py` and long-cap Minetown/Oracle stall seeds in
+   the representative-seed catalog. A noise margin for the paired gates
+   remains open.
 3. **Commit provenance for Claude Code: decided.** Claude Code commits by
    itself (owner decision, 2026-10-20) with
    `_agents/skills/omp-commit/scripts/omp_commit.py claude-commit

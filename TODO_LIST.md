@@ -14,7 +14,18 @@ Implemented/evaluated; D5 fresh-sample gate passed, traversal and Eat regression
 
 Unified survival remediation shipped; `descend-d5-v2` passed its objective-rate gate but failed its Fainting-death gate. Milestone 3 subsumes the D5 retry ([ADR 0006](docs/decisions/0006-unified-goal-suites.md), [0046](docs/notes/0046-descend-d5-v2-real-model-acceptance.md), [0056]).
 
-## Now: milestone 3 — Mines to Minetown, and the Oracle
+## Now: milestone 3A — Find the way down
+
+Goal ([ADR 0008](docs/decisions/0008-find-the-way-down.md), accepted 2026-10-25): on main Dlvl 1-9 and Mines levels 1-4 the hero reaches a goal-compatible staircase without long single-level stalls. A run is stalled when one contiguous level stay exceeds 1,000 game turns; baseline 48/40/11 of 67 (Minetown/Oracle/D5), where 72%/66%/32% of turns are past the 500th on one level. Acceptance: at most 10 stalled runs per Minetown and Oracle regression suite, D5 not above 11, at most 4 of 30 per fresh target, and ADR 0007 §4.1 outcome gates unchanged. Each rule qualifies separately.
+
+- [ ] Phase 1: classify every stalled level in the baseline arms with native truth (hidden exit, unrouted exit, locked door/boulder, wasted search, unusual exit, fighting/waiting); no seeds spent.
+- [ ] Phase 2: stall diagnostics in `compare.py` (longest level stay, stalled runs, arrive-then-leave, fallback waits); long-cap Minetown/Oracle stall seeds in the representative-seed catalog.
+- [ ] Phase 3: one rule per cause class, largest first. Carry the 0059 lessons: distance-aware search-stand ranking; known floor on a new route must not restart the no-progress clock ([0059](docs/notes/0059-rest-plus-stall-budget-development.md)).
+- [ ] Phase 4: acceptance per ADR 0008 §3.
+
+## Paused: milestone 3 — Mines to Minetown, and the Oracle
+
+Paused 2026-10-25 until milestone 3A is accepted ([ADR 0008](docs/decisions/0008-find-the-way-down.md)); its items below stay open.
 
 Goal: the same single agent, in two separate suites, (1) reaches **Minetown** (Gnomish Mines level 3 or 4, Dlvl 5-8) and **enters its temple**, and (2) reaches the **Oracle** level (Dlvl 5-9) and **stands next to the peaceful Oracle** without attacking her. Orcish Town counts as Minetown; in NetHack 3.6.7 (`dat/mines.des`, `minetn-1`) its altar lies in an ordinary region, not a temple room, so its success is standing on that unaligned altar (confirmed in [ADR 0007](docs/decisions/0007-mines-minetown-and-oracle.md), accepted). Scope: capability areas A (survive), B (food), F (navigation) below. ADR 0007 defines the accepted objectives, detectors, suites, and gates.
 
@@ -22,7 +33,7 @@ Process rules (milestone-2 lessons, notes 0037-0046, and [ADR 0007 process decis
 
 Order of work (current 2026-10-19; supersedes 10-06/10-18; diagnosis/history in [0056]):
 
-1. Disengage-and-rest rule (Phase 3): REJECTED ([0057](docs/notes/0057-elbereth-disengage-qualification.md)); fewer deaths, but objectives fell and fresh Weak-or-worse deaths rose. Next step decided 2026-10-21: combined rest + stall-budget candidate 0059 was developed as one unit under the recorded [ADR 0007 exception](docs/decisions/0007-mines-minetown-and-oracle.md#process-decision-2026-10-21-combined-candidate-0059) and NOT QUALIFIED after three development passes ([0059](docs/notes/0059-rest-plus-stall-budget-development.md)): pass 3 passed Minetown (19 objectives, 37 deaths) and Oracle (14, 50) but failed D5 (53 objectives, 6 deaths, 3 Weak-or-worse); no fresh seeds spent. Next candidate to be chosen by the owner.
+1. Disengage-and-rest rule (Phase 3): REJECTED ([0057](docs/notes/0057-elbereth-disengage-qualification.md)); fewer deaths, but objectives fell and fresh Weak-or-worse deaths rose. Next step decided 2026-10-21: combined rest + stall-budget candidate 0059 was developed as one unit under the recorded [ADR 0007 exception](docs/decisions/0007-mines-minetown-and-oracle.md#process-decision-2026-10-21-combined-candidate-0059) and NOT QUALIFIED after three development passes ([0059](docs/notes/0059-rest-plus-stall-budget-development.md)): pass 3 passed Minetown (19 objectives, 37 deaths) and Oracle (14, 50) but failed D5 (53 objectives, 6 deaths, 3 Weak-or-worse); no fresh seeds spent. Next step: milestone 3A ([ADR 0008](docs/decisions/0008-find-the-way-down.md)).
 2. Stall budget (Phase 2): candidate 0054 was rejected with 0059 as a unit. A successor needs a distance-aware search-stand ranking, or a no-progress clock that known floor seen on a new route does not restart ([0059](docs/notes/0059-rest-plus-stall-budget-development.md)).
 3. Optional ADR 0007 gate amendment: objectives not lower, starvation/Weak-or-worse deaths not higher; this would not rescue measured 0054 or 0057.
 

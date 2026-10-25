@@ -192,8 +192,12 @@ standing next to the peaceful Oracle. The `enter_minetown_temple` and
 development baselines are 19/67 (Minetown) and 9/67 (Oracle). An offline
 native-truth audit found no false or missed detector claims
 ([0050](docs/notes/0050-phase1-objectives-baselines-detector-audit.md)).
-Hunger causes the most deaths, followed by staircase confusion and stalls;
-[`TODO_LIST.md`](TODO_LIST.md) has the order of work.
+Survival and stall rules since then have not qualified (notes 0052-0059).
+Single-level stalls take most of the game time (72% of Minetown turns are
+past the 500th on one level), so milestone 3 is paused for milestone 3A
+([ADR 0008](docs/decisions/0008-find-the-way-down.md)): reach the next
+staircase without stalls over 1,000 turns. [`TODO_LIST.md`](TODO_LIST.md) has
+the order of work.
 
 ## Documentation
 
