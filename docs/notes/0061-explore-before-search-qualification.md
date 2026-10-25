@@ -145,3 +145,128 @@ launch scripts are frozen externally in `~/nethack-evidence/0061q/frozen.sha256`
 | `nethack-agent/src/nethack_agent/skills.py` | `8ef0a924d5a3f0a35e35cff43f608088a4f9234f480dd2588c872b8d16b110c4` |
 | `nethack-agent/tests/test_planner.py` | `7cf586cb7f6950e7b983c074fbeb310f9d228adafe43022ed3f9799d4cf6455b` |
 | `nethack-agent/tests/test_targets.py` | `0dacef0873a537fdd7868f16d16b77d0f43953d64686a1f9edc5ec44796fdaa8` |
+
+## Completed qualification results
+
+All seven new arms finished with exit code 0 through the detached runner,
+without cutoff, replacement or candidate change. `sha256sum --check
+frozen.sha256` passed before both waves. All reports are complete, with zero
+invalid actions, gate rejections and integrity failures, and zero
+`oracle_attacks` and `peaceful_attacks`, in every arm. The three regression
+arms reproduce development pass 1 exactly, seed for seed. That is expected:
+the scripted runs are deterministic and the gameplay code is unchanged since
+`c7541b2`.
+
+O/D/T = objectives/deaths/truncations; W = last-live Weak-or-worse deaths;
+S = starvation deaths.
+
+| Paired set | Baseline O/D/T, W, S | Candidate O/D/T, W, S | Gate |
+| --- | --- | --- | --- |
+| minetown-regression-v2, 67 | 19/42/6, 20, 1 | 24/39/4, 10, 1 | pass |
+| oracle-regression-v2, 67 | 9/53/5, 19, 0 | 13/49/5, 7, 0 | pass |
+| unified-d5-regression-v5, 67 | 54/5/8, 0, 0 | 54/5/8, 0, 0 | pass (identical) |
+| Minetown fresh 635-664, 30 | 6/18/6, 6, 2 | 13/15/2, 0, 0 | pass |
+| Oracle fresh 635-664, 30 | 6/22/2, 6, 1 | 8/21/1, 5, 0 | pass |
+
+ADR 0008 stall metric (`stalls.py`; runs with one level stay over 1,000
+turns, and the median longest stay):
+
+| Set | Stalled runs | Median longest stay (turns) |
+| --- | --- | --- |
+| Minetown regression | 48 -> 26 | 2,051 -> 610 |
+| Oracle regression | 40 -> 25 | 1,490 -> 633 |
+| D5 regression | 11 -> 11 | 329 -> 329 |
+| Minetown fresh | 19 -> 12 | 1,824 -> 616 |
+| Oracle fresh | 19 -> 10 | 1,344 -> 488 |
+
+That roughly halves stalls but does not meet ADR 0008 §3. Acceptance needs at
+most 10 per regression suite and at most 4 per fresh target, so further
+Phase 3 rules are needed.
+
+New stalls: Minetown regression 6, 9, 1364 and 1528054415; Minetown fresh
+637, 638, 640, 653 and 663; Oracle fresh 654. Except for 663, a 1,021-turn
+stay on Mines level 4, each is an unbounded search of a deeper range level
+after a shallower one was deferred, as below.
+
+### Every lost success and new death
+
+No loss shows an implementation defect: the flag, the planner and the replay
+agree, and nothing changed outside the range planning. The lost successes
+come from the rule's preregistered order. A range level whose target lies
+behind a hidden passage is deferred once its visible frontier runs out. The
+nearest unexhausted range level is then searched without a budget, so the
+hero never returns to the shallower level. That is the next rule's class,
+secret-passage search targeting, recorded in development as "9, 6 and 1364
+searched Dlvl 4 first".
+
+| Set / seed | Baseline -> candidate | Finding |
+| --- | --- | --- |
+| Minetown fresh 637 | objective -> hobgoblin death | The baseline found the Mines `>` on Dlvl 2 after 7 searches. The candidate deferred Dlvl 2 after 66 turns, explored Dlvl 3-4, then searched Dlvl 4 for 7,700 turns (5,607 searches). Deferral, then unbounded search. |
+| Minetown fresh 638 | objective -> pony death | Same: the baseline needed 23 searches on Dlvl 2. The candidate searched Dlvl 4 (570) and then Dlvl 3 (6,381) and never returned to Dlvl 2. |
+| Oracle fresh 654 | objective -> lizard death, Fainting | The Oracle's part of Dlvl 6 lay behind a hidden corridor. At a dead-end corridor (57,3) the visible frontier ran out, so Dlvl 6 counted as explored after 28 turns. The hero searched there for the way down, found the corridor, crossed to the `>` and descended. It then searched Dlvl 7 for 1,300 turns (510 searches) and fainted. |
+| Minetown fresh 645 | objective -> giant bat death | The candidate passed Dlvl 2-3 quickly (the baseline searched both for 3,800 turns) and was killed on Dlvl 4 at T702. Combat after divergence. |
+| Minetown fresh 636, 651 | truncated -> gnome mummy / giant spider death | The baseline stalled on Dlvl 3 and Dlvl 2. The candidate reached Mines levels 6 and 8 and died in combat. |
+| Oracle fresh 637 | truncated -> rothe death | The baseline searched Dlvl 5 to the cap. The candidate explored Dlvl 5-8 without searching and died in combat on Dlvl 8. |
+| Minetown reg 1528054415 | objective -> truncated | Deferral class: the branch was hidden on Dlvl 2, and Dlvl 3's main `>` needed four secret cells (native truth). |
+| Minetown reg 9 | objective -> hill orc death, Hungry | Deferral class: Dlvl 4 searched first (4,118-turn stay with fallback waits). |
+| Minetown reg 1375 | objective -> killed by Izchak | Blinded in Izchak's shop, the hero walked into the unseen shopkeeper. A blindness hazard, also seen in smoke Minetown 701; not a conduct incident. |
+| Minetown reg 703, 704, 2094095407; Oracle reg 2065672237 | objective -> combat death | Deeper or earlier combat after divergence (kobold mummy, giant bat, wolf, paper golem). |
+| Minetown reg 824, 799362204, 1362, 1368 | truncated -> combat death | The baseline stalled to the cap. The candidate went deeper and died in combat. 1368 died Fainting, at Dlvl 7. |
+
+Gains: Minetown regression 11 new objectives; Oracle regression 5; Minetown
+fresh 10 (635, 641, 643, 646, 649, 650, 654, 655, 656, 664, including both
+starvation deaths removed); Oracle fresh 3 (635, 643, 664).
+
+## Decision
+
+QUALIFIED under the preregistered gates. Every paired set passes:
+- objectives not lower;
+- deaths not higher;
+- Weak-or-worse and starvation deaths not higher;
+- complete records with zero invalid actions, gate rejections and integrity
+  failures.
+
+Every lost success and new death is traced. None comes from a defect in the
+changed rule. The lost successes are the preregistered order deferring a
+level whose target hides behind a secret passage, which the next Phase 3 rule
+must fix. Seeds 635-664 are consumed.
+
+Shipped as policy
+`hierarchical-survival-hp-prayer-burden-look-ration-explore-first-v1` with
+knowledge `survival-reviewed-v2`. It pins new immutable
+`minetown-regression-v3`, `oracle-regression-v3` and
+`unified-d5-regression-v6`, copies that change only `suite_id` and
+`policy_version`. ADR 0008's stall bars apply to these copies, since the cases
+are the same. The qualification suites `minetown-fresh-v4` and
+`oracle-fresh-v4` are committed with their qualification-only label, and the
+current policy refuses them, as it does every earlier pinned suite.
+
+## Evidence
+
+Compact per-seed records are in `docs/notes/evidence/0061/`:
+- `cand-*` for the candidate arms;
+- `base-*` for the two new fresh baselines and the three reused note-0052
+  regression baselines;
+- `paired-comparison.json` (`compare.py`);
+- `stalls.json` (`stalls.py`).
+
+Raw databases, reports, manifests and launch scripts are in
+`~/nethack-evidence/0061q/`, the development history in
+`~/nethack-evidence/0061/`, and a shipped-tree smoke (Minetown seed 3,
+objective) in `~/nethack-evidence/0061q/ship-smoke/`.
+
+## Lessons
+
+- **The first rule to add objectives:**
+  - It changes where the hero spends turns, not how it fights. It is the
+    first milestone-3 rule to add objectives on both targets.
+  - It also lowers Weak-or-worse deaths, because less food goes on stalls.
+  - This supports note 0056's view that stall reduction is the lever.
+- **Deferral needs bounded search:**
+  - Deferring a level until the whole range is explored is right on average.
+  - It loses when the target sits behind a secret passage on a shallow level,
+    because the search that follows is unbounded and picks the nearest
+    level, not the likeliest.
+  - The next rule should bound or target search, which is ADR 0008's
+    secret-passage class: rotate among unexhausted range levels, and rank
+    search stands by dead ends and map gaps.

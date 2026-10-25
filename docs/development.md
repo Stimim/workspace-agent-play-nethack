@@ -414,11 +414,11 @@ New evaluation follows [ADR 0006](decisions/0006-unified-goal-suites.md):
 place-reaching goals run on `NetHackScore-v0` with `nle-survival-actions` and
 the same survival-capable policy; Staircase success ends on the first
 downstairs, making it a sub-goal rather than a D5 environment. The
-development-only `evaluation/unified-d5-regression-v5.json` runs the 67 unique
+development-only `evaluation/unified-d5-regression-v6.json` runs the 67 unique
 historical/probe seeds as `reach_level(0,5)` with a 3,000-step cap. Its
 67/67 goal tracks remediation but does not block commits; historical suites
 and reports remain immutable. Run all cases with the scripted model using
-`uv run nethack-agent eval run --suite evaluation/unified-d5-regression-v5.json --data-dir /tmp/unified-d5-scripted --report-dir /tmp/unified-d5-scripted/reports --development-scripted-model --workers 10`; omit `--development-scripted-model` and choose separate data/report directories to run with the configured real model. Version 5 pins the qualified ration-selection policy (note 0051), as do `evaluation/minetown-regression-v2.json` and `evaluation/oracle-regression-v2.json` for the milestone-3 targets at a 10,000-step cap; v4 and earlier, `minetown-regression-v1`, and `oracle-regression-v1` stay immutable. The next milestone's fresh-draw suite must declare its objective-success rate and explicit zero-staircase tolerance.
+`uv run nethack-agent eval run --suite evaluation/unified-d5-regression-v6.json --data-dir /tmp/unified-d5-scripted --report-dir /tmp/unified-d5-scripted/reports --development-scripted-model --workers 10`; omit `--development-scripted-model` and choose separate data/report directories to run with the configured real model. Version 6 pins the qualified explore-before-search policy (note 0061), as do `evaluation/minetown-regression-v3.json` and `evaluation/oracle-regression-v3.json` for the milestone-3 targets at a 10,000-step cap; v5 and earlier, `minetown-regression-v1`/`-v2`, and `oracle-regression-v1`/`-v2` stay immutable. The next milestone's fresh-draw suite must declare its objective-success rate and explicit zero-staircase tolerance.
 
 Coding-agent workflow: use the [_agents/skills/omp-commit/SKILL.md](../_agents/skills/omp-commit/SKILL.md) commit guard for product changes, and launch every evaluation through the [_agents/skills/detached-eval/SKILL.md](../_agents/skills/detached-eval/SKILL.md) detached runner; wait with no tool deadline or poll status so suites cannot be cut short.
 

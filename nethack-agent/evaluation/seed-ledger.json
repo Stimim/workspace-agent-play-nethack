@@ -374,6 +374,12 @@
       "seeds": [],
       "ranges": [[605, 634]],
       "note": "Consumed by rejected Elbereth disengage qualification (note 0057): paired minetown-fresh-v3 and oracle-fresh-v3. Candidate code and suites not merged. Development-only; never reuse as fresh or acceptance seeds."
+    },
+    {
+      "source": "note-0061-explore-before-search-qualification",
+      "seeds": [],
+      "ranges": [[635, 664]],
+      "note": "Reserved, then consumed, by the explore-before-search qualification (note 0061): paired minetown-fresh-v4 and oracle-fresh-v4. Development-only; never reuse as fresh or acceptance seeds."
     }
   ]
 }

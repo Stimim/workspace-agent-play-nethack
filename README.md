@@ -137,9 +137,16 @@ Fresh seeds matched baseline exactly (18/30 both); the one development-set
 change traced to the feature firing is a gain, not a loss (a starvation
 death on seed 5 became a truncation once LOOK kept exploration moving); zero
 invalid actions, gate rejections, or integrity failures on either set.
-The current policy, `hierarchical-survival-hp-prayer-burden-look-ration-v1`,
-pins `survival-reviewed-v2` and development suites `unified-d5-regression-v5`,
-`minetown-regression-v2`, and `oracle-regression-v2`. It fixes a hunger-skill
+The current policy, `hierarchical-survival-hp-prayer-burden-look-ration-explore-first-v1`,
+pins `survival-reviewed-v2` and development suites `unified-d5-regression-v6`,
+`minetown-regression-v3`, and `oracle-regression-v3`. It explores every
+branch, Oracle or Mines-temple range level before searching any of them for
+hidden passages. On fresh seeds 635-664 that raised Minetown objectives from
+6 to 13 and Oracle objectives from 6 to 8, and roughly halved runs with a
+single-level stay over 1,000 turns
+([note 0061](docs/notes/0061-explore-before-search-qualification.md)).
+The previous policy, `hierarchical-survival-hp-prayer-burden-look-ration-v1`,
+fixed a hunger-skill
 live-lock: with two identical verified rations in inventory the skill
 cancelled its own `EAT` prompt and reopened it forever at zero game turns.
 Every development and fresh set matched baseline except one Oracle seed whose

@@ -2,14 +2,15 @@
 
 Status and working notes for the next coding agent (for example Claude Code,
 `claude.exe`). Read this after `AGENTS.md`, `README.md`, `ARCHITECTURE.md` and
-`TODO_LIST.md`. Facts here were current at commit `4acf4d0` (2026-10-20);
+`TODO_LIST.md`. Facts here were current on 2026-10-26 (note 0061 shipped);
 `TODO_LIST.md` and the notes stay authoritative when they disagree.
 
 ## 1. Where the project stands
 
-- **Shipped policy:** `hierarchical-survival-hp-prayer-burden-look-ration-v1`
-  (commit `22d0a5f`, note 0051), knowledge `survival-reviewed-v2`. Later
-  commits changed tooling and docs only.
+- **Shipped policy:**
+  `hierarchical-survival-hp-prayer-burden-look-ration-explore-first-v1` (note
+  0061, explore-before-search), knowledge `survival-reviewed-v2`. Its
+  baseline was `22d0a5f` (note 0051).
 - **Milestones:** 1 accepted; 2 evaluated, acceptance failed (notes 0036, 0046);
   3 (ADR 0007: enter the Minetown temple, and stand next to the peaceful
   Oracle, in two separate suites) **paused** for **3A in progress** (ADR 0008,
@@ -19,13 +20,21 @@ Status and working notes for the next coding agent (for example Claude Code,
 
   | Suite | Objectives | Deaths | Weak-or-worse deaths |
   | --- | --- | --- | --- |
-  | minetown-regression-v2 (67) | 19 | 42 | 20 |
-  | oracle-regression-v2 (67) | 9 | 53 | 19 |
-  | unified-d5-regression-v5 (67) | 54 | 5 | 0 |
-  | Minetown fresh 605-634 (30) | 9 | 19 | 5 |
-  | Oracle fresh 605-634 (30) | 6 | 24 | 8 |
+  | minetown-regression-v3 (67) | 24 | 39 | 10 |
+  | oracle-regression-v3 (67) | 13 | 49 | 7 |
+  | unified-d5-regression-v6 (67) | 54 | 5 | 0 |
+  | Minetown fresh 635-664 (30) | 13 | 15 | 0 |
+  | Oracle fresh 635-664 (30) | 8 | 21 | 5 |
 
-- **What the last four rule attempts showed:** every survival-only or
+  Stalled runs (one level stay over 1,000 turns): 26 / 25 / 11 of 67 and
+  12 / 10 of 30 fresh. ADR 0008 asks for at most 10 / 10 / 11 and 4 / 4.
+
+- **0061 explore-before-search: QUALIFIED and shipped.** This is the first
+  rule to add objectives on both targets. It works because it cuts stalls.
+  Its lost successes defer a shallow level whose target is behind a secret
+  passage and then search the nearest range level without a bound. That is
+  the next rule's class.
+- **What the earlier rule attempts showed:** every survival-only or
   escape-only rule moves deaths around instead of adding objectives.
   - 0052 slime-mold food: REJECTED. More food, but stalls still burn it.
   - 0053 ranged clearing of floating eyes and gas spores: paused. The hero
@@ -47,10 +56,12 @@ Status and working notes for the next coding agent (for example Claude Code,
 ## 2. Decisions waiting for the project owner
 
 1. **Next gameplay step: decided** (owner, 2026-10-25). Milestone 3A
-   (ADR 0008): Phase 1 diagnosis done (note 0060); the first Phase 3 rule
-   is explore-before-search in the branch, Oracle and Mines-temple ranges. Candidate 0059 was
-   recorded NOT QUALIFIED (note 0059). Fresh seeds 635-664 remain the next
-   unused range.
+   (ADR 0008): Phase 1 diagnosis done (note 0060). The first Phase 3 rule,
+   explore-before-search, is shipped (note 0061; seeds 635-664 consumed).
+   Next: secret-passage search targeting (bounded, rotating among
+   unexhausted range levels). Candidate 0059 was recorded NOT QUALIFIED (note
+   0059). Fresh seeds 665-694 are the next unused range; check with
+   `used_seeds` first.
 2. **Verification process: decided** (ADR 0008 §4, Phase 2): stall
    diagnostics (`stalls.py`, done) and long-cap Minetown/Oracle stall seeds in
    the representative-seed catalog. A noise margin for the paired gates
@@ -75,8 +86,13 @@ Candidate code lives in git worktrees outside the repository. Each branch is
 committed with a `Qualification-Exempt` trailer, and the five candidate
 branches below were pushed to `origin` on 2026-10-25.
 
+The next qualification needs a new baseline worktree at the 0061 ship commit,
+with baseline regression arms on `*-regression-v3` / `unified-d5-regression-v6`.
+The 0052 baseline reports describe the old policy.
+
 | Worktree | Branch (base `22d0a5f`) | State | Record |
 | --- | --- | --- | --- |
+| `~/nethack-evidence/0061/candidate` | `rule-0061-explore-before-search` (base `e1a232b`) | QUALIFIED; shipped to `main` as one commit with the shipped label | note 0061, `~/nethack-evidence/0061q/` |
 | `~/nethack-evidence/0057/candidate` | `rule-0057-elbereth-disengage` | rejected, frozen | note 0057 |
 | `~/nethack-evidence/0059-rest-stall/candidate` | `rule-0059-rest-plus-stall-budget` (0054 + 0057, then fixes to `afc3282`) | NOT QUALIFIED after 3 development passes | note 0059, `~/nethack-evidence/0059-rest-stall/DEV.md` |
 | `~/nethack-evidence/0054/candidate` | `rule-0054-no-progress-budget` | rejected with 0059; its later bug fixes live on the 0059 branch | `~/nethack-evidence/0054/STATUS.md`, note 0059 |

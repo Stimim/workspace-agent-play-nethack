@@ -53,8 +53,11 @@ from nethack_agent.tasks import STAIRCASE_TASK, TaskSpec
 
 # Survival adds the action profile, deterministic prayer, safe corpse eating,
 # corrected meal lifecycle, and exit discovery from notes 0025–0034.
+# Explore-first range search is from note 0061.
 # Earlier suites and reports remain pinned to their original policies.
-POLICY_VERSION: Final = "hierarchical-survival-hp-prayer-burden-look-ration-v1"
+POLICY_VERSION: Final = (
+    "hierarchical-survival-hp-prayer-burden-look-ration-explore-first-v1"
+)
 _ACTIVE_STATES: Final = frozenset({RunState.IDLE, RunState.RUNNING, RunState.PAUSED})
 
 

@@ -24,6 +24,8 @@ from nethack_agent.traversal import (
     STAIRCASE_OBJECTIVE,
     STAND_ON_DOWNSTAIRS,
     EnterDungeonLeg,
+    EnterMinetownTempleLeg,
+    EnterTempleGoal,
     ExploreDungeonLeg,
     ExploreLevelGoal,
     FindOracleLeg,
@@ -161,11 +163,12 @@ def test_mines_search_descends_to_the_range_then_searches_each_level(
     # Above the DL2-4 branch range: descend by the main staircase.
     assert plan(MINES, walk) == PlannedGoal(main_stairs(DOWN))
 
-    walk.at(LevelKey(0, 1), "|..@|").use_stairs(LevelKey(0, 2), "|@.>.|")
-    # In range and not yet exhausted: look for the branch staircase here.
+    walk.at(LevelKey(0, 1), "|..@|").use_stairs(LevelKey(0, 2), "|@.>.. |")
+    # In range with unexplored space: look for the branch staircase here.
     assert plan(MINES, walk) == PlannedGoal(branch_stairs(DOWN, 2))
-    # Exhausted with a single `>`: move on to the next unvisited range level.
-    walk.exhaust()
+    # Frontier explored with a single `>`: move on to the next unvisited range
+    # level before any hidden-passage search (note 0061).
+    walk.at(LevelKey(0, 2), "|..>..@|")
     assert plan(MINES, walk) == PlannedGoal(main_stairs(DOWN))
 
 
@@ -280,16 +283,70 @@ def test_explore_dungeon_completes_when_every_required_level_is_explored(
         plan(objective, walk)
 
 
-def test_oracle_searches_each_candidate_level_before_descending(
+def test_oracle_explores_each_candidate_level_before_descending(
     template: ProjectedObservation,
 ) -> None:
     objective = Objective((FindOracleLeg(),))
     walk = Walk(template).at(LevelKey(0, 4), "|@>|")
     assert plan(objective, walk) == PlannedGoal(main_stairs(DOWN))
-    walk.use_stairs(LevelKey(0, 5), "|<@>|")
+    walk.use_stairs(LevelKey(0, 5), "|<@>. |")
     from nethack_agent.traversal import ApproachOracleGoal
 
     assert plan(objective, walk) == PlannedGoal(ApproachOracleGoal(LevelKey(0, 5)))
-    walk.exhaust()
+    # The frontier ran out without the Oracle: descend before searching.
+    walk.at(LevelKey(0, 5), "|<.>.@|")
     assert plan(objective, walk) == PlannedGoal(main_stairs(DOWN))
     assert not leg_complete(FindOracleLeg(), walk.dungeon)
+
+
+def test_branch_range_is_explored_everywhere_before_any_search(
+    template: ProjectedObservation,
+) -> None:
+    walk = Walk(template).at(LevelKey(0, 2), "|<.@>|")
+    # Dlvl 2's frontier is gone and it shows one `>`: try the next range level
+    # instead of searching here for a hidden branch staircase (note 0060).
+    assert plan(MINES, walk) == PlannedGoal(main_stairs(DOWN))
+    walk.use_stairs(LevelKey(0, 3), "|<.@>|")
+    assert plan(MINES, walk) == PlannedGoal(main_stairs(DOWN))
+    walk.use_stairs(LevelKey(0, 4), "|<.@>|")
+    # Every range level is explored: search the nearest one, here.
+    assert plan(MINES, walk) == PlannedGoal(branch_stairs(DOWN, 2))
+    walk.exhaust()
+    assert plan(MINES, walk) == PlannedGoal(main_stairs(UP))
+    walk.use_stairs(LevelKey(0, 3), "|<.@>|")
+    assert plan(MINES, walk) == PlannedGoal(branch_stairs(DOWN, 2))
+
+
+def test_explored_frontier_is_sticky_on_the_way_out(
+    template: ProjectedObservation,
+) -> None:
+    walk = Walk(template).at(LevelKey(0, 2), "|<.@>|   ")
+    assert plan(MINES, walk) == PlannedGoal(main_stairs(DOWN))
+    # Cells seen on the walk to the staircase reopen a frontier; the level
+    # still counts as explored, so the goal does not flip back (0054 lesson).
+    walk.at(LevelKey(0, 2), "|<..@... ")
+    assert walk.dungeon.current.frontier_explored
+    assert plan(MINES, walk) == PlannedGoal(main_stairs(DOWN))
+
+
+def test_locked_door_beside_unexplored_space_keeps_the_level_open(
+    template: ProjectedObservation,
+) -> None:
+    walk = Walk(template).at(LevelKey(0, 2), "|<.@>| ")
+    walk.dungeon.current.locked_doors.add((5, 0))
+    assert plan(MINES, walk) == PlannedGoal(branch_stairs(DOWN, 2))
+    assert not walk.dungeon.current.frontier_explored
+
+
+def test_mines_town_levels_are_explored_before_either_is_searched(
+    template: ProjectedObservation,
+) -> None:
+    objective = Objective((EnterMinetownTempleLeg(),))
+    walk = Walk(template).at(LevelKey(2, 3), "|<.@>|")
+    # Not the town and nothing left to explore: Minetown is probably level 4.
+    assert plan(objective, walk) == PlannedGoal(main_stairs(DOWN))
+    walk.use_stairs(LevelKey(2, 4), "|<.@>|")
+    assert plan(objective, walk) == PlannedGoal(EnterTempleGoal(LevelKey(2, 4)))
+    walk.exhaust()
+    # Level 4 is searched out; level 3 was only explored: search it next.
+    assert plan(objective, walk) == PlannedGoal(main_stairs(UP))
