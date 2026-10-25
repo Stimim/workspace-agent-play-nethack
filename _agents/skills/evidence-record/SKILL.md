@@ -84,3 +84,16 @@ A pair's verdict is `fail` if any gate failed, else `unknown` if any gate is unk
 JSON output: `header` (schema version, commits, verdict, gate definitions) and one entry per pair with `verdict`, `failed_gates`, `unknown_gates`, `gates` (baseline/candidate/passed), `comparability_problems`, `arm_differences`, per-arm summaries (`baseline`, `candidate`: report file and SHA-256, suite, policy, knowledge, O/D/T, Weak-or-worse, starvation, deaths without hunger evidence, quality counts, conduct counts or `null` when absent, and diagnostics: death causes, hunger at death, deaths by max depth, median death turn, max depth and final XL), `transitions` (outcome changes), `changed_seeds` (endpoint = outcome, death cause or hunger changed; with flags such as `lost_success`, `new_death`, `new_weak_or_worse`, `avoided_death`, `cause_changed`, and turn/depth/step deltas) and `seeds` (every paired seed's outcome in each arm). Each seed row is one line.
 
 Checked against the recorded verdicts: the five note-0057 pairs reproduce its table (Minetown regression and both fresh sets fail, the rest pass) and the five note-0052 pairs reproduce its three failures and the changed-seed lists of `~/nethack-evidence/0052/paired-report-analysis.json`.
+
+## Stall and loop diagnostics (`stalls.py`)
+
+ADR 0008's stall metric needs step events, which reports do not carry (the D5 report format has no per-level turns), so this separate tool reads each arm's `runs.sqlite3` read-only, one database at a time. `compare.py` stays report-only.
+
+```bash
+uv run --project nethack-agent python3 _agents/skills/evidence-record/stalls.py \
+  --pair NAME BASELINE_DB CANDIDATE_DB [--pair ...] [--output OUT_JSON]
+```
+
+Per run: the longest contiguous stay on one level (same dungeon number and level, first to last step; a zeroed death screen is ignored), `stalled` when it exceeds 1,000 game turns, model-fallback steps, and arrive-then-leave events (a "Move to search spot P (1 steps)" step followed by a move to a different spot). Per arm: stalled runs, median longest stay, runs with at least 100 fallback steps, and arrive-then-leave events and runs. Changed seeds carry `new_stall`, `removed_stall` and `new_fallback_loop`. The Markdown table goes to stdout. A 67-seed arm takes a few minutes.
+
+Checked against note 0059: Minetown baseline against pass 2 gives 48 -> 47 stalled runs, 4 -> 10 fallback-loop runs and 10 (7) -> 662 (43) arrive-then-leave events; D5 baseline against pass 3 gives 11 -> 15 stalled runs.

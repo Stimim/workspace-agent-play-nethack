@@ -51,7 +51,7 @@ Status and working notes for the next coding agent (for example Claude Code,
    recorded NOT QUALIFIED (note 0059). Fresh seeds 635-664 remain the next
    unused range.
 2. **Verification process: decided** (ADR 0008 §4, Phase 2): stall
-   diagnostics in `compare.py` and long-cap Minetown/Oracle stall seeds in
+   diagnostics (`stalls.py`, done) and long-cap Minetown/Oracle stall seeds in
    the representative-seed catalog. A noise margin for the paired gates
    remains open.
 3. **Commit provenance for Claude Code: decided.** Claude Code commits by
@@ -138,6 +138,9 @@ _agents/skills/detached-eval/scripts/detached_eval.py --state-dir DIR start --na
   --cwd WORKTREE/nethack-agent -- nice -n 15 ionice -c 3 uv run nethack-agent eval run \
   --suite SUITE --data-dir OUT --report-dir OUT/reports --workers 2 --development-scripted-model
 _agents/skills/detached-eval/scripts/detached_eval.py --state-dir DIR wait RUN   # or status/list/stop
+# ADR 0008 stall and loop diagnostics from paired run databases (read-only)
+uv run --project nethack-agent python3 _agents/skills/evidence-record/stalls.py \
+  --pair NAME BASE_DIR/runs.sqlite3 CAND_DIR/runs.sqlite3 --output OUT.json
 # compact per-seed record for a report
 uv run --project nethack-agent python3 _agents/skills/evidence-record/record.py REPORT.json \
   --commit SHA --command "CMD" --output docs/notes/evidence/NNNN/NAME.json

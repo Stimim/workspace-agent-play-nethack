@@ -19,7 +19,7 @@ Unified survival remediation shipped; `descend-d5-v2` passed its objective-rate 
 Goal ([ADR 0008](docs/decisions/0008-find-the-way-down.md), accepted 2026-10-25): on main Dlvl 1-9 and Mines levels 1-4 the hero reaches a goal-compatible staircase without long single-level stalls. A run is stalled when one contiguous level stay exceeds 1,000 game turns; baseline 48/40/11 of 67 (Minetown/Oracle/D5), where 72%/66%/32% of turns are past the 500th on one level. Acceptance: at most 10 stalled runs per Minetown and Oracle regression suite, D5 not above 11, at most 4 of 30 per fresh target, and ADR 0007 §4.1 outcome gates unchanged. Each rule qualifies separately.
 
 - [ ] Phase 1: classify every stalled level in the baseline arms with native truth (hidden exit, unrouted exit, locked door/boulder, wasted search, unusual exit, fighting/waiting); no seeds spent.
-- [ ] Phase 2: stall diagnostics in `compare.py` (longest level stay, stalled runs, arrive-then-leave, fallback waits); long-cap Minetown/Oracle stall seeds in the representative-seed catalog.
+- [ ] Phase 2: long-cap Minetown/Oracle stall seeds in the representative-seed catalog. Done: stall and loop diagnostics (longest level stay, stalled runs, arrive-then-leave, fallback waits) in [`stalls.py`](_agents/skills/evidence-record/SKILL.md), beside the report-only `compare.py`.
 - [ ] Phase 3: one rule per cause class, largest first. Carry the 0059 lessons: distance-aware search-stand ranking; known floor on a new route must not restart the no-progress clock ([0059](docs/notes/0059-rest-plus-stall-budget-development.md)).
 - [ ] Phase 4: acceptance per ADR 0008 §3.
 

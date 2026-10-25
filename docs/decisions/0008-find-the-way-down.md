@@ -77,9 +77,10 @@ gates are its non-inferiority checks.
    - a trapdoor-only or otherwise unusual exit;
    - fighting or waiting.
 2. **Verification.**
-   - `compare.py` reports stall diagnostics per arm and changed seed: the
-     longest level stay, stalled runs, arrive-then-leave events and
-     model-fallback waits.
+   - Stall diagnostics per arm and changed seed: the longest level stay,
+     stalled runs, arrive-then-leave events and model-fallback waits. They
+     need step events, so they live in `_agents/skills/evidence-record/stalls.py`
+     (run databases, read-only) beside the report-only `compare.py`.
    - The representative-seed catalog gains long-cap Minetown and Oracle
      stall seeds.
 3. **Rules.** One rule per cause class, largest class first, each qualified
