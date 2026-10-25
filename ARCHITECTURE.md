@@ -168,10 +168,17 @@ function of the current leg and dungeon memory that sets every step's goal. A
 leg keeps that goal. A `reach_level` leg in the same dungeon takes the main
 staircase toward the level; from another dungeon it retraces the recorded
 branch link. `enter_dungeon(2)` (the Gnomish Mines; Sokoban's number 4 is
-unverified) descends to the DL2-4 branch range, searches each range level for
-a second `>`, probes two unknown `>` (the nearest first), moves on when a
-level is exhausted with one `>`, and re-arms each exhausted range level's
-exploration once before giving up. `explore_dungeon(max_level)` requires
+unverified) descends to the DL2-4 branch range, probes two unknown `>` (the
+nearest first), and explores every range level's frontier before searching
+any of them for a hidden second `>`. A range level whose frontier ran out
+shows one `>` is left by the main staircase; once every range level is
+explored, the nearest not yet exhausted is searched, and each exhausted range
+level's exploration is re-armed once before giving up. `frontier_explored`,
+like `explored`, never clears: the planner sets it while the level is
+current, from `skills.frontier_exhausted` (no frontier even past monsters, no
+known locked door beside unexplored space), so cells seen on the way out do
+not send the hero back (note 0060 measured searching levels that lack the
+target as 58% of baseline stall turns). `explore_dungeon(max_level)` requires
 every Dungeons of Doom level 1..`max_level` to be explored: it plans
 `explore_level` on the shallowest unexplored required level, main stairs
 toward it otherwise (so a level skipped by a trap door is revisited by
@@ -185,16 +192,17 @@ The two milestone-3 place legs (`{"kind": "enter_minetown_temple"}`,
 They turn on NLE's `screen_descriptions` key and public detectors in
 `targets.py`, which planning and evaluator replay share and which read no
 native state. **Minetown:** the planner leaves any other branch, enters the
-Mines, descends to Mines level 3, and then to level 4 once level 3 is
-explored. It plans `enter_temple`, or `occupy_altar` when an unaligned altar
+Mines, descends to Mines level 3, and explores levels 3 and 4 before
+searching either. It plans `enter_temple`, or `occupy_altar` when an unaligned altar
 is known. The leg completes on a Mines level 3 or 4 reached through a recorded
 main-dungeon branch crossing at the matching depth (`mines_candidate`) after
 temple-entry evidence: priest speech, or, once wall/door/bar counts identify
 a town, standing on a known altar or inside its fully enclosed room. In
 Orcish Town the evidence is standing on a publicly unaligned altar.
 **Oracle:** the planner leaves any branch, descends
-main stairs to Dlvl 5-9, plans `approach_oracle` on unexplored levels or once
-an Oracle is seen, and completes only when the hero is next to a
+main stairs to Dlvl 5-9, plans `approach_oracle` on each range level until
+its frontier is explored, then searches the nearest range level not yet
+exhausted only once every range level is explored, or once an Oracle is seen, and completes only when the hero is next to a
 publicly peaceful Oracle glyph, is not hallucinating, and has never attacked
 her. `conduct.attack_evidence` counts Oracle attacks from every one-step and
 `CompassDirectionLonger` move into a monster, applied before each step and

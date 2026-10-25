@@ -1033,6 +1033,23 @@ def _frontier_goal(
     return goal
 
 
+def frontier_exhausted(memory: LevelMemory) -> bool:
+    """Nothing is left to explore before `ExploreLevelSkill` would search.
+
+    No frontier is reachable, even past monsters, and no known locked door
+    borders unexplored space (exploration kicks such doors before searching).
+    The planner uses it to leave a target-range level unsearched (note 0061).
+    """
+    through = route_tree(memory, through_monsters=True)
+    if _frontier_goal(memory, through, ()) is not None:
+        return False
+    return not any(
+        memory.unexplored(near)
+        for door in memory.locked_doors
+        for near in memory.neighbors(door)
+    )
+
+
 def _check_covered_exit(
     memory: LevelMemory, tree: RouteTree, actions_by_name: dict[str, LegalAction]
 ) -> SkillAction | None:

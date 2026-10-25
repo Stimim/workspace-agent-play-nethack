@@ -300,6 +300,10 @@ class LevelMemory:
         # `exhausted`, later knowledge growth never clears it; an
         # explore_dungeon objective counts the level as explored.
         self.explored = False
+        # The reachable frontier ran out at least once, before any search was
+        # spent. Sticky like `explored`; the planner sets it while this is the
+        # current level and moves on through a target range (ADR 0008, 0061).
+        self.frontier_explored = False
         # One extra search round was granted to find a branch staircase here.
         self.branch_rearmed = False
         self.enter()

@@ -117,9 +117,10 @@ class ObjectivePlanner:
                 return PlannedGoal(main_stairs(StairDirection.DOWN))
             if here.dungeon_level > 4:
                 return PlannedGoal(main_stairs(StairDirection.UP))
-            if here.dungeon_level == 3 and memory.explored:
-                return PlannedGoal(main_stairs(StairDirection.DOWN))
-            return PlannedGoal(EnterTempleGoal(here))
+            level = _range_level(dungeon, here, range(3, 5))
+            if level is None or level == here.dungeon_level:
+                return PlannedGoal(EnterTempleGoal(here))
+            return PlannedGoal(_toward(here, level))
         if isinstance(leg, FindOracleLeg):
             if here.dungeon_number != DUNGEONS_OF_DOOM:
                 return PlannedGoal(_leave_branch(dungeon, here))
@@ -130,8 +131,11 @@ class ObjectivePlanner:
                 return PlannedGoal(main_stairs(StairDirection.DOWN))
             if here.dungeon_level > 9:
                 return PlannedGoal(main_stairs(StairDirection.UP))
-            if not memory.explored:
+            level = _range_level(dungeon, here, range(5, 10))
+            if level == here.dungeon_level:
                 return PlannedGoal(ApproachOracleGoal(here))
+            if level is not None:
+                return PlannedGoal(_toward(here, level))
             if here.dungeon_level < 9:
                 return PlannedGoal(main_stairs(StairDirection.DOWN))
             return PlannedGoal(main_stairs(StairDirection.UP))
@@ -262,10 +266,11 @@ def _enter_branch(
 ) -> PlannedGoal:
     """Find and take the Dungeons of Doom staircase into `dungeon_number`.
 
-    Search order: a level whose branch staircase is identified; then any
-    level of the branch range that is unvisited, still being explored, or
-    shows two staircases of the branch direction; then, once, a re-armed
-    search of each exhausted range level. Main staircases move between them.
+    Search order: a level whose branch staircase is identified; then one that
+    shows two staircases of the branch direction; then any range level whose
+    frontier is not yet explored; then any range level not yet exhausted by
+    search; then, once, a re-armed search of each exhausted range level. Main
+    staircases move between them.
     """
     direction, branch = _BRANCHES[dungeon_number]
     goal = branch_stairs(direction, dungeon_number)
@@ -284,6 +289,12 @@ def _enter_branch(
         )
     ]
     span = range(branch.first_level, branch.last_level + 1)
+    paired = [
+        level
+        for level in span
+        if level in levels and levels[level].pair_known(direction)
+    ]
+    unexplored = _unexplored_levels(dungeon, here, span)
     open_levels = [
         level
         for level in span
@@ -299,7 +310,7 @@ def _enter_branch(
         and not levels[level].pair_known(direction)
         and not levels[level].branch_rearmed
     ]
-    for candidates in (identified, open_levels):
+    for candidates in (identified, paired, unexplored, open_levels):
         if here.dungeon_level in candidates:
             return PlannedGoal(goal)
         if candidates:
@@ -311,6 +322,56 @@ def _enter_branch(
     # Every range level was searched twice without a branch staircase; keep
     # searching here and let stuck consultations decide.
     return PlannedGoal(goal)
+
+
+def frontier_explored(dungeon: DungeonMemory, level: LevelKey) -> bool:
+    """Whether `level`'s reachable frontier has run out at least once.
+
+    Evaluated, and made sticky, only while `level` is the current level, so
+    the coordinator and `ExplorationReplay`, which plan on the same
+    observations, set it on the same step. Walking out over cells first seen
+    on the way never withdraws it.
+    """
+    memory = dungeon.levels.get(level)
+    if memory is None:
+        return False
+    if memory is dungeon.current and not memory.frontier_explored:
+        from nethack_agent.skills import frontier_exhausted
+
+        memory.frontier_explored = memory.explored or frontier_exhausted(memory)
+    return memory.frontier_explored or memory.explored
+
+
+def _unexplored_levels(
+    dungeon: DungeonMemory, here: LevelKey, span: range
+) -> list[int]:
+    return [
+        level
+        for level in span
+        if not frontier_explored(dungeon, LevelKey(here.dungeon_number, level))
+    ]
+
+
+def _range_level(dungeon: DungeonMemory, here: LevelKey, span: range) -> int | None:
+    """The range level where a target is sought next; None once all are searched.
+
+    Every range level's frontier is explored before any range level is
+    searched for hidden passages: searching a level that lacks the target
+    took 58% of baseline stall turns (note 0060).
+    """
+    searchable = [
+        level
+        for level in span
+        if (memory := dungeon.levels.get(LevelKey(here.dungeon_number, level)))
+        is not None
+        and not memory.exhausted
+    ]
+    for candidates in (_unexplored_levels(dungeon, here, span), searchable):
+        if here.dungeon_level in candidates:
+            return here.dungeon_level
+        if candidates:
+            return _nearest(candidates, here)
+    return None
 
 
 def _nearest(levels: list[int], here: LevelKey) -> int:

@@ -169,8 +169,9 @@ def test_minetown_planner_stops_descent_at_identified_town(
     planner = ObjectivePlanner(Objective((EnterMinetownTempleLeg(),)))
     assert planner.plan(0, dungeon).goal == main_stairs(StairDirection.DOWN)
     memory = dungeon.observe(temple_observation(template, step=2))
-    assert planner.plan(0, dungeon).goal == EnterTempleGoal(LevelKey(2, 3))
-    memory.mark_exhausted()
+    # An unidentified level with nothing left to explore is not searched
+    # before level 4 is seen (note 0061).
+    assert memory.level == LevelKey(2, 3)
     assert planner.plan(0, dungeon).goal == main_stairs(StairDirection.DOWN)
     memory.town_identified = True
     assert planner.plan(0, dungeon).goal == EnterTempleGoal(LevelKey(2, 3))
