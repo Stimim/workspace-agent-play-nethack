@@ -500,3 +500,21 @@ def test_executed_batch_finishes_then_rotates_without_refilling(template, action
     rotated = search_candidate(memory, route_tree(memory))
     assert rotated is not None and rotated[0] != stand
     assert min(memory.search_coverage.get(p, 0) for p in rotated[1]) < SEARCH_BATCH_SIZE
+
+
+def test_arrival_at_committed_stand_searches_before_rotating(template, actions):
+    arrived = ("       ", " ----- ", " |.@.| ", " ----- ", "       ")
+    memory = remembered(template, ROOM, arrived)
+    stand = memory.position
+    best = search_candidate(memory, route_tree(memory))
+    assert best is not None and best[0] != stand
+    # Walking to a stand and leaving it unsearched for a better-ranked one
+    # crossed whole levels and restarted the clock (0059 pass 2, seed 1360).
+    memory.search_goal = stand
+    kept = search_candidate(memory, route_tree(memory))
+    assert kept is not None and kept[0] == stand
+    record = ActionRecord(ActionKind.SEARCH, stand, search_spot=stand)
+    for _ in range(SEARCH_BATCH_SIZE):
+        assert search_candidate(memory, route_tree(memory))[0] == stand
+        memory.record(record)
+    assert search_candidate(memory, route_tree(memory))[0] != stand

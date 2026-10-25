@@ -248,8 +248,16 @@ def search_candidate(
         return None
     best = min(candidates, key=lambda point: candidates[point][0])
     committed = memory.search_goal
+    batch_done = (
+        memory.search_location == committed and memory.search_turns_remaining == 0
+    )
+    # An arrived stand is searched for one batch before rotating: leaving it
+    # unsearched for a better-ranked stand crossed whole levels, and the
+    # newly observed cells on each walk restarted the no-progress clock
+    # (0059 development pass 2, Minetown 1360).
     if committed in candidates and (
         (memory.search_location == committed and memory.search_turns_remaining > 0)
+        or (memory.position == committed and not batch_done)
         or (
             memory.position != committed
             and candidates[committed][0][0] == candidates[best][0][0]

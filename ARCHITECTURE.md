@@ -468,9 +468,9 @@ and clearing quarantine and waits), exactly as it always has. `search_exhausted`
 A place objective's stair-seeking travel (`reach_level`, `find_oracle`,
 `enter_minetown_temple`) instead uses a separate, **finite, never-refillable**
 navigation budget: the least-covered under-cap candidate, then
-benefit/density, travel distance, and map order; an executed batch stays
-committed while it still benefits an under-cap candidate, for at most ten
-searches, and coverage is cumulative per level, never multiplied by a round.
+benefit/density, travel distance, and map order; a stand the hero has walked
+to, and an executed batch, stay committed while they still benefit an
+under-cap candidate, for at most ten searches, and coverage is cumulative per level, never multiplied by a round.
 A reachable goal-compatible staircase or frontier is attempted before more
 search or blocker waiting. This per-candidate cap and per-level no-progress
 clock share one public-evidence predicate across skill selection,
