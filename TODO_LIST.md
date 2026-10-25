@@ -22,8 +22,8 @@ Process rules (milestone-2 lessons, notes 0037-0046, and [ADR 0007 process decis
 
 Order of work (current 2026-10-19; supersedes 10-06/10-18; diagnosis/history in [0056]):
 
-1. Disengage-and-rest rule (Phase 3): REJECTED ([0057](docs/notes/0057-elbereth-disengage-qualification.md)); fewer deaths, but objectives fell and fresh Weak-or-worse deaths rose. Next step decided 2026-10-21: combined rest + stall-budget candidate 0059 qualifies as one unit under the recorded [ADR 0007 exception](docs/decisions/0007-mines-minetown-and-oracle.md#process-decision-2026-10-21-combined-candidate-0059); development pass in progress.
-2. Requalify stall-budget candidate 0054 (Phase 2); its two blocking bugs are fixed on its branch.
+1. Disengage-and-rest rule (Phase 3): REJECTED ([0057](docs/notes/0057-elbereth-disengage-qualification.md)); fewer deaths, but objectives fell and fresh Weak-or-worse deaths rose. Next step decided 2026-10-21: combined rest + stall-budget candidate 0059 was developed as one unit under the recorded [ADR 0007 exception](docs/decisions/0007-mines-minetown-and-oracle.md#process-decision-2026-10-21-combined-candidate-0059) and NOT QUALIFIED after three development passes ([0059](docs/notes/0059-rest-plus-stall-budget-development.md)): pass 3 passed Minetown (19 objectives, 37 deaths) and Oracle (14, 50) but failed D5 (53 objectives, 6 deaths, 3 Weak-or-worse); no fresh seeds spent. Next candidate to be chosen by the owner.
+2. Stall budget (Phase 2): candidate 0054 was rejected with 0059 as a unit. A successor needs a distance-aware search-stand ranking, or a no-progress clock that known floor seen on a new route does not restart ([0059](docs/notes/0059-rest-plus-stall-budget-development.md)).
 3. Optional ADR 0007 gate amendment: objectives not lower, starvation/Weak-or-worse deaths not higher; this would not rescue measured 0054 or 0057.
 
 Phase 0 tooling may proceed alongside this order.
@@ -59,7 +59,7 @@ Done: Minetown/Oracle objective planning, peaceful adjacency/attack conduct, dev
 - [ ] Build a reviewed-card threat model covering difficulty/special attacks, including floating eyes, cockatrices, nymphs, leprechauns, ants, werecreatures, gas spores, shop mimics and mattock dwarves ([ADR 0007](docs/decisions/0007-mines-minetown-and-oracle.md)).
 - [ ] Cure publicly evident lycanthropy by safe-timeout prayer (3.6.7 major-trouble/cure semantics confirmed); qualify beyond the current corpse-eating exclusion ([0056]).
 - [ ] Preserve dwarven-hero peaceful handling: never attack peaceful gnomes/dwarves/watch and keep declining `Really attack?`; qualify conduct on Mines runs ([ADR 0007](docs/decisions/0007-mines-minetown-and-oracle.md)).
-- [ ] Disengage/rest: the first combat-only Elbereth rule was rejected ([0057](docs/notes/0057-elbereth-disengage-qualification.md)); candidate on branch `rule-0057-elbereth-disengage`. Resting needs stall reduction and a food budget to turn survival into objectives; quiet rest and retreat movement remain untried.
+- [ ] Disengage/rest: the first combat-only Elbereth rule was rejected ([0057](docs/notes/0057-elbereth-disengage-qualification.md)); candidate on branch `rule-0057-elbereth-disengage`. Combined with the 0054 stall budget (candidate 0059) it passed Minetown and Oracle regression but failed D5 and was not qualified ([0059](docs/notes/0059-rest-plus-stall-budget-development.md)). Resting needs stall reduction and a food budget to turn survival into objectives; quiet rest and retreat movement remain untried.
 - [ ] Handle stun/confusion/blindness safely and remember/route around known traps; qualify recurring failure classes ([0051](docs/notes/0051-ration-livelock-qualification.md), [ADR 0007](docs/decisions/0007-mines-minetown-and-oracle.md)).
 - [ ] Comply with vault guards after involuntary relocation; reproduce and fix the recorded failure ([0056] seed 1377).
 

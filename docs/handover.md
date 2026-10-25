@@ -32,6 +32,10 @@ Status and working notes for the next coding agent (for example Claude Code,
     hungry.
   - 0057 Elbereth disengage: REJECTED. Fewer deaths, but objectives fell and
     resting caused more Weak-or-worse deaths.
+  - 0059 rest + stall budget combined: NOT QUALIFIED after three development
+    passes (note 0059). Pass 3 passed Minetown (19 objectives, 37 deaths) and
+    Oracle (14, 50) but failed D5 (53, 6, 3 Weak-or-worse). No fresh seeds
+    spent.
 - **Root cause:** the death analysis (note 0056, Phase 3 section; raw data in
   `~/nethack-evidence/0055-death-analysis/`). Deeper levels kill a weak hero
   (median XL 3-5, AC 6) that keeps fighting at low HP with prayer on cooldown.
@@ -40,12 +44,17 @@ Status and working notes for the next coding agent (for example Claude Code,
 
 ## 2. Decisions waiting for the project owner
 
-1. **Next gameplay step: decided** (owner, 2026-10-21). Candidate 0059
-   (0057 resting + 0054 stall budget) qualifies as one unit under the
-   process decision recorded at the end of ADR 0007. A development pass on
-   the three regression suites runs before preregistration; fresh seeds
-   635-664 are the next unused range.
-2. **Commit provenance for Claude Code: decided.** Claude Code commits by
+1. **Next gameplay step: open.** Candidate 0059 (0057 resting + 0054 stall
+   budget, one unit under the ADR 0007 exception) was recorded NOT QUALIFIED
+   by the owner on 2026-10-25 (note 0059). Its remaining defect is the 0054
+   search-stand ranking and no-progress clock (note 0059, "Remaining
+   mechanism"). A successor combining the rules needs a new exception.
+   Fresh seeds 635-664 remain the next unused range.
+2. **Verification process: open.** The representative-seed catalog check
+   missed all three navigation bugs found in 0059 (note 0059,
+   "Disposition"). The owner will review whether to add long-cap Minetown
+   and Oracle seeds and loop counters.
+3. **Commit provenance for Claude Code: decided.** Claude Code commits by
    itself (owner decision, 2026-10-20) with
    `_agents/skills/omp-commit/scripts/omp_commit.py claude-commit
    --message-file FILE`. It runs the guard and checks and adds one
@@ -56,21 +65,20 @@ Status and working notes for the next coding agent (for example Claude Code,
    session. That is why commit `5892159` (the 0055 evidence record) carries
    the OMP orchestrator's `OMP-Conversation` trailer; it was actually made by
    Claude Code session `ebfd92cf-38da-48d2-b9b3-fb2d860347f9`.
-3. **Optional cleanups:** fix Markdown list formatting in 18 older docs (ADR
+4. **Optional cleanups:** fix Markdown list formatting in 18 older docs (ADR
    0004, notes 0044/0049/0050, ...); trim README "Project status" history.
 
 ## 3. Work in flight (not in `main`)
 
 Candidate code lives in git worktrees outside the repository. Each branch is
-committed locally (2026-10-21) with a `Qualification-Exempt` trailer, but
-nothing is pushed: back up `.git` or push the branches before deleting
-directories or reinstalling the machine.
+committed with a `Qualification-Exempt` trailer, and the five candidate
+branches below were pushed to `origin` on 2026-10-25.
 
 | Worktree | Branch (base `22d0a5f`) | State | Record |
 | --- | --- | --- | --- |
 | `~/nethack-evidence/0057/candidate` | `rule-0057-elbereth-disengage` | rejected, frozen | note 0057 |
-| `~/nethack-evidence/0059-rest-stall/candidate` | `rule-0059-rest-plus-stall-budget` (merge of 0054 `4822092` and 0057 `fba7813`) | built, unqualified; awaits the ADR 0007 exception | commit `800e05d` message |
-| `~/nethack-evidence/0054/candidate` | `rule-0054-no-progress-budget` | unqualified; two blocking bugs fixed (`4822092`) | `~/nethack-evidence/0054/STATUS.md` |
+| `~/nethack-evidence/0059-rest-stall/candidate` | `rule-0059-rest-plus-stall-budget` (0054 + 0057, then fixes to `afc3282`) | NOT QUALIFIED after 3 development passes | note 0059, `~/nethack-evidence/0059-rest-stall/DEV.md` |
+| `~/nethack-evidence/0054/candidate` | `rule-0054-no-progress-budget` | rejected with 0059; its later bug fixes live on the 0059 branch | `~/nethack-evidence/0054/STATUS.md`, note 0059 |
 | `~/nethack-evidence/0053/candidate` | `rule-0053-ranged-clearance` | paused (needs ammunition) | note 0056, `implementation-report.json` |
 | `~/nethack-evidence/0052/candidate` | `qualify-0052-slime-mold` | rejected | note 0052 |
 | `~/nethack-evidence/0052/baseline` | detached at `22d0a5f` | shipped baseline with its own `.venv` | reused by 0057 |
