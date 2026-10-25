@@ -31,6 +31,7 @@
 - Milestone 3 Phase 3: the rejected combat-only Elbereth disengage rule, its development history, consumed fresh sample and per-seed evidence: [note 0057](notes/0057-elbereth-disengage-qualification.md).
 - Milestone 3 Phase 2: branch-stair identity diagnosis, closed without a rule (the Mines `>` detour costs 2 turns): [note 0058](notes/0058-branch-stair-identity-diagnosis.md).
 - Milestone 3 Phases 2-3: combined rest + stall-budget candidate 0059, NOT QUALIFIED after three development passes (D5 regression gates failed; no fresh seeds spent), with per-pass evidence: [note 0059](notes/0059-rest-plus-stall-budget-development.md).
+- Milestone 3A Phase 1: native-truth classification of every baseline stall; 58% of stall turns search a level for a target it lacks: [note 0060](notes/0060-stall-cause-diagnosis.md).
 - [`external/`](external/): instructions for large external source material that is not committed.
 - [`../_agents/`](../_agents/): repository-specific coding-agent procedures and tools.
 - [`../nethack-agent/knowledge/`](../nethack-agent/knowledge/): reviewed knowledge made available to the local playing agent.

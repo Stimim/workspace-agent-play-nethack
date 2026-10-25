@@ -18,9 +18,9 @@ Unified survival remediation shipped; `descend-d5-v2` passed its objective-rate 
 
 Goal ([ADR 0008](docs/decisions/0008-find-the-way-down.md), accepted 2026-10-25): on main Dlvl 1-9 and Mines levels 1-4 the hero reaches a goal-compatible staircase without long single-level stalls. A run is stalled when one contiguous level stay exceeds 1,000 game turns; baseline 48/40/11 of 67 (Minetown/Oracle/D5), where 72%/66%/32% of turns are past the 500th on one level. Acceptance: at most 10 stalled runs per Minetown and Oracle regression suite, D5 not above 11, at most 4 of 30 per fresh target, and ADR 0007 §4.1 outcome gates unchanged. Each rule qualifies separately.
 
-- [ ] Phase 1: classify every stalled level in the baseline arms with native truth (hidden exit, unrouted exit, locked door/boulder, wasted search, unusual exit, fighting/waiting); no seeds spent.
+- [x] Phase 1: stall causes classified ([0060](docs/notes/0060-stall-cause-diagnosis.md)). 58% of stall turns search a level for a target it lacks (Mines branch, Oracle, Mines temple), because range levels count as visited only after hidden-passage search is exhausted; secret-passage exits 25%; seen-but-not-taken 8%.
 - [ ] Phase 2: long-cap Minetown/Oracle stall seeds in the representative-seed catalog. Done: stall and loop diagnostics (longest level stay, stalled runs, arrive-then-leave, fallback waits) in [`stalls.py`](_agents/skills/evidence-record/SKILL.md), beside the report-only `compare.py`.
-- [ ] Phase 3: one rule per cause class, largest first. Carry the 0059 lessons: distance-aware search-stand ranking; known floor on a new route must not restart the no-progress clock ([0059](docs/notes/0059-rest-plus-stall-budget-development.md)).
+- [ ] Phase 3: one rule per cause class, largest first. First: explore every range level's frontier before hidden-passage search for the branch, Oracle or Mines temple ([0060](docs/notes/0060-stall-cause-diagnosis.md)); then secret-passage search targeting. Carry the 0059 lessons: distance-aware search-stand ranking; known floor on a new route must not restart the no-progress clock ([0059](docs/notes/0059-rest-plus-stall-budget-development.md)).
 - [ ] Phase 4: acceptance per ADR 0008 §3.
 
 ## Paused: milestone 3 — Mines to Minetown, and the Oracle

@@ -47,7 +47,8 @@ Status and working notes for the next coding agent (for example Claude Code,
 ## 2. Decisions waiting for the project owner
 
 1. **Next gameplay step: decided** (owner, 2026-10-25). Milestone 3A
-   (ADR 0008) starts with the Phase 1 stall diagnosis. Candidate 0059 was
+   (ADR 0008): Phase 1 diagnosis done (note 0060); the first Phase 3 rule
+   is explore-before-search in the branch, Oracle and Mines-temple ranges. Candidate 0059 was
    recorded NOT QUALIFIED (note 0059). Fresh seeds 635-664 remain the next
    unused range.
 2. **Verification process: decided** (ADR 0008 §4, Phase 2): stall
