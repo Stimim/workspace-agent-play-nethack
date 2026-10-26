@@ -30,6 +30,7 @@
 - Roadmap consolidation and preserved roadmap-only facts, diagnosis, and deferred-work dispositions: [note 0056](notes/0056-roadmap-consolidation.md).
 - Milestone 3 Phase 3: the rejected combat-only Elbereth disengage rule, its development history, consumed fresh sample and per-seed evidence: [note 0057](notes/0057-elbereth-disengage-qualification.md).
 - Milestone 3 Phase 2: branch-stair identity diagnosis, closed without a rule (the Mines `>` detour costs 2 turns): [note 0058](notes/0058-branch-stair-identity-diagnosis.md).
+- Milestone 3A Phase 3: remaining stall mechanisms after explore-before-search (search-spot ping-pong, waits for sessile blockers, search ranking): [note 0062](notes/0062-remaining-stall-mechanisms.md).
 - Milestone 3A Phase 3: the qualified and shipped explore-before-search rule, policy `hierarchical-survival-hp-prayer-burden-look-ration-explore-first-v1`, its consumed fresh sample 635-664 and per-seed evidence: [note 0061](notes/0061-explore-before-search-qualification.md).
 - Milestone 3 Phases 2-3: combined rest + stall-budget candidate 0059, NOT QUALIFIED after three development passes (D5 regression gates failed; no fresh seeds spent), with per-pass evidence: [note 0059](notes/0059-rest-plus-stall-budget-development.md).
 - Milestone 3A Phase 1: native-truth classification of every baseline stall; 58% of stall turns search a level for a target it lacks: [note 0060](notes/0060-stall-cause-diagnosis.md).

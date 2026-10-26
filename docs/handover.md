@@ -58,8 +58,11 @@ Status and working notes for the next coding agent (for example Claude Code,
 1. **Next gameplay step: decided** (owner, 2026-10-25). Milestone 3A
    (ADR 0008): Phase 1 diagnosis done (note 0060). The first Phase 3 rule,
    explore-before-search, is shipped (note 0061; seeds 635-664 consumed).
-   Next: secret-passage search targeting (bounded, rotating among
-   unexhausted range levels). Candidate 0059 was recorded NOT QUALIFIED (note
+   Note 0062 diagnosed what remains. Next: rule 0063, search-spot
+   ping-pong; then rule 0064, never waiting on sessile blockers; then
+   search ranking, re-measured. The baseline arms at the shipped commit are
+   in `~/nethack-evidence/0062/base-*-reg` (worktree
+   `~/nethack-evidence/0062/baseline`). Candidate 0059 was recorded NOT QUALIFIED (note
    0059). Fresh seeds 665-694 are the next unused range; check with
    `used_seeds` first.
 2. **Verification process: decided** (ADR 0008 §4, Phase 2): stall
@@ -86,9 +89,11 @@ Candidate code lives in git worktrees outside the repository. Each branch is
 committed with a `Qualification-Exempt` trailer, and the five candidate
 branches below were pushed to `origin` on 2026-10-25.
 
-The next qualification needs a new baseline worktree at the 0061 ship commit,
-with baseline regression arms on `*-regression-v3` / `unified-d5-regression-v6`.
-The 0052 baseline reports describe the old policy.
+The baseline for the next qualifications is `~/nethack-evidence/0062/baseline`,
+detached at `9783a7e`, with regression arms on `*-regression-v3` and
+`unified-d5-regression-v6` in `~/nethack-evidence/0062/base-*-reg`. They
+reproduce the 0061 candidate outcome for outcome. The 0052 baseline reports
+describe the old policy.
 
 | Worktree | Branch (base `22d0a5f`) | State | Record |
 | --- | --- | --- | --- |

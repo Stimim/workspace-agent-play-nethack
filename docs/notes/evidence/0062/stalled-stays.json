@@ -1,0 +1,3286 @@
+{
+ "source": "0061q cand-{mt,or}-reg (shipped gameplay, commit 4f3c6f4 == 9783a7e outcomes); native-truth replay, diagnosis only",
+ "stays": [
+  {
+   "arm": "mt",
+   "seed": 1,
+   "run_id": "736670a9-3032-4663-8b69-94be1f944ad1",
+   "level": [
+    0,
+    2
+   ],
+   "turns": 2835,
+   "steps": {
+    "start_step": 916,
+    "first_search": 1116,
+    "stall_step": 1905,
+    "end_step": 3732
+   },
+   "searches": 1204,
+   "search_stands": 58,
+   "phases": {
+    "first_search": {
+     "step": 1116,
+     "target": "main_down",
+     "route_steps": 52,
+     "secrets": [
+      [
+       13,
+       8
+      ]
+     ],
+     "other_barriers": [
+      "locked"
+     ],
+     "unknown_path_cells": 4,
+     "first_secret": [
+      13,
+      8
+     ],
+     "searches_next_to_first": 31,
+     "known_stands": 1,
+     "class": "searched_next_to_it"
+    },
+    "stall": {
+     "step": 1905,
+     "target": "main_down",
+     "route_steps": 82,
+     "secrets": [
+      [
+       13,
+       8
+      ]
+     ],
+     "other_barriers": [
+      "locked"
+     ],
+     "unknown_path_cells": 4,
+     "first_secret": [
+      13,
+      8
+     ],
+     "searches_next_to_first": 31,
+     "known_stands": 1,
+     "class": "searched_next_to_it"
+    },
+    "end": {
+     "step": 3732,
+     "target": "main_down",
+     "route_steps": 0,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    }
+   },
+   "mechanism_steps": {
+    "search": 1204,
+    "travel": 1276,
+    "flip": 29,
+    "wait_blocker": 0,
+    "blocked_approach": 1,
+    "other": 336
+   },
+   "blocker_waits": {}
+  },
+  {
+   "arm": "mt",
+   "seed": 2,
+   "run_id": "a877da69-6420-4bf6-b224-a104d0948d23",
+   "level": [
+    0,
+    3
+   ],
+   "turns": 1316,
+   "steps": {
+    "start_step": 713,
+    "first_search": 1166,
+    "stall_step": 1707,
+    "end_step": 2025
+   },
+   "searches": 215,
+   "search_stands": 23,
+   "phases": {
+    "first_search": {
+     "step": 1166,
+     "target": "branch_down",
+     "class": "no_target_branch_down"
+    },
+    "stall": {
+     "step": 1707,
+     "target": "branch_down",
+     "class": "no_target_branch_down"
+    },
+    "end": {
+     "step": 2025,
+     "target": "main_down",
+     "route_steps": 0,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    }
+   },
+   "mechanism_steps": {
+    "search": 191,
+    "travel": 439,
+    "flip": 13,
+    "wait_blocker": 24,
+    "blocked_approach": 114,
+    "other": 545
+   },
+   "blocker_waits": {
+    "floating eye": 24
+   }
+  },
+  {
+   "arm": "mt",
+   "seed": 701,
+   "run_id": "30d0f4eb-a6a4-4fd9-86fa-64f6b650f206",
+   "level": [
+    0,
+    3
+   ],
+   "turns": 1148,
+   "steps": {
+    "start_step": 780,
+    "first_search": 980,
+    "stall_step": 1791,
+    "end_step": 1929
+   },
+   "searches": 329,
+   "search_stands": 32,
+   "phases": {
+    "first_search": {
+     "step": 980,
+     "target": "branch_down",
+     "class": "no_target_branch_down"
+    },
+    "stall": {
+     "step": 1791,
+     "target": "main_down",
+     "route_steps": 43,
+     "secrets": [
+      [
+       26,
+       4
+      ]
+     ],
+     "other_barriers": [],
+     "unknown_path_cells": 33,
+     "first_secret": [
+      26,
+      4
+     ],
+     "searches_next_to_first": 12,
+     "known_stands": 2,
+     "class": "stand_known_not_searched"
+    },
+    "end": {
+     "step": 1929,
+     "target": "main_down",
+     "route_steps": 0,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    }
+   },
+   "mechanism_steps": {
+    "search": 329,
+    "travel": 406,
+    "flip": 7,
+    "wait_blocker": 0,
+    "blocked_approach": 0,
+    "other": 415
+   },
+   "blocker_waits": {}
+  },
+  {
+   "arm": "mt",
+   "seed": 901,
+   "run_id": "855c0088-4b64-4f55-b3d4-d4483bee6020",
+   "level": [
+    2,
+    5
+   ],
+   "turns": 1376,
+   "steps": {
+    "start_step": 363,
+    "first_search": 674,
+    "stall_step": 1354,
+    "end_step": 1729
+   },
+   "searches": 505,
+   "search_stands": 51,
+   "phases": {
+    "first_search": {
+     "step": 674,
+     "target": "occupy_altar",
+     "class": "no_target_occupy_altar"
+    },
+    "stall": {
+     "step": 1354,
+     "target": "occupy_altar",
+     "class": "no_target_occupy_altar"
+    },
+    "end": {
+     "step": 1729,
+     "target": "occupy_altar",
+     "class": "no_target_occupy_altar"
+    }
+   },
+   "mechanism_steps": {
+    "search": 505,
+    "travel": 524,
+    "flip": 3,
+    "wait_blocker": 0,
+    "blocked_approach": 0,
+    "other": 338
+   },
+   "blocker_waits": {}
+  },
+  {
+   "arm": "mt",
+   "seed": 643863903,
+   "run_id": "af445d69-5b94-45af-a200-2fa77cb55045",
+   "level": [
+    2,
+    6
+   ],
+   "turns": 8963,
+   "steps": {
+    "start_step": 2691,
+    "first_search": 2734,
+    "stall_step": 3689,
+    "end_step": 9968
+   },
+   "searches": 5138,
+   "search_stands": 25,
+   "phases": {
+    "first_search": {
+     "step": 2734,
+     "target": "temple",
+     "route_steps": 53,
+     "secrets": [],
+     "other_barriers": [
+      "locked",
+      "peaceful_monster"
+     ],
+     "unknown_path_cells": 43,
+     "class": "other_barrier"
+    },
+    "stall": {
+     "step": 3689,
+     "target": "main_down",
+     "route_steps": 72,
+     "secrets": [],
+     "other_barriers": [
+      "locked"
+     ],
+     "unknown_path_cells": 59,
+     "class": "other_barrier"
+    },
+    "end": {
+     "step": 9968,
+     "target": "main_down",
+     "route_steps": 58,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 56,
+     "class": "unexplored_open_route"
+    }
+   },
+   "mechanism_steps": {
+    "search": 5138,
+    "travel": 1988,
+    "flip": 7,
+    "wait_blocker": 0,
+    "blocked_approach": 0,
+    "other": 152
+   },
+   "blocker_waits": {}
+  },
+  {
+   "arm": "mt",
+   "seed": 1703050900,
+   "run_id": "7f703d96-b987-4499-97b4-256c161b77e4",
+   "level": [
+    2,
+    5
+   ],
+   "turns": 5761,
+   "steps": {
+    "start_step": 345,
+    "first_search": 465,
+    "stall_step": 1334,
+    "end_step": 5782
+   },
+   "searches": 3150,
+   "search_stands": 43,
+   "phases": {
+    "first_search": {
+     "step": 465,
+     "target": "temple",
+     "route_steps": 38,
+     "secrets": [],
+     "other_barriers": [
+      "closed",
+      "locked",
+      "peaceful_monster"
+     ],
+     "unknown_path_cells": 21,
+     "class": "other_barrier"
+    },
+    "stall": {
+     "step": 1334,
+     "target": "temple",
+     "route_steps": 26,
+     "secrets": [],
+     "other_barriers": [
+      "locked"
+     ],
+     "unknown_path_cells": 21,
+     "class": "other_barrier"
+    },
+    "end": {
+     "step": 5782,
+     "target": "temple",
+     "route_steps": 24,
+     "secrets": [],
+     "other_barriers": [
+      "locked"
+     ],
+     "unknown_path_cells": 21,
+     "class": "other_barrier"
+    }
+   },
+   "mechanism_steps": {
+    "search": 3149,
+    "travel": 2065,
+    "flip": 23,
+    "wait_blocker": 1,
+    "blocked_approach": 0,
+    "other": 223
+   },
+   "blocker_waits": {
+    "dwarf": 1
+   }
+  },
+  {
+   "arm": "mt",
+   "seed": 703,
+   "run_id": "d962f9b1-09e0-4ff3-9caf-6d693d480176",
+   "level": [
+    2,
+    7
+   ],
+   "turns": 2949,
+   "steps": {
+    "start_step": 1163,
+    "first_search": 1170,
+    "stall_step": 2161,
+    "end_step": 4104
+   },
+   "searches": 2572,
+   "search_stands": 6,
+   "phases": {
+    "first_search": {
+     "step": 1170,
+     "target": "temple",
+     "route_steps": 25,
+     "secrets": [],
+     "other_barriers": [
+      "closed",
+      "locked",
+      "peaceful_monster"
+     ],
+     "unknown_path_cells": 23,
+     "class": "other_barrier"
+    },
+    "stall": {
+     "step": 2161,
+     "target": "main_up",
+     "route_steps": 37,
+     "secrets": [],
+     "other_barriers": [
+      "locked",
+      "peaceful_monster"
+     ],
+     "unknown_path_cells": 35,
+     "class": "other_barrier"
+    },
+    "end": {
+     "step": 4104,
+     "target": "main_up",
+     "route_steps": 41,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 39,
+     "class": "unexplored_open_route"
+    }
+   },
+   "mechanism_steps": {
+    "search": 2572,
+    "travel": 330,
+    "flip": 15,
+    "wait_blocker": 0,
+    "blocked_approach": 0,
+    "other": 40
+   },
+   "blocker_waits": {}
+  },
+  {
+   "arm": "mt",
+   "seed": 1354866613,
+   "run_id": "bbd96ce0-9f39-4647-bd1e-2ac7bc525547",
+   "level": [
+    2,
+    5
+   ],
+   "turns": 1427,
+   "steps": {
+    "start_step": 882,
+    "first_search": 892,
+    "stall_step": 1883,
+    "end_step": 2309
+   },
+   "searches": 1016,
+   "search_stands": 8,
+   "phases": {
+    "first_search": {
+     "step": 892,
+     "target": "main_down",
+     "route_steps": 54,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    },
+    "stall": {
+     "step": 1883,
+     "target": "main_down",
+     "route_steps": 58,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    },
+    "end": {
+     "step": 2309,
+     "target": "main_down",
+     "route_steps": 60,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    }
+   },
+   "mechanism_steps": {
+    "search": 1016,
+    "travel": 387,
+    "flip": 0,
+    "wait_blocker": 0,
+    "blocked_approach": 0,
+    "other": 25
+   },
+   "blocker_waits": {}
+  },
+  {
+   "arm": "mt",
+   "seed": 5,
+   "run_id": "08c02c1f-4309-4f49-9ce0-47a6ccb0ad33",
+   "level": [
+    2,
+    6
+   ],
+   "turns": 5294,
+   "steps": {
+    "start_step": 1249,
+    "first_search": 1494,
+    "stall_step": 2246,
+    "end_step": 6518
+   },
+   "searches": 2144,
+   "search_stands": 100,
+   "phases": {
+    "first_search": {
+     "step": 1494,
+     "target": "temple",
+     "class": "no_target_temple"
+    },
+    "stall": {
+     "step": 2246,
+     "target": "temple",
+     "class": "no_target_temple"
+    },
+    "end": {
+     "step": 6518,
+     "target": "temple",
+     "class": "no_target_temple"
+    }
+   },
+   "mechanism_steps": {
+    "search": 2103,
+    "travel": 2000,
+    "flip": 35,
+    "wait_blocker": 41,
+    "blocked_approach": 15,
+    "other": 1111
+   },
+   "blocker_waits": {
+    "green mold": 41
+   }
+  },
+  {
+   "arm": "mt",
+   "seed": 704,
+   "run_id": "24de90fc-63cd-496c-804f-0165699a4575",
+   "level": [
+    0,
+    1
+   ],
+   "turns": 1002,
+   "steps": {
+    "start_step": 1,
+    "first_search": 429,
+    "stall_step": 988,
+    "end_step": 989
+   },
+   "searches": 210,
+   "search_stands": 22,
+   "phases": {
+    "first_search": {
+     "step": 429,
+     "target": "main_down",
+     "route_steps": 64,
+     "secrets": [
+      [
+       19,
+       15
+      ]
+     ],
+     "other_barriers": [
+      "locked"
+     ],
+     "unknown_path_cells": 4,
+     "first_secret": [
+      19,
+      15
+     ],
+     "searches_next_to_first": 10,
+     "known_stands": 2,
+     "class": "stand_known_not_searched"
+    },
+    "stall": {
+     "step": 988,
+     "target": "main_down",
+     "route_steps": 1,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    },
+    "end": {
+     "step": 989,
+     "target": "main_down",
+     "route_steps": 0,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    }
+   },
+   "mechanism_steps": {
+    "search": 210,
+    "travel": 330,
+    "flip": 2,
+    "wait_blocker": 0,
+    "blocked_approach": 0,
+    "other": 449
+   },
+   "blocker_waits": {}
+  },
+  {
+   "arm": "mt",
+   "seed": 1364,
+   "run_id": "e0eecf5d-7fd0-4bf7-9bfb-bc06217c00c6",
+   "level": [
+    0,
+    4
+   ],
+   "turns": 2464,
+   "steps": {
+    "start_step": 859,
+    "first_search": 1133,
+    "stall_step": 1857,
+    "end_step": 3281
+   },
+   "searches": 823,
+   "search_stands": 85,
+   "phases": {
+    "first_search": {
+     "step": 1133,
+     "target": "branch_down",
+     "class": "no_target_branch_down"
+    },
+    "stall": {
+     "step": 1857,
+     "target": "branch_down",
+     "class": "no_target_branch_down"
+    },
+    "end": {
+     "step": 3281,
+     "target": "branch_down",
+     "class": "no_target_branch_down"
+    }
+   },
+   "mechanism_steps": {
+    "search": 823,
+    "travel": 854,
+    "flip": 14,
+    "wait_blocker": 0,
+    "blocked_approach": 0,
+    "other": 746
+   },
+   "blocker_waits": {}
+  },
+  {
+   "arm": "mt",
+   "seed": 6,
+   "run_id": "2857dd08-a255-4f52-8410-79a1eb73a8ad",
+   "level": [
+    0,
+    4
+   ],
+   "turns": 1552,
+   "steps": {
+    "start_step": 707,
+    "first_search": 1150,
+    "stall_step": 1691,
+    "end_step": 2243
+   },
+   "searches": 410,
+   "search_stands": 43,
+   "phases": {
+    "first_search": {
+     "step": 1150,
+     "target": "branch_down",
+     "class": "no_target_branch_down"
+    },
+    "stall": {
+     "step": 1691,
+     "target": "branch_down",
+     "class": "no_target_branch_down"
+    },
+    "end": {
+     "step": 2243,
+     "target": "main_up",
+     "route_steps": 0,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    }
+   },
+   "mechanism_steps": {
+    "search": 409,
+    "travel": 599,
+    "flip": 7,
+    "wait_blocker": 1,
+    "blocked_approach": 0,
+    "other": 528
+   },
+   "blocker_waits": {
+    "hobbit": 1
+   }
+  },
+  {
+   "arm": "mt",
+   "seed": 279714031,
+   "run_id": "80ecce1f-3730-4c2c-a0bb-6c896e8a4dcc",
+   "level": [
+    0,
+    4
+   ],
+   "turns": 1056,
+   "steps": {
+    "start_step": 424,
+    "first_search": 762,
+    "stall_step": 1426,
+    "end_step": 1481
+   },
+   "searches": 320,
+   "search_stands": 32,
+   "phases": {
+    "first_search": {
+     "step": 762,
+     "target": "branch_down",
+     "class": "no_target_branch_down"
+    },
+    "stall": {
+     "step": 1426,
+     "target": "branch_down",
+     "class": "no_target_branch_down"
+    },
+    "end": {
+     "step": 1481,
+     "target": "main_up",
+     "route_steps": 0,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    }
+   },
+   "mechanism_steps": {
+    "search": 320,
+    "travel": 398,
+    "flip": 2,
+    "wait_blocker": 0,
+    "blocked_approach": 0,
+    "other": 340
+   },
+   "blocker_waits": {}
+  },
+  {
+   "arm": "mt",
+   "seed": 1365,
+   "run_id": "23be6ee3-4567-430a-84b7-b201f03891e8",
+   "level": [
+    2,
+    4
+   ],
+   "turns": 1096,
+   "steps": {
+    "start_step": 620,
+    "first_search": 713,
+    "stall_step": 1616,
+    "end_step": 1712
+   },
+   "searches": 565,
+   "search_stands": 25,
+   "phases": {
+    "first_search": {
+     "step": 713,
+     "target": "main_down",
+     "route_steps": 43,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 8,
+     "class": "unexplored_open_route"
+    },
+    "stall": {
+     "step": 1616,
+     "target": "main_down",
+     "route_steps": 43,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 8,
+     "class": "unexplored_open_route"
+    },
+    "end": {
+     "step": 1712,
+     "target": "main_down",
+     "route_steps": 0,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    }
+   },
+   "mechanism_steps": {
+    "search": 565,
+    "travel": 375,
+    "flip": 3,
+    "wait_blocker": 0,
+    "blocked_approach": 0,
+    "other": 153
+   },
+   "blocker_waits": {}
+  },
+  {
+   "arm": "mt",
+   "seed": 1367,
+   "run_id": "ae63bd51-09bf-4c0b-99e1-44cce9ba812b",
+   "level": [
+    2,
+    5
+   ],
+   "turns": 2857,
+   "steps": {
+    "start_step": 686,
+    "first_search": 795,
+    "stall_step": 1678,
+    "end_step": 3318
+   },
+   "searches": 1480,
+   "search_stands": 39,
+   "phases": {
+    "first_search": {
+     "step": 795,
+     "target": "temple",
+     "route_steps": 37,
+     "secrets": [],
+     "other_barriers": [
+      "closed",
+      "locked",
+      "peaceful_monster"
+     ],
+     "unknown_path_cells": 32,
+     "class": "other_barrier"
+    },
+    "stall": {
+     "step": 1678,
+     "target": "temple",
+     "route_steps": 51,
+     "secrets": [],
+     "other_barriers": [
+      "locked"
+     ],
+     "unknown_path_cells": 32,
+     "class": "other_barrier"
+    },
+    "end": {
+     "step": 3318,
+     "target": "temple",
+     "route_steps": 42,
+     "secrets": [],
+     "other_barriers": [
+      "locked"
+     ],
+     "unknown_path_cells": 32,
+     "class": "other_barrier"
+    }
+   },
+   "mechanism_steps": {
+    "search": 1480,
+    "travel": 1031,
+    "flip": 12,
+    "wait_blocker": 0,
+    "blocked_approach": 1,
+    "other": 121
+   },
+   "blocker_waits": {}
+  },
+  {
+   "arm": "mt",
+   "seed": 9,
+   "run_id": "6ce0c575-602d-4a99-8d33-c64ba13fd91a",
+   "level": [
+    0,
+    4
+   ],
+   "turns": 4118,
+   "steps": {
+    "start_step": 553,
+    "first_search": 877,
+    "stall_step": 1550,
+    "end_step": 4384
+   },
+   "searches": 2354,
+   "search_stands": 57,
+   "phases": {
+    "first_search": {
+     "step": 877,
+     "target": "branch_down",
+     "class": "no_target_branch_down"
+    },
+    "stall": {
+     "step": 1550,
+     "target": "branch_down",
+     "class": "no_target_branch_down"
+    },
+    "end": {
+     "step": 4384,
+     "target": "main_up",
+     "route_steps": 21,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 2,
+     "class": "unexplored_open_route"
+    }
+   },
+   "mechanism_steps": {
+    "search": 541,
+    "travel": 876,
+    "flip": 32,
+    "wait_blocker": 1813,
+    "blocked_approach": 6,
+    "other": 596
+   },
+   "blocker_waits": {
+    "floating eye": 1813
+   }
+  },
+  {
+   "arm": "mt",
+   "seed": 10,
+   "run_id": "69dd6958-f908-4a16-a437-550e36c998ff",
+   "level": [
+    0,
+    1
+   ],
+   "turns": 2080,
+   "steps": {
+    "start_step": 1,
+    "first_search": 369,
+    "stall_step": 996,
+    "end_step": 2064
+   },
+   "searches": 714,
+   "search_stands": 72,
+   "phases": {
+    "first_search": {
+     "step": 369,
+     "target": "main_down",
+     "route_steps": 59,
+     "secrets": [
+      [
+       59,
+       6
+      ]
+     ],
+     "other_barriers": [],
+     "unknown_path_cells": 11,
+     "first_secret": [
+      59,
+      6
+     ],
+     "searches_next_to_first": 16,
+     "known_stands": 1,
+     "class": "stand_known_not_searched"
+    },
+    "stall": {
+     "step": 996,
+     "target": "main_down",
+     "route_steps": 16,
+     "secrets": [
+      [
+       59,
+       6
+      ]
+     ],
+     "other_barriers": [],
+     "unknown_path_cells": 11,
+     "first_secret": [
+      59,
+      6
+     ],
+     "searches_next_to_first": 16,
+     "known_stands": 1,
+     "class": "stand_known_not_searched"
+    },
+    "end": {
+     "step": 2064,
+     "target": "main_down",
+     "route_steps": 0,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    }
+   },
+   "mechanism_steps": {
+    "search": 714,
+    "travel": 932,
+    "flip": 8,
+    "wait_blocker": 0,
+    "blocked_approach": 0,
+    "other": 418
+   },
+   "blocker_waits": {}
+  },
+  {
+   "arm": "mt",
+   "seed": 1369,
+   "run_id": "fab10554-30e2-4ed5-8b15-7788f44cba21",
+   "level": [
+    0,
+    2
+   ],
+   "turns": 10619,
+   "steps": {
+    "start_step": 45,
+    "first_search": 141,
+    "stall_step": 1031,
+    "end_step": 9432
+   },
+   "searches": 987,
+   "search_stands": 69,
+   "phases": {
+    "first_search": {
+     "step": 141,
+     "target": "main_down",
+     "route_steps": 102,
+     "secrets": [
+      [
+       18,
+       3
+      ],
+      [
+       50,
+       13
+      ]
+     ],
+     "other_barriers": [
+      "boulder"
+     ],
+     "unknown_path_cells": 59,
+     "first_secret": [
+      18,
+      3
+     ],
+     "searches_next_to_first": 21,
+     "known_stands": 1,
+     "class": "stand_known_not_searched"
+    },
+    "stall": {
+     "step": 1031,
+     "target": "main_down",
+     "route_steps": 56,
+     "secrets": [
+      [
+       50,
+       13
+      ]
+     ],
+     "other_barriers": [],
+     "unknown_path_cells": 22,
+     "first_secret": [
+      50,
+      13
+     ],
+     "searches_next_to_first": 0,
+     "known_stands": 3,
+     "class": "stand_known_not_searched"
+    },
+    "end": {
+     "step": 9432,
+     "target": "main_down",
+     "route_steps": 72,
+     "secrets": [
+      [
+       50,
+       13
+      ]
+     ],
+     "other_barriers": [],
+     "unknown_path_cells": 22,
+     "first_secret": [
+      50,
+      13
+     ],
+     "searches_next_to_first": 0,
+     "known_stands": 3,
+     "class": "stand_known_not_searched"
+    }
+   },
+   "mechanism_steps": {
+    "search": 987,
+    "travel": 7873,
+    "flip": 652,
+    "wait_blocker": 0,
+    "blocked_approach": 0,
+    "other": 528
+   },
+   "blocker_waits": {}
+  },
+  {
+   "arm": "mt",
+   "seed": 1195605202,
+   "run_id": "0628542b-7927-4bed-af21-16ba7e2a47ae",
+   "level": [
+    2,
+    5
+   ],
+   "turns": 5485,
+   "steps": {
+    "start_step": 1510,
+    "first_search": 1573,
+    "stall_step": 2506,
+    "end_step": 6787
+   },
+   "searches": 3590,
+   "search_stands": 15,
+   "phases": {
+    "first_search": {
+     "step": 1573,
+     "target": "main_down",
+     "class": "unreachable"
+    },
+    "stall": {
+     "step": 2506,
+     "target": "main_down",
+     "class": "unreachable"
+    },
+    "end": {
+     "step": 6787,
+     "target": "main_down",
+     "class": "unreachable"
+    }
+   },
+   "mechanism_steps": {
+    "search": 3590,
+    "travel": 1448,
+    "flip": 9,
+    "wait_blocker": 0,
+    "blocked_approach": 0,
+    "other": 240
+   },
+   "blocker_waits": {}
+  },
+  {
+   "arm": "mt",
+   "seed": 1009099699,
+   "run_id": "88d13200-6c25-475b-a608-51892e8353ce",
+   "level": [
+    2,
+    6
+   ],
+   "turns": 1652,
+   "steps": {
+    "start_step": 2954,
+    "first_search": 2964,
+    "stall_step": 3952,
+    "end_step": 4385
+   },
+   "searches": 710,
+   "search_stands": 68,
+   "phases": {
+    "first_search": {
+     "step": 2964,
+     "target": "temple",
+     "class": "no_target_temple"
+    },
+    "stall": {
+     "step": 3952,
+     "target": "temple",
+     "class": "no_target_temple"
+    },
+    "end": {
+     "step": 4385,
+     "target": "temple",
+     "class": "no_target_temple"
+    }
+   },
+   "mechanism_steps": {
+    "search": 710,
+    "travel": 672,
+    "flip": 13,
+    "wait_blocker": 0,
+    "blocked_approach": 0,
+    "other": 50
+   },
+   "blocker_waits": {}
+  },
+  {
+   "arm": "mt",
+   "seed": 1528054415,
+   "run_id": "1a8f63ef-e965-4457-a5b8-6cf298152f1a",
+   "level": [
+    0,
+    3
+   ],
+   "turns": 11581,
+   "steps": {
+    "start_step": 242,
+    "first_search": 313,
+    "stall_step": 1239,
+    "end_step": 10000
+   },
+   "searches": 7998,
+   "search_stands": 51,
+   "phases": {
+    "first_search": {
+     "step": 313,
+     "target": "branch_down",
+     "class": "no_target_branch_down"
+    },
+    "stall": {
+     "step": 1239,
+     "target": "main_down",
+     "route_steps": 99,
+     "secrets": [
+      [
+       37,
+       6
+      ],
+      [
+       15,
+       3
+      ]
+     ],
+     "other_barriers": [],
+     "unknown_path_cells": 48,
+     "first_secret": [
+      37,
+      6
+     ],
+     "searches_next_to_first": 0,
+     "known_stands": 3,
+     "class": "stand_known_not_searched"
+    },
+    "end": {
+     "step": 10000,
+     "target": "main_down",
+     "route_steps": 112,
+     "secrets": [
+      [
+       37,
+       6
+      ],
+      [
+       15,
+       3
+      ]
+     ],
+     "other_barriers": [
+      "peaceful_monster"
+     ],
+     "unknown_path_cells": 48,
+     "first_secret": [
+      37,
+      6
+     ],
+     "searches_next_to_first": 0,
+     "known_stands": 3,
+     "class": "stand_known_not_searched"
+    }
+   },
+   "mechanism_steps": {
+    "search": 7989,
+    "travel": 1474,
+    "flip": 277,
+    "wait_blocker": 9,
+    "blocked_approach": 1,
+    "other": 286
+   },
+   "blocker_waits": {
+    "gas spore": 8,
+    "shopkeeper": 1
+   }
+  },
+  {
+   "arm": "mt",
+   "seed": 1374,
+   "run_id": "4f6608b7-e9f6-4215-9ff6-7004d6583970",
+   "level": [
+    0,
+    3
+   ],
+   "turns": 11006,
+   "steps": {
+    "start_step": 543,
+    "first_search": 653,
+    "stall_step": 1540,
+    "end_step": 10000
+   },
+   "searches": 8755,
+   "search_stands": 39,
+   "phases": {
+    "first_search": {
+     "step": 653,
+     "target": "main_down",
+     "route_steps": 65,
+     "secrets": [
+      [
+       50,
+       12
+      ],
+      [
+       47,
+       18
+      ]
+     ],
+     "other_barriers": [
+      "closed"
+     ],
+     "unknown_path_cells": 65,
+     "first_secret": [
+      50,
+      12
+     ],
+     "searches_next_to_first": 25,
+     "known_stands": 0,
+     "class": "stand_not_known"
+    },
+    "stall": {
+     "step": 1540,
+     "target": "main_down",
+     "route_steps": 88,
+     "secrets": [
+      [
+       50,
+       12
+      ],
+      [
+       47,
+       18
+      ]
+     ],
+     "other_barriers": [
+      "closed"
+     ],
+     "unknown_path_cells": 65,
+     "first_secret": [
+      50,
+      12
+     ],
+     "searches_next_to_first": 25,
+     "known_stands": 1,
+     "class": "stand_known_not_searched"
+    },
+    "end": {
+     "step": 10000,
+     "target": "main_down",
+     "route_steps": 49,
+     "secrets": [],
+     "other_barriers": [
+      "peaceful_monster"
+     ],
+     "unknown_path_cells": 47,
+     "class": "other_barrier"
+    }
+   },
+   "mechanism_steps": {
+    "search": 8731,
+    "travel": 513,
+    "flip": 6,
+    "wait_blocker": 24,
+    "blocked_approach": 11,
+    "other": 179
+   },
+   "blocker_waits": {
+    "floating eye": 24
+   }
+  },
+  {
+   "arm": "mt",
+   "seed": 1003301977,
+   "run_id": "0a7b5ee6-20f4-4546-be4a-786872f99efa",
+   "level": [
+    2,
+    4
+   ],
+   "turns": 1327,
+   "steps": {
+    "start_step": 932,
+    "first_search": 1054,
+    "stall_step": 1932,
+    "end_step": 2073
+   },
+   "searches": 715,
+   "search_stands": 7,
+   "phases": {
+    "first_search": {
+     "step": 1054,
+     "target": "main_down",
+     "route_steps": 99,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 5,
+     "class": "unexplored_open_route"
+    },
+    "stall": {
+     "step": 1932,
+     "target": "main_down",
+     "route_steps": 100,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 5,
+     "class": "unexplored_open_route"
+    },
+    "end": {
+     "step": 2073,
+     "target": "main_down",
+     "route_steps": 96,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 5,
+     "class": "unexplored_open_route"
+    }
+   },
+   "mechanism_steps": {
+    "search": 715,
+    "travel": 263,
+    "flip": 13,
+    "wait_blocker": 0,
+    "blocked_approach": 0,
+    "other": 164
+   },
+   "blocker_waits": {}
+  },
+  {
+   "arm": "mt",
+   "seed": 1376,
+   "run_id": "e95de3bd-4f47-494f-8fe9-df1ce3022afc",
+   "level": [
+    0,
+    3
+   ],
+   "turns": 11417,
+   "steps": {
+    "start_step": 367,
+    "first_search": 376,
+    "stall_step": 1364,
+    "end_step": 10000
+   },
+   "searches": 6085,
+   "search_stands": 4,
+   "phases": {
+    "first_search": {
+     "step": 376,
+     "target": "branch_down",
+     "class": "no_target_branch_down"
+    },
+    "stall": {
+     "step": 1364,
+     "target": "main_down",
+     "route_steps": 11,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    },
+    "end": {
+     "step": 10000,
+     "target": "main_down",
+     "route_steps": 10,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    }
+   },
+   "mechanism_steps": {
+    "search": 1,
+    "travel": 1674,
+    "flip": 76,
+    "wait_blocker": 6084,
+    "blocked_approach": 668,
+    "other": 1207
+   },
+   "blocker_waits": {
+    "green mold": 6082,
+    "hobbit": 2
+   }
+  },
+  {
+   "arm": "mt",
+   "seed": 1377,
+   "run_id": "9c285f53-8231-4d16-bdf2-73efc286f605",
+   "level": [
+    0,
+    3
+   ],
+   "turns": 7678,
+   "steps": {
+    "start_step": 3637,
+    "first_search": 3762,
+    "stall_step": 4629,
+    "end_step": 10000
+   },
+   "searches": 6049,
+   "search_stands": 18,
+   "phases": {
+    "first_search": {
+     "step": 3762,
+     "target": "main_down",
+     "route_steps": 65,
+     "secrets": [
+      [
+       45,
+       3
+      ],
+      [
+       60,
+       10
+      ]
+     ],
+     "other_barriers": [
+      "locked"
+     ],
+     "unknown_path_cells": 47,
+     "first_secret": [
+      45,
+      3
+     ],
+     "searches_next_to_first": 0,
+     "known_stands": 3,
+     "class": "stand_known_not_searched"
+    },
+    "stall": {
+     "step": 4629,
+     "target": "main_down",
+     "route_steps": 81,
+     "secrets": [
+      [
+       45,
+       3
+      ],
+      [
+       60,
+       10
+      ]
+     ],
+     "other_barriers": [
+      "locked"
+     ],
+     "unknown_path_cells": 47,
+     "first_secret": [
+      45,
+      3
+     ],
+     "searches_next_to_first": 0,
+     "known_stands": 3,
+     "class": "stand_known_not_searched"
+    },
+    "end": {
+     "step": 10000,
+     "target": "main_down",
+     "route_steps": 79,
+     "secrets": [
+      [
+       45,
+       3
+      ],
+      [
+       60,
+       10
+      ]
+     ],
+     "other_barriers": [
+      "locked"
+     ],
+     "unknown_path_cells": 47,
+     "first_secret": [
+      45,
+      3
+     ],
+     "searches_next_to_first": 0,
+     "known_stands": 3,
+     "class": "stand_known_not_searched"
+    }
+   },
+   "mechanism_steps": {
+    "search": 6049,
+    "travel": 172,
+    "flip": 0,
+    "wait_blocker": 0,
+    "blocked_approach": 0,
+    "other": 143
+   },
+   "blocker_waits": {}
+  },
+  {
+   "arm": "mt",
+   "seed": 2094095407,
+   "run_id": "b9f7629a-51ea-41ef-9775-84dd5f950b4e",
+   "level": [
+    0,
+    4
+   ],
+   "turns": 1248,
+   "steps": {
+    "start_step": 892,
+    "first_search": 901,
+    "stall_step": 1896,
+    "end_step": 2139
+   },
+   "searches": 302,
+   "search_stands": 32,
+   "phases": {
+    "first_search": {
+     "step": 901,
+     "target": "branch_down",
+     "class": "no_target_branch_down"
+    },
+    "stall": {
+     "step": 1896,
+     "target": "branch_down",
+     "class": "no_target_branch_down"
+    },
+    "end": {
+     "step": 2139,
+     "target": "main_up",
+     "route_steps": 0,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    }
+   },
+   "mechanism_steps": {
+    "search": 302,
+    "travel": 412,
+    "flip": 3,
+    "wait_blocker": 0,
+    "blocked_approach": 0,
+    "other": 534
+   },
+   "blocker_waits": {}
+  },
+  {
+   "arm": "or",
+   "seed": 700,
+   "run_id": "bce28778-a26c-40c6-a478-75a846212eb9",
+   "level": [
+    0,
+    6
+   ],
+   "turns": 1077,
+   "steps": {
+    "start_step": 958,
+    "first_search": 1090,
+    "stall_step": 1947,
+    "end_step": 2023
+   },
+   "searches": 437,
+   "search_stands": 44,
+   "phases": {
+    "first_search": {
+     "step": 1090,
+     "target": "oracle_not_this_level",
+     "class": "no_target_oracle_not_this_level"
+    },
+    "stall": {
+     "step": 1947,
+     "target": "main_down",
+     "route_steps": 8,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    },
+    "end": {
+     "step": 2023,
+     "target": "main_down",
+     "route_steps": 0,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    }
+   },
+   "mechanism_steps": {
+    "search": 421,
+    "travel": 418,
+    "flip": 5,
+    "wait_blocker": 16,
+    "blocked_approach": 49,
+    "other": 162
+   },
+   "blocker_waits": {
+    "floating eye": 16
+   }
+  },
+  {
+   "arm": "or",
+   "seed": 1,
+   "run_id": "6df17d79-eaa9-4e98-9b47-b750088efb69",
+   "level": [
+    0,
+    2
+   ],
+   "turns": 2835,
+   "steps": {
+    "start_step": 916,
+    "first_search": 1116,
+    "stall_step": 1905,
+    "end_step": 3732
+   },
+   "searches": 1204,
+   "search_stands": 58,
+   "phases": {
+    "first_search": {
+     "step": 1116,
+     "target": "main_down",
+     "route_steps": 52,
+     "secrets": [
+      [
+       13,
+       8
+      ]
+     ],
+     "other_barriers": [
+      "locked"
+     ],
+     "unknown_path_cells": 4,
+     "first_secret": [
+      13,
+      8
+     ],
+     "searches_next_to_first": 31,
+     "known_stands": 1,
+     "class": "searched_next_to_it"
+    },
+    "stall": {
+     "step": 1905,
+     "target": "main_down",
+     "route_steps": 82,
+     "secrets": [
+      [
+       13,
+       8
+      ]
+     ],
+     "other_barriers": [
+      "locked"
+     ],
+     "unknown_path_cells": 4,
+     "first_secret": [
+      13,
+      8
+     ],
+     "searches_next_to_first": 31,
+     "known_stands": 1,
+     "class": "searched_next_to_it"
+    },
+    "end": {
+     "step": 3732,
+     "target": "main_down",
+     "route_steps": 0,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    }
+   },
+   "mechanism_steps": null,
+   "blocker_waits": null
+  },
+  {
+   "arm": "or",
+   "seed": 53,
+   "run_id": "838bc59b-0e96-4cd4-b0e7-489eff7fb5a2",
+   "level": [
+    0,
+    5
+   ],
+   "turns": 1237,
+   "steps": {
+    "start_step": 466,
+    "first_search": 650,
+    "stall_step": 1461,
+    "end_step": 1697
+   },
+   "searches": 473,
+   "search_stands": 48,
+   "phases": {
+    "first_search": {
+     "step": 650,
+     "target": "oracle_not_this_level",
+     "class": "no_target_oracle_not_this_level"
+    },
+    "stall": {
+     "step": 1461,
+     "target": "oracle_not_this_level",
+     "class": "no_target_oracle_not_this_level"
+    },
+    "end": {
+     "step": 1697,
+     "target": "main_down",
+     "route_steps": 1,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    }
+   },
+   "mechanism_steps": {
+    "search": 473,
+    "travel": 469,
+    "flip": 5,
+    "wait_blocker": 0,
+    "blocked_approach": 2,
+    "other": 288
+   },
+   "blocker_waits": {}
+  },
+  {
+   "arm": "or",
+   "seed": 701,
+   "run_id": "5c9e77ac-d450-4974-b1b7-5961433cf6a5",
+   "level": [
+    0,
+    3
+   ],
+   "turns": 6760,
+   "steps": {
+    "start_step": 588,
+    "first_search": 773,
+    "stall_step": 1589,
+    "end_step": 6573
+   },
+   "searches": 4114,
+   "search_stands": 9,
+   "phases": {
+    "first_search": {
+     "step": 773,
+     "target": "main_down",
+     "route_steps": 100,
+     "secrets": [
+      [
+       26,
+       4
+      ]
+     ],
+     "other_barriers": [
+      "closed"
+     ],
+     "unknown_path_cells": 35,
+     "first_secret": [
+      26,
+      4
+     ],
+     "searches_next_to_first": 2,
+     "known_stands": 2,
+     "class": "stand_known_not_searched"
+    },
+    "stall": {
+     "step": 1589,
+     "target": "main_down",
+     "route_steps": 13,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 10,
+     "class": "unexplored_open_route"
+    },
+    "end": {
+     "step": 6573,
+     "target": "main_down",
+     "route_steps": 14,
+     "secrets": [],
+     "other_barriers": [
+      "peaceful_monster"
+     ],
+     "unknown_path_cells": 9,
+     "class": "other_barrier"
+    }
+   },
+   "mechanism_steps": {
+    "search": 64,
+    "travel": 677,
+    "flip": 82,
+    "wait_blocker": 4050,
+    "blocked_approach": 0,
+    "other": 1195
+   },
+   "blocker_waits": {
+    "yellow mold": 4050
+   }
+  },
+  {
+   "arm": "or",
+   "seed": 902,
+   "run_id": "5f4e2d10-e62c-4070-b709-71e083b91979",
+   "level": [
+    0,
+    4
+   ],
+   "turns": 5994,
+   "steps": {
+    "start_step": 390,
+    "first_search": 634,
+    "stall_step": 1380,
+    "end_step": 6346
+   },
+   "searches": 3712,
+   "search_stands": 112,
+   "phases": {
+    "first_search": {
+     "step": 634,
+     "target": "main_down",
+     "route_steps": 40,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    },
+    "stall": {
+     "step": 1380,
+     "target": "main_down",
+     "route_steps": 65,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    },
+    "end": {
+     "step": 6346,
+     "target": "main_down",
+     "route_steps": 15,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 9,
+     "class": "unexplored_open_route"
+    }
+   },
+   "mechanism_steps": {
+    "search": 3690,
+    "travel": 1581,
+    "flip": 24,
+    "wait_blocker": 22,
+    "blocked_approach": 2,
+    "other": 662
+   },
+   "blocker_waits": {
+    "gas spore": 22
+   }
+  },
+  {
+   "arm": "or",
+   "seed": 903,
+   "run_id": "dfed1d03-1bcc-4558-8a16-b7b3dc5f85e3",
+   "level": [
+    0,
+    5
+   ],
+   "turns": 1490,
+   "steps": {
+    "start_step": 284,
+    "first_search": 452,
+    "stall_step": 1279,
+    "end_step": 1766
+   },
+   "searches": 587,
+   "search_stands": 62,
+   "phases": {
+    "first_search": {
+     "step": 452,
+     "target": "oracle_not_this_level",
+     "class": "no_target_oracle_not_this_level"
+    },
+    "stall": {
+     "step": 1279,
+     "target": "oracle_not_this_level",
+     "class": "no_target_oracle_not_this_level"
+    },
+    "end": {
+     "step": 1766,
+     "target": "main_down",
+     "route_steps": 0,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    }
+   },
+   "mechanism_steps": {
+    "search": 587,
+    "travel": 614,
+    "flip": 3,
+    "wait_blocker": 0,
+    "blocked_approach": 1,
+    "other": 281
+   },
+   "blocker_waits": {}
+  },
+  {
+   "arm": "or",
+   "seed": 5,
+   "run_id": "42cf44a1-7bbe-4ce2-9a14-397261896c84",
+   "level": [
+    0,
+    4
+   ],
+   "turns": 11402,
+   "steps": {
+    "start_step": 619,
+    "first_search": 732,
+    "stall_step": 1611,
+    "end_step": 10000
+   },
+   "searches": 740,
+   "search_stands": 46,
+   "phases": {
+    "first_search": {
+     "step": 732,
+     "target": "main_down",
+     "route_steps": 50,
+     "secrets": [],
+     "other_barriers": [
+      "boulder"
+     ],
+     "unknown_path_cells": 49,
+     "class": "other_barrier"
+    },
+    "stall": {
+     "step": 1611,
+     "target": "main_down",
+     "route_steps": 46,
+     "secrets": [
+      [
+       36,
+       7
+      ]
+     ],
+     "other_barriers": [
+      "locked"
+     ],
+     "unknown_path_cells": 38,
+     "first_secret": [
+      36,
+      7
+     ],
+     "searches_next_to_first": 30,
+     "known_stands": 2,
+     "class": "searched_next_to_it"
+    },
+    "end": {
+     "step": 10000,
+     "target": "main_down",
+     "route_steps": 45,
+     "secrets": [],
+     "other_barriers": [
+      "locked"
+     ],
+     "unknown_path_cells": 38,
+     "class": "other_barrier"
+    }
+   },
+   "mechanism_steps": {
+    "search": 740,
+    "travel": 644,
+    "flip": 43,
+    "wait_blocker": 0,
+    "blocked_approach": 0,
+    "other": 7998
+   },
+   "blocker_waits": {}
+  },
+  {
+   "arm": "or",
+   "seed": 704,
+   "run_id": "d82c7ad8-b94e-4d97-801a-3e1ba216794b",
+   "level": [
+    0,
+    5
+   ],
+   "turns": 1380,
+   "steps": {
+    "start_step": 1126,
+    "first_search": 1538,
+    "stall_step": 2121,
+    "end_step": 2502
+   },
+   "searches": 401,
+   "search_stands": 43,
+   "phases": {
+    "first_search": {
+     "step": 1538,
+     "target": "oracle_not_this_level",
+     "class": "no_target_oracle_not_this_level"
+    },
+    "stall": {
+     "step": 2121,
+     "target": "oracle_not_this_level",
+     "class": "no_target_oracle_not_this_level"
+    },
+    "end": {
+     "step": 2502,
+     "target": "main_down",
+     "route_steps": 0,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    }
+   },
+   "mechanism_steps": {
+    "search": 401,
+    "travel": 551,
+    "flip": 2,
+    "wait_blocker": 0,
+    "blocked_approach": 1,
+    "other": 424
+   },
+   "blocker_waits": {}
+  },
+  {
+   "arm": "or",
+   "seed": 904,
+   "run_id": "c060dc40-ea4f-4ee0-8126-27b01d9c1dc0",
+   "level": [
+    0,
+    5
+   ],
+   "turns": 4493,
+   "steps": {
+    "start_step": 538,
+    "first_search": 762,
+    "stall_step": 1535,
+    "end_step": 4960
+   },
+   "searches": 411,
+   "search_stands": 10,
+   "phases": {
+    "first_search": {
+     "step": 762,
+     "target": "oracle_not_this_level",
+     "class": "no_target_oracle_not_this_level"
+    },
+    "stall": {
+     "step": 1535,
+     "target": "main_down",
+     "route_steps": 4,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    },
+    "end": {
+     "step": 4960,
+     "target": "main_down",
+     "route_steps": 3,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    }
+   },
+   "mechanism_steps": {
+    "search": 53,
+    "travel": 952,
+    "flip": 133,
+    "wait_blocker": 358,
+    "blocked_approach": 1646,
+    "other": 1414
+   },
+   "blocker_waits": {
+    "green mold": 294,
+    "floating eye": 48,
+    "red mold": 16
+   }
+  },
+  {
+   "arm": "or",
+   "seed": 924,
+   "run_id": "a580e5a9-a3d0-459d-8ca0-579a81b07dff",
+   "level": [
+    0,
+    4
+   ],
+   "turns": 6938,
+   "steps": {
+    "start_step": 1310,
+    "first_search": 2242,
+    "stall_step": 2350,
+    "end_step": 10000
+   },
+   "searches": 1319,
+   "search_stands": 4,
+   "phases": {
+    "first_search": {
+     "step": 2242,
+     "target": "main_down",
+     "route_steps": 75,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 12,
+     "class": "unexplored_open_route"
+    },
+    "stall": {
+     "step": 2350,
+     "target": "main_down",
+     "route_steps": 72,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 12,
+     "class": "unexplored_open_route"
+    },
+    "end": {
+     "step": 10000,
+     "target": "main_down",
+     "route_steps": 74,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 13,
+     "class": "unexplored_open_route"
+    }
+   },
+   "mechanism_steps": {
+    "search": 720,
+    "travel": 72,
+    "flip": 0,
+    "wait_blocker": 599,
+    "blocked_approach": 161,
+    "other": 7139
+   },
+   "blocker_waits": {
+    "red mold": 597,
+    "hobbit": 1,
+    "floating eye": 1
+   }
+  },
+  {
+   "arm": "or",
+   "seed": 6,
+   "run_id": "9b23b755-8070-4b19-bcf5-135ab4028232",
+   "level": [
+    0,
+    5
+   ],
+   "turns": 3995,
+   "steps": {
+    "start_step": 710,
+    "first_search": 864,
+    "stall_step": 1701,
+    "end_step": 4704
+   },
+   "searches": 3430,
+   "search_stands": 5,
+   "phases": {
+    "first_search": {
+     "step": 864,
+     "target": "oracle_not_this_level",
+     "class": "no_target_oracle_not_this_level"
+    },
+    "stall": {
+     "step": 1701,
+     "target": "oracle_not_this_level",
+     "class": "no_target_oracle_not_this_level"
+    },
+    "end": {
+     "step": 4704,
+     "target": "main_down",
+     "route_steps": 0,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    }
+   },
+   "mechanism_steps": {
+    "search": 16,
+    "travel": 17,
+    "flip": 1,
+    "wait_blocker": 3414,
+    "blocked_approach": 8,
+    "other": 540
+   },
+   "blocker_waits": {
+    "floating eye": 3414
+   }
+  },
+  {
+   "arm": "or",
+   "seed": 7,
+   "run_id": "270ba693-ebb3-4abe-a306-eb5f671e1a8a",
+   "level": [
+    0,
+    6
+   ],
+   "turns": 1355,
+   "steps": {
+    "start_step": 861,
+    "first_search": 864,
+    "stall_step": 1852,
+    "end_step": 2152
+   },
+   "searches": 443,
+   "search_stands": 18,
+   "phases": {
+    "first_search": {
+     "step": 864,
+     "target": "main_down",
+     "route_steps": 65,
+     "secrets": [
+      [
+       14,
+       5
+      ]
+     ],
+     "other_barriers": [
+      "boulder"
+     ],
+     "unknown_path_cells": 65,
+     "first_secret": [
+      14,
+      5
+     ],
+     "searches_next_to_first": 13,
+     "known_stands": 0,
+     "class": "stand_not_known"
+    },
+    "stall": {
+     "step": 1852,
+     "target": "main_down",
+     "route_steps": 32,
+     "secrets": [],
+     "other_barriers": [
+      "boulder"
+     ],
+     "unknown_path_cells": 21,
+     "class": "other_barrier"
+    },
+    "end": {
+     "step": 2152,
+     "target": "main_down",
+     "route_steps": 56,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 28,
+     "class": "unexplored_open_route"
+    }
+   },
+   "mechanism_steps": {
+    "search": 443,
+    "travel": 339,
+    "flip": 8,
+    "wait_blocker": 0,
+    "blocked_approach": 0,
+    "other": 510
+   },
+   "blocker_waits": {}
+  },
+  {
+   "arm": "or",
+   "seed": 1368,
+   "run_id": "eaf142ec-6d57-4651-a048-9d3407381415",
+   "level": [
+    0,
+    6
+   ],
+   "turns": 1931,
+   "steps": {
+    "start_step": 1380,
+    "first_search": 1838,
+    "stall_step": 2376,
+    "end_step": 3301
+   },
+   "searches": 707,
+   "search_stands": 72,
+   "phases": {
+    "first_search": {
+     "step": 1838,
+     "target": "oracle_not_this_level",
+     "class": "no_target_oracle_not_this_level"
+    },
+    "stall": {
+     "step": 2376,
+     "target": "oracle_not_this_level",
+     "class": "no_target_oracle_not_this_level"
+    },
+    "end": {
+     "step": 3301,
+     "target": "main_down",
+     "route_steps": 0,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    }
+   },
+   "mechanism_steps": {
+    "search": 707,
+    "travel": 642,
+    "flip": 5,
+    "wait_blocker": 0,
+    "blocked_approach": 3,
+    "other": 570
+   },
+   "blocker_waits": {}
+  },
+  {
+   "arm": "or",
+   "seed": 10,
+   "run_id": "6b297e48-68c7-4bcb-8d53-b4b1debbedef",
+   "level": [
+    0,
+    1
+   ],
+   "turns": 2080,
+   "steps": {
+    "start_step": 1,
+    "first_search": 369,
+    "stall_step": 996,
+    "end_step": 2064
+   },
+   "searches": 714,
+   "search_stands": 72,
+   "phases": {
+    "first_search": {
+     "step": 369,
+     "target": "main_down",
+     "route_steps": 59,
+     "secrets": [
+      [
+       59,
+       6
+      ]
+     ],
+     "other_barriers": [],
+     "unknown_path_cells": 11,
+     "first_secret": [
+      59,
+      6
+     ],
+     "searches_next_to_first": 16,
+     "known_stands": 1,
+     "class": "stand_known_not_searched"
+    },
+    "stall": {
+     "step": 996,
+     "target": "main_down",
+     "route_steps": 16,
+     "secrets": [
+      [
+       59,
+       6
+      ]
+     ],
+     "other_barriers": [],
+     "unknown_path_cells": 11,
+     "first_secret": [
+      59,
+      6
+     ],
+     "searches_next_to_first": 16,
+     "known_stands": 1,
+     "class": "stand_known_not_searched"
+    },
+    "end": {
+     "step": 2064,
+     "target": "main_down",
+     "route_steps": 0,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    }
+   },
+   "mechanism_steps": null,
+   "blocker_waits": null
+  },
+  {
+   "arm": "or",
+   "seed": 1887524929,
+   "run_id": "0aa2794b-b8b8-45c6-b6a3-72b3241672b2",
+   "level": [
+    0,
+    5
+   ],
+   "turns": 2105,
+   "steps": {
+    "start_step": 1127,
+    "first_search": 1365,
+    "stall_step": 2128,
+    "end_step": 3154
+   },
+   "searches": 844,
+   "search_stands": 63,
+   "phases": {
+    "first_search": {
+     "step": 1365,
+     "target": "main_down",
+     "route_steps": 72,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    },
+    "stall": {
+     "step": 2128,
+     "target": "main_down",
+     "route_steps": 66,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    },
+    "end": {
+     "step": 3154,
+     "target": "main_down",
+     "route_steps": 65,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    }
+   },
+   "mechanism_steps": {
+    "search": 844,
+    "travel": 793,
+    "flip": 15,
+    "wait_blocker": 0,
+    "blocked_approach": 0,
+    "other": 391
+   },
+   "blocker_waits": {}
+  },
+  {
+   "arm": "or",
+   "seed": 1369,
+   "run_id": "5168cdb6-a9ba-4f9d-ab33-5bf71aa74de2",
+   "level": [
+    0,
+    2
+   ],
+   "turns": 10619,
+   "steps": {
+    "start_step": 45,
+    "first_search": 141,
+    "stall_step": 1031,
+    "end_step": 9432
+   },
+   "searches": 987,
+   "search_stands": 69,
+   "phases": {
+    "first_search": {
+     "step": 141,
+     "target": "main_down",
+     "route_steps": 102,
+     "secrets": [
+      [
+       18,
+       3
+      ],
+      [
+       50,
+       13
+      ]
+     ],
+     "other_barriers": [
+      "boulder"
+     ],
+     "unknown_path_cells": 59,
+     "first_secret": [
+      18,
+      3
+     ],
+     "searches_next_to_first": 21,
+     "known_stands": 1,
+     "class": "stand_known_not_searched"
+    },
+    "stall": {
+     "step": 1031,
+     "target": "main_down",
+     "route_steps": 56,
+     "secrets": [
+      [
+       50,
+       13
+      ]
+     ],
+     "other_barriers": [],
+     "unknown_path_cells": 22,
+     "first_secret": [
+      50,
+      13
+     ],
+     "searches_next_to_first": 0,
+     "known_stands": 3,
+     "class": "stand_known_not_searched"
+    },
+    "end": {
+     "step": 9432,
+     "target": "main_down",
+     "route_steps": 72,
+     "secrets": [
+      [
+       50,
+       13
+      ]
+     ],
+     "other_barriers": [],
+     "unknown_path_cells": 22,
+     "first_secret": [
+      50,
+      13
+     ],
+     "searches_next_to_first": 0,
+     "known_stands": 3,
+     "class": "stand_known_not_searched"
+    }
+   },
+   "mechanism_steps": null,
+   "blocker_waits": null
+  },
+  {
+   "arm": "or",
+   "seed": 1370,
+   "run_id": "840ec1d3-e96d-474c-a456-724777d8ac96",
+   "level": [
+    0,
+    5
+   ],
+   "turns": 2327,
+   "steps": {
+    "start_step": 477,
+    "first_search": 710,
+    "stall_step": 1482,
+    "end_step": 2754
+   },
+   "searches": 860,
+   "search_stands": 61,
+   "phases": {
+    "first_search": {
+     "step": 710,
+     "target": "oracle_not_this_level",
+     "class": "no_target_oracle_not_this_level"
+    },
+    "stall": {
+     "step": 1482,
+     "target": "oracle_not_this_level",
+     "class": "no_target_oracle_not_this_level"
+    },
+    "end": {
+     "step": 2754,
+     "target": "main_down",
+     "route_steps": 65,
+     "secrets": [],
+     "other_barriers": [
+      "boulder",
+      "closed"
+     ],
+     "unknown_path_cells": 31,
+     "class": "other_barrier"
+    }
+   },
+   "mechanism_steps": {
+    "search": 859,
+    "travel": 944,
+    "flip": 7,
+    "wait_blocker": 1,
+    "blocked_approach": 2,
+    "other": 472
+   },
+   "blocker_waits": {
+    "gnome": 1
+   }
+  },
+  {
+   "arm": "or",
+   "seed": 1371,
+   "run_id": "c210c017-289a-4971-b310-b15a56abaeb8",
+   "level": [
+    0,
+    5
+   ],
+   "turns": 1824,
+   "steps": {
+    "start_step": 1001,
+    "first_search": 1313,
+    "stall_step": 1990,
+    "end_step": 2809
+   },
+   "searches": 698,
+   "search_stands": 73,
+   "phases": {
+    "first_search": {
+     "step": 1313,
+     "target": "oracle_not_this_level",
+     "class": "no_target_oracle_not_this_level"
+    },
+    "stall": {
+     "step": 1990,
+     "target": "oracle_not_this_level",
+     "class": "no_target_oracle_not_this_level"
+    },
+    "end": {
+     "step": 2809,
+     "target": "main_down",
+     "route_steps": 0,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    }
+   },
+   "mechanism_steps": {
+    "search": 698,
+    "travel": 710,
+    "flip": 2,
+    "wait_blocker": 0,
+    "blocked_approach": 0,
+    "other": 401
+   },
+   "blocker_waits": {}
+  },
+  {
+   "arm": "or",
+   "seed": 1528054415,
+   "run_id": "9c82762b-fbf4-4e9a-9e5d-316ac0cbe7c2",
+   "level": [
+    0,
+    3
+   ],
+   "turns": 11581,
+   "steps": {
+    "start_step": 242,
+    "first_search": 313,
+    "stall_step": 1239,
+    "end_step": 10000
+   },
+   "searches": 7998,
+   "search_stands": 51,
+   "phases": {
+    "first_search": {
+     "step": 313,
+     "target": "main_down",
+     "route_steps": 67,
+     "secrets": [
+      [
+       37,
+       6
+      ],
+      [
+       15,
+       3
+      ]
+     ],
+     "other_barriers": [
+      "closed"
+     ],
+     "unknown_path_cells": 50,
+     "first_secret": [
+      37,
+      6
+     ],
+     "searches_next_to_first": 0,
+     "known_stands": 3,
+     "class": "stand_known_not_searched"
+    },
+    "stall": {
+     "step": 1239,
+     "target": "main_down",
+     "route_steps": 99,
+     "secrets": [
+      [
+       37,
+       6
+      ],
+      [
+       15,
+       3
+      ]
+     ],
+     "other_barriers": [],
+     "unknown_path_cells": 48,
+     "first_secret": [
+      37,
+      6
+     ],
+     "searches_next_to_first": 0,
+     "known_stands": 3,
+     "class": "stand_known_not_searched"
+    },
+    "end": {
+     "step": 10000,
+     "target": "main_down",
+     "route_steps": 112,
+     "secrets": [
+      [
+       37,
+       6
+      ],
+      [
+       15,
+       3
+      ]
+     ],
+     "other_barriers": [
+      "peaceful_monster"
+     ],
+     "unknown_path_cells": 48,
+     "first_secret": [
+      37,
+      6
+     ],
+     "searches_next_to_first": 0,
+     "known_stands": 3,
+     "class": "stand_known_not_searched"
+    }
+   },
+   "mechanism_steps": null,
+   "blocker_waits": null
+  },
+  {
+   "arm": "or",
+   "seed": 1374,
+   "run_id": "712be53d-b947-4e64-99b1-c3bb6660b99b",
+   "level": [
+    0,
+    3
+   ],
+   "turns": 11006,
+   "steps": {
+    "start_step": 543,
+    "first_search": 653,
+    "stall_step": 1540,
+    "end_step": 10000
+   },
+   "searches": 8755,
+   "search_stands": 39,
+   "phases": {
+    "first_search": {
+     "step": 653,
+     "target": "main_down",
+     "route_steps": 65,
+     "secrets": [
+      [
+       50,
+       12
+      ],
+      [
+       47,
+       18
+      ]
+     ],
+     "other_barriers": [
+      "closed"
+     ],
+     "unknown_path_cells": 65,
+     "first_secret": [
+      50,
+      12
+     ],
+     "searches_next_to_first": 25,
+     "known_stands": 0,
+     "class": "stand_not_known"
+    },
+    "stall": {
+     "step": 1540,
+     "target": "main_down",
+     "route_steps": 88,
+     "secrets": [
+      [
+       50,
+       12
+      ],
+      [
+       47,
+       18
+      ]
+     ],
+     "other_barriers": [
+      "closed"
+     ],
+     "unknown_path_cells": 65,
+     "first_secret": [
+      50,
+      12
+     ],
+     "searches_next_to_first": 25,
+     "known_stands": 1,
+     "class": "stand_known_not_searched"
+    },
+    "end": {
+     "step": 10000,
+     "target": "main_down",
+     "route_steps": 49,
+     "secrets": [],
+     "other_barriers": [
+      "peaceful_monster"
+     ],
+     "unknown_path_cells": 47,
+     "class": "other_barrier"
+    }
+   },
+   "mechanism_steps": null,
+   "blocker_waits": null
+  },
+  {
+   "arm": "or",
+   "seed": 1375,
+   "run_id": "bc0365da-6039-49b4-bebb-ed9c86b805ed",
+   "level": [
+    0,
+    7
+   ],
+   "turns": 1191,
+   "steps": {
+    "start_step": 1421,
+    "first_search": 1487,
+    "stall_step": 2407,
+    "end_step": 2597
+   },
+   "searches": 373,
+   "search_stands": 40,
+   "phases": {
+    "first_search": {
+     "step": 1487,
+     "target": "main_down",
+     "route_steps": 47,
+     "secrets": [
+      [
+       73,
+       13
+      ]
+     ],
+     "other_barriers": [
+      "closed"
+     ],
+     "unknown_path_cells": 46,
+     "first_secret": [
+      73,
+      13
+     ],
+     "searches_next_to_first": 10,
+     "known_stands": 0,
+     "class": "stand_not_known"
+    },
+    "stall": {
+     "step": 2407,
+     "target": "main_down",
+     "route_steps": 52,
+     "secrets": [
+      [
+       73,
+       13
+      ]
+     ],
+     "other_barriers": [],
+     "unknown_path_cells": 2,
+     "first_secret": [
+      73,
+      13
+     ],
+     "searches_next_to_first": 10,
+     "known_stands": 1,
+     "class": "stand_known_not_searched"
+    },
+    "end": {
+     "step": 2597,
+     "target": "main_down",
+     "route_steps": 59,
+     "secrets": [
+      [
+       73,
+       13
+      ]
+     ],
+     "other_barriers": [],
+     "unknown_path_cells": 2,
+     "first_secret": [
+      73,
+      13
+     ],
+     "searches_next_to_first": 10,
+     "known_stands": 1,
+     "class": "stand_known_not_searched"
+    }
+   },
+   "mechanism_steps": {
+    "search": 373,
+    "travel": 433,
+    "flip": 2,
+    "wait_blocker": 0,
+    "blocked_approach": 0,
+    "other": 371
+   },
+   "blocker_waits": {}
+  },
+  {
+   "arm": "or",
+   "seed": 296200318,
+   "run_id": "42ca1792-437e-4e33-8a3e-eec32e867d68",
+   "level": [
+    0,
+    5
+   ],
+   "turns": 2387,
+   "steps": {
+    "start_step": 1011,
+    "first_search": 1251,
+    "stall_step": 2008,
+    "end_step": 3371
+   },
+   "searches": 824,
+   "search_stands": 44,
+   "phases": {
+    "first_search": {
+     "step": 1251,
+     "target": "main_down",
+     "route_steps": 41,
+     "secrets": [],
+     "other_barriers": [
+      "boulder"
+     ],
+     "unknown_path_cells": 11,
+     "class": "other_barrier"
+    },
+    "stall": {
+     "step": 2008,
+     "target": "main_down",
+     "route_steps": 40,
+     "secrets": [],
+     "other_barriers": [
+      "boulder"
+     ],
+     "unknown_path_cells": 11,
+     "class": "other_barrier"
+    },
+    "end": {
+     "step": 3371,
+     "target": "main_down",
+     "route_steps": 0,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    }
+   },
+   "mechanism_steps": {
+    "search": 784,
+    "travel": 967,
+    "flip": 8,
+    "wait_blocker": 40,
+    "blocked_approach": 7,
+    "other": 563
+   },
+   "blocker_waits": {
+    "gas spore": 40
+   }
+  },
+  {
+   "arm": "or",
+   "seed": 1377,
+   "run_id": "3cbeaeb6-0b88-441f-b01b-1c1737a7491b",
+   "level": [
+    0,
+    1
+   ],
+   "turns": 3209,
+   "steps": {
+    "start_step": 1,
+    "first_search": 206,
+    "stall_step": 994,
+    "end_step": 3198
+   },
+   "searches": 1418,
+   "search_stands": 70,
+   "phases": {
+    "first_search": {
+     "step": 206,
+     "target": "main_down",
+     "route_steps": 18,
+     "secrets": [
+      [
+       24,
+       8
+      ],
+      [
+       17,
+       6
+      ],
+      [
+       14,
+       6
+      ]
+     ],
+     "other_barriers": [
+      "closed"
+     ],
+     "unknown_path_cells": 18,
+     "first_secret": [
+      24,
+      8
+     ],
+     "searches_next_to_first": 38,
+     "known_stands": 0,
+     "class": "searched_next_to_it"
+    },
+    "stall": {
+     "step": 994,
+     "target": "main_down",
+     "route_steps": 47,
+     "secrets": [
+      [
+       24,
+       8
+      ],
+      [
+       17,
+       6
+      ],
+      [
+       14,
+       6
+      ]
+     ],
+     "other_barriers": [
+      "closed"
+     ],
+     "unknown_path_cells": 18,
+     "first_secret": [
+      24,
+      8
+     ],
+     "searches_next_to_first": 38,
+     "known_stands": 1,
+     "class": "searched_next_to_it"
+    },
+    "end": {
+     "step": 3198,
+     "target": "main_down",
+     "route_steps": 6,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    }
+   },
+   "mechanism_steps": {
+    "search": 1418,
+    "travel": 1503,
+    "flip": 12,
+    "wait_blocker": 0,
+    "blocked_approach": 0,
+    "other": 277
+   },
+   "blocker_waits": {}
+  },
+  {
+   "arm": "or",
+   "seed": 2094095407,
+   "run_id": "fd3d62b3-9afd-40f7-9925-55f132f1124f",
+   "level": [
+    0,
+    5
+   ],
+   "turns": 1436,
+   "steps": {
+    "start_step": 542,
+    "first_search": 952,
+    "stall_step": 1542,
+    "end_step": 1975
+   },
+   "searches": 426,
+   "search_stands": 41,
+   "phases": {
+    "first_search": {
+     "step": 952,
+     "target": "oracle_not_this_level",
+     "class": "no_target_oracle_not_this_level"
+    },
+    "stall": {
+     "step": 1542,
+     "target": "oracle_not_this_level",
+     "class": "no_target_oracle_not_this_level"
+    },
+    "end": {
+     "step": 1975,
+     "target": "main_down",
+     "route_steps": 0,
+     "secrets": [],
+     "other_barriers": [],
+     "unknown_path_cells": 0,
+     "class": "seen_not_taken"
+    }
+   },
+   "mechanism_steps": {
+    "search": 410,
+    "travel": 605,
+    "flip": 8,
+    "wait_blocker": 16,
+    "blocked_approach": 8,
+    "other": 395
+   },
+   "blocker_waits": {
+    "floating eye": 16
+   }
+  },
+  {
+   "arm": "or",
+   "seed": 1379,
+   "run_id": "1a1e118f-d777-4c18-8a31-8c152a661ace",
+   "level": [
+    0,
+    3
+   ],
+   "turns": 10926,
+   "steps": {
+    "start_step": 364,
+    "first_search": 382,
+    "stall_step": 1361,
+    "end_step": 10000
+   },
+   "searches": 9047,
+   "search_stands": 9,
+   "phases": {
+    "first_search": {
+     "step": 382,
+     "target": "main_down",
+     "route_steps": 53,
+     "secrets": [
+      [
+       52,
+       13
+      ]
+     ],
+     "other_barriers": [
+      "closed"
+     ],
+     "unknown_path_cells": 47,
+     "first_secret": [
+      52,
+      13
+     ],
+     "searches_next_to_first": 0,
+     "known_stands": 0,
+     "class": "stand_not_known"
+    },
+    "stall": {
+     "step": 1361,
+     "target": "main_down",
+     "route_steps": 59,
+     "secrets": [
+      [
+       52,
+       13
+      ]
+     ],
+     "other_barriers": [
+      "closed"
+     ],
+     "unknown_path_cells": 47,
+     "first_secret": [
+      52,
+      13
+     ],
+     "searches_next_to_first": 0,
+     "known_stands": 0,
+     "class": "stand_not_known"
+    },
+    "end": {
+     "step": 10000,
+     "target": "main_down",
+     "route_steps": 86,
+     "secrets": [
+      [
+       52,
+       13
+      ]
+     ],
+     "other_barriers": [
+      "peaceful_monster"
+     ],
+     "unknown_path_cells": 31,
+     "first_secret": [
+      52,
+      13
+     ],
+     "searches_next_to_first": 0,
+     "known_stands": 2,
+     "class": "stand_known_not_searched"
+    }
+   },
+   "mechanism_steps": {
+    "search": 4452,
+    "travel": 166,
+    "flip": 1,
+    "wait_blocker": 4595,
+    "blocked_approach": 47,
+    "other": 377
+   },
+   "blocker_waits": {
+    "floating eye": 3652,
+    "gas spore": 887,
+    "red mold": 56
+   }
+  }
+ ]
+}
