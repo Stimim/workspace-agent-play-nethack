@@ -1,0 +1,657 @@
+{
+  "header": {
+    "schema_version": 1,
+    "tool": "_agents/skills/evidence-record/compare.py",
+    "base_commit": "9783a7e",
+    "candidate_commit": null,
+    "verdict": "fail",
+    "gates": {
+      "objectives_not_lower": "candidate objectives >= baseline",
+      "deaths_not_higher": "candidate deaths <= baseline",
+      "weak_or_worse_not_higher": "candidate last-live Weak-or-worse deaths <= baseline; unknown when a death lacks hunger evidence",
+      "starvation_not_higher": "candidate starvation deaths <= baseline",
+      "zero_invalid_actions": "zero invalid actions in both arms",
+      "zero_gate_rejections": "zero gate rejections in both arms",
+      "zero_integrity_failures": "zero integrity failures in both arms",
+      "complete_comparable_records": "both reports complete, every requested seed evaluated with a terminal record and ttyrec, same seeds, model, character, tasks and step caps"
+    },
+    "weak_or_worse_states": [
+      "fainted",
+      "fainting",
+      "starved",
+      "weak"
+    ]
+  },
+  "pairs": [
+    {
+      "name": "minetown",
+      "verdict": "fail",
+      "failed_gates": [
+        "starvation_not_higher"
+      ],
+      "unknown_gates": [],
+      "gates": {
+        "objectives_not_lower": {
+          "baseline": 24,
+          "candidate": 25,
+          "passed": true
+        },
+        "deaths_not_higher": {
+          "baseline": 39,
+          "candidate": 36,
+          "passed": true
+        },
+        "weak_or_worse_not_higher": {
+          "baseline": 10,
+          "candidate": 10,
+          "passed": true
+        },
+        "starvation_not_higher": {
+          "baseline": 1,
+          "candidate": 2,
+          "passed": false
+        },
+        "zero_invalid_actions": {
+          "baseline": 0,
+          "candidate": 0,
+          "passed": true
+        },
+        "zero_gate_rejections": {
+          "baseline": 0,
+          "candidate": 0,
+          "passed": true
+        },
+        "zero_integrity_failures": {
+          "baseline": 0,
+          "candidate": 0,
+          "passed": true
+        },
+        "complete_comparable_records": {
+          "baseline": 0,
+          "candidate": 0,
+          "passed": true
+        }
+      },
+      "comparability_problems": [],
+      "arm_differences": [
+        "suite_id",
+        "suite_sha256",
+        "policy_version"
+      ],
+      "baseline": {
+        "report_file": "minetown-regression-v3-development-20261026T014337Z.json",
+        "report_sha256": "65c8e4d1afb6ca86e1c309f43e366e0ccd693390789b551d925c5ddb60d80d6c",
+        "suite_id": "minetown-regression-v3",
+        "suite_sha256": "6230af9475990e8ce0dcfb09af90325ea3f47fcdf5d648cd9a3d8c5973629bf0",
+        "status": "complete",
+        "started_at": "2026-10-26T01:43:37+00:00",
+        "model": "scripted-development",
+        "policy_version": "hierarchical-survival-hp-prayer-burden-look-ration-explore-first-v1",
+        "knowledge_version": "survival-reviewed-v2+sha256:d5cb109e09e3d798a97f9521411a914c8fc2855916c6d4a6e3298e591e0fa19e",
+        "episodes": 67,
+        "objectives": 24,
+        "deaths": 39,
+        "truncations": 4,
+        "outcomes": {
+          "death": 39,
+          "objective_complete": 24,
+          "truncated": 4
+        },
+        "weak_or_worse_deaths": 10,
+        "deaths_without_hunger_evidence": 0,
+        "starvation_deaths": 1,
+        "quality": {
+          "invalid_actions": 0,
+          "gate_rejections": 0,
+          "integrity_failures": 0,
+          "incomplete_records": 0,
+          "errors": 0,
+          "decision_failures": 0
+        },
+        "conduct": {
+          "oracle_attacks": 0,
+          "peaceful_attacks": 0
+        },
+        "diagnostics": {
+          "death_causes": {
+            "killed by a hill orc": 3,
+            "killed by a wand": 3,
+            "killed by Izchak; the shopkeeper": 2,
+            "killed by a garter snake": 2,
+            "killed by a giant ant": 2,
+            "killed by a giant bat": 2,
+            "killed by a rabid rat": 2,
+            "killed by a rothe": 2,
+            "died of starvation": 1,
+            "killed by a boulder": 1,
+            "killed by a coyote": 1,
+            "killed by a dog": 1,
+            "killed by a giant spider": 1,
+            "killed by a gnome zombie": 1,
+            "killed by a gold golem": 1,
+            "killed by a grid bug": 1,
+            "killed by a hobbit": 1,
+            "killed by a homunculus": 1,
+            "killed by a human zombie": 1,
+            "killed by a kobold": 1,
+            "killed by a kobold mummy": 1,
+            "killed by a little dog": 1,
+            "killed by a manes": 1,
+            "killed by a pony": 1,
+            "killed by a priest of Odin": 1,
+            "killed by a werejackal": 1,
+            "killed by a wolf": 1,
+            "killed by an imp": 1,
+            "poisoned by an orcish arrow": 1
+          },
+          "hunger_at_death": {
+            "not_hungry": 28,
+            "fainting": 9,
+            "hungry": 1,
+            "weak": 1
+          },
+          "deaths_by_max_depth": {
+            "1": 1,
+            "2": 1,
+            "3": 1,
+            "4": 12,
+            "5": 6,
+            "6": 7,
+            "7": 8,
+            "8": 3
+          },
+          "median_death_turn": 2169,
+          "median_max_depth": 6,
+          "median_final_experience_level": 4
+        }
+      },
+      "candidate": {
+        "report_file": "minetown-regression-v3-spot-commit-dev-0063-development-20261026T041122Z.json",
+        "report_sha256": "072b5818b3127c805b838a926463e49240b704565df51ceb0392297c8d5232f2",
+        "suite_id": "minetown-regression-v3-spot-commit-dev-0063",
+        "suite_sha256": "8bc1ada40f9754e9d8abc9ff8bbac08e0aa2ec74cbf9b768857fc4546444a3fd",
+        "status": "complete",
+        "started_at": "2026-10-26T04:11:22+00:00",
+        "model": "scripted-development",
+        "policy_version": "hierarchical-survival-hp-prayer-burden-look-ration-explore-first-spotcommit-qual",
+        "knowledge_version": "survival-reviewed-v2+sha256:d5cb109e09e3d798a97f9521411a914c8fc2855916c6d4a6e3298e591e0fa19e",
+        "episodes": 67,
+        "objectives": 25,
+        "deaths": 36,
+        "truncations": 6,
+        "outcomes": {
+          "death": 36,
+          "objective_complete": 25,
+          "truncated": 6
+        },
+        "weak_or_worse_deaths": 10,
+        "deaths_without_hunger_evidence": 0,
+        "starvation_deaths": 2,
+        "quality": {
+          "invalid_actions": 0,
+          "gate_rejections": 0,
+          "integrity_failures": 0,
+          "incomplete_records": 0,
+          "errors": 0,
+          "decision_failures": 0
+        },
+        "conduct": {
+          "oracle_attacks": 0,
+          "peaceful_attacks": 0
+        },
+        "diagnostics": {
+          "death_causes": {
+            "killed by a wand": 3,
+            "died of starvation": 2,
+            "killed by Izchak; the shopkeeper": 2,
+            "killed by a giant ant": 2,
+            "killed by a gold golem": 2,
+            "killed by a hill orc": 2,
+            "killed by a rabid rat": 2,
+            "killed by a rothe": 2,
+            "killed by a black unicorn": 1,
+            "killed by a boulder": 1,
+            "killed by a coyote": 1,
+            "killed by a dog": 1,
+            "killed by a garter snake": 1,
+            "killed by a giant bat": 1,
+            "killed by a giant spider": 1,
+            "killed by a gnome zombie": 1,
+            "killed by a grid bug": 1,
+            "killed by a hobbit": 1,
+            "killed by a homunculus": 1,
+            "killed by a human zombie": 1,
+            "killed by a kobold mummy": 1,
+            "killed by a little dog": 1,
+            "killed by a manes": 1,
+            "killed by a pony": 1,
+            "killed by a wolf": 1,
+            "killed by an imp": 1,
+            "poisoned by an orcish arrow": 1
+          },
+          "hunger_at_death": {
+            "not_hungry": 26,
+            "fainting": 8,
+            "weak": 2
+          },
+          "deaths_by_max_depth": {
+            "1": 1,
+            "3": 1,
+            "4": 10,
+            "5": 6,
+            "6": 7,
+            "7": 8,
+            "8": 3
+          },
+          "median_death_turn": 1813.5,
+          "median_max_depth": 6,
+          "median_final_experience_level": 4
+        }
+      },
+      "transitions": {
+        "death->objective_complete": 2,
+        "death->truncated": 1,
+        "objective_complete->truncated": 1
+      },
+      "changed_seeds": [
+        {"case_id": "note-0035-probes", "seed": 1368, "flags": ["cause_changed", "hunger_changed"], "baseline": {"outcome": "death", "death_cause": "killed by a garter snake", "hunger_at_death": "fainting", "game_turns": 2620, "max_depth": 7}, "candidate": {"outcome": "death", "death_cause": "killed by a gold golem", "hunger_at_death": "weak", "game_turns": 2494, "max_depth": 7}, "delta": {"game_turns": -126, "max_depth": 0, "steps": -126}},
+        {"case_id": "note-0035-probes", "seed": 1369, "flags": ["avoided_death", "removed_weak_or_worse"], "baseline": {"outcome": "death", "death_cause": "killed by a kobold", "hunger_at_death": "fainting", "game_turns": 10667, "max_depth": 2}, "candidate": {"outcome": "truncated", "death_cause": null, "hunger_at_death": null, "game_turns": 10898, "max_depth": 2}, "delta": {"game_turns": 231, "max_depth": 0, "steps": 567}},
+        {"case_id": "staircase-historical", "seed": 1, "flags": ["cause_changed", "hunger_changed", "new_weak_or_worse", "new_starvation"], "baseline": {"outcome": "death", "death_cause": "killed by a werejackal", "hunger_at_death": "not_hungry", "game_turns": 4687, "max_depth": 4}, "candidate": {"outcome": "death", "death_cause": "died of starvation", "hunger_at_death": "fainting", "game_turns": 9541, "max_depth": 4}, "delta": {"game_turns": 4854, "max_depth": 0, "steps": 3254}},
+        {"case_id": "staircase-historical", "seed": 2, "flags": ["lost_success"], "baseline": {"outcome": "objective_complete", "death_cause": null, "hunger_at_death": null, "game_turns": 2500, "max_depth": 8}, "candidate": {"outcome": "truncated", "death_cause": null, "hunger_at_death": null, "game_turns": 12122, "max_depth": 3}, "delta": {"game_turns": 9622, "max_depth": -5, "steps": 7496}},
+        {"case_id": "staircase-historical", "seed": 5, "flags": ["cause_changed", "hunger_changed", "removed_weak_or_worse"], "baseline": {"outcome": "death", "death_cause": "killed by a human zombie", "hunger_at_death": "fainting", "game_turns": 6562, "max_depth": 6}, "candidate": {"outcome": "death", "death_cause": "killed by a black unicorn", "hunger_at_death": "not_hungry", "game_turns": 5450, "max_depth": 6}, "delta": {"game_turns": -1112, "max_depth": 0, "steps": -1104}},
+        {"case_id": "staircase-historical", "seed": 6, "flags": ["cause_changed", "hunger_changed", "new_weak_or_worse"], "baseline": {"outcome": "death", "death_cause": "killed by a giant bat", "hunger_at_death": "not_hungry", "game_turns": 4122, "max_depth": 4}, "candidate": {"outcome": "death", "death_cause": "killed by a human zombie", "hunger_at_death": "fainting", "game_turns": 9979, "max_depth": 7}, "delta": {"game_turns": 5857, "max_depth": 3, "steps": 4875}},
+        {"case_id": "staircase-historical", "seed": 9, "flags": ["new_success", "avoided_death"], "baseline": {"outcome": "death", "death_cause": "killed by a hill orc", "hunger_at_death": "hungry", "game_turns": 4674, "max_depth": 4}, "candidate": {"outcome": "objective_complete", "death_cause": null, "hunger_at_death": null, "game_turns": 4454, "max_depth": 5}, "delta": {"game_turns": -220, "max_depth": 1, "steps": 25}},
+        {"case_id": "traversal-historical", "seed": 701, "flags": ["new_success", "avoided_death"], "baseline": {"outcome": "death", "death_cause": "killed by a priest of Odin", "hunger_at_death": "not_hungry", "game_turns": 3055, "max_depth": 7}, "candidate": {"outcome": "objective_complete", "death_cause": null, "hunger_at_death": null, "game_turns": 2782, "max_depth": 7}, "delta": {"game_turns": -273, "max_depth": 0, "steps": -278}}
+      ],
+      "seeds": [
+        {"case_id": "catalog-only-historical", "seed": 53, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "catalog-only-historical", "seed": 824, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 1003301977, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 1009099699, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 1063911084, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 1077361413, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 1195605202, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 1259450733, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 1354866613, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 1528054415, "baseline": "truncated", "candidate": "truncated", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 1703050900, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 1807224773, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 1840248764, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 1887524929, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 2014004543, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 2065672237, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 2094095407, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 2105401147, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 279714031, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 296200318, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 643863903, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 799362204, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "eat-historical", "seed": 920, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "eat-historical", "seed": 921, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "eat-historical", "seed": 922, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "eat-historical", "seed": 923, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "eat-historical", "seed": 924, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1360, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1361, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1362, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1363, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1364, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1365, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1366, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1367, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1368, "baseline": "death", "candidate": "death", "changed": true},
+        {"case_id": "note-0035-probes", "seed": 1369, "baseline": "death", "candidate": "truncated", "changed": true},
+        {"case_id": "note-0035-probes", "seed": 1370, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1371, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1372, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1373, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1374, "baseline": "truncated", "candidate": "truncated", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1375, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1376, "baseline": "truncated", "candidate": "truncated", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1377, "baseline": "truncated", "candidate": "truncated", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1378, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1379, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "scout-historical", "seed": 900, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "scout-historical", "seed": 901, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "scout-historical", "seed": 902, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "scout-historical", "seed": 903, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "scout-historical", "seed": 904, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "staircase-historical", "seed": 1, "baseline": "death", "candidate": "death", "changed": true},
+        {"case_id": "staircase-historical", "seed": 10, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "staircase-historical", "seed": 2, "baseline": "objective_complete", "candidate": "truncated", "changed": true},
+        {"case_id": "staircase-historical", "seed": 3, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "staircase-historical", "seed": 4, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "staircase-historical", "seed": 5, "baseline": "death", "candidate": "death", "changed": true},
+        {"case_id": "staircase-historical", "seed": 6, "baseline": "death", "candidate": "death", "changed": true},
+        {"case_id": "staircase-historical", "seed": 7, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "staircase-historical", "seed": 8, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "staircase-historical", "seed": 9, "baseline": "death", "candidate": "objective_complete", "changed": true},
+        {"case_id": "traversal-historical", "seed": 700, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "traversal-historical", "seed": 701, "baseline": "death", "candidate": "objective_complete", "changed": true},
+        {"case_id": "traversal-historical", "seed": 702, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "traversal-historical", "seed": 703, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "traversal-historical", "seed": 704, "baseline": "death", "candidate": "death", "changed": false}
+      ]
+    },
+    {
+      "name": "oracle",
+      "verdict": "pass",
+      "failed_gates": [],
+      "unknown_gates": [],
+      "gates": {
+        "objectives_not_lower": {
+          "baseline": 13,
+          "candidate": 13,
+          "passed": true
+        },
+        "deaths_not_higher": {
+          "baseline": 49,
+          "candidate": 48,
+          "passed": true
+        },
+        "weak_or_worse_not_higher": {
+          "baseline": 7,
+          "candidate": 4,
+          "passed": true
+        },
+        "starvation_not_higher": {
+          "baseline": 0,
+          "candidate": 0,
+          "passed": true
+        },
+        "zero_invalid_actions": {
+          "baseline": 0,
+          "candidate": 0,
+          "passed": true
+        },
+        "zero_gate_rejections": {
+          "baseline": 0,
+          "candidate": 0,
+          "passed": true
+        },
+        "zero_integrity_failures": {
+          "baseline": 0,
+          "candidate": 0,
+          "passed": true
+        },
+        "complete_comparable_records": {
+          "baseline": 0,
+          "candidate": 0,
+          "passed": true
+        }
+      },
+      "comparability_problems": [],
+      "arm_differences": [
+        "suite_id",
+        "suite_sha256",
+        "policy_version"
+      ],
+      "baseline": {
+        "report_file": "oracle-regression-v3-development-20261026T014337Z.json",
+        "report_sha256": "399bf44c8339a111cfe164426f80eb8070086c691126e6fd1a537cbc03d85a31",
+        "suite_id": "oracle-regression-v3",
+        "suite_sha256": "13a25100aafcc6da235dcff7bf5c111d0ad98c1a17abaeaa572567af9635fe81",
+        "status": "complete",
+        "started_at": "2026-10-26T01:43:37+00:00",
+        "model": "scripted-development",
+        "policy_version": "hierarchical-survival-hp-prayer-burden-look-ration-explore-first-v1",
+        "knowledge_version": "survival-reviewed-v2+sha256:d5cb109e09e3d798a97f9521411a914c8fc2855916c6d4a6e3298e591e0fa19e",
+        "episodes": 67,
+        "objectives": 13,
+        "deaths": 49,
+        "truncations": 5,
+        "outcomes": {
+          "death": 49,
+          "objective_complete": 13,
+          "truncated": 5
+        },
+        "weak_or_worse_deaths": 7,
+        "deaths_without_hunger_evidence": 0,
+        "starvation_deaths": 0,
+        "quality": {
+          "invalid_actions": 0,
+          "gate_rejections": 0,
+          "integrity_failures": 0,
+          "incomplete_records": 0,
+          "errors": 0,
+          "decision_failures": 0
+        },
+        "conduct": {
+          "oracle_attacks": 0,
+          "peaceful_attacks": 0
+        },
+        "diagnostics": {
+          "death_causes": {
+            "killed by a pony": 3,
+            "killed by a rothe": 3,
+            "killed by a giant ant": 2,
+            "killed by a giant bat": 2,
+            "killed by a giant beetle": 2,
+            "killed by a homunculus": 2,
+            "killed by a soldier ant": 2,
+            "killed by a wererat": 2,
+            "killed by an ape": 2,
+            "killed by an imp": 2,
+            "poisoned by a killer bee": 2,
+            "poisoned by a rabid rat": 2,
+            "killed by a bat": 1,
+            "killed by a black unicorn": 1,
+            "killed by a bugbear": 1,
+            "killed by a dwarf king": 1,
+            "killed by a fire ant": 1,
+            "killed by a fox": 1,
+            "killed by a garter snake": 1,
+            "killed by a gas spore's explosion": 1,
+            "killed by a gnome mummy": 1,
+            "killed by a grid bug": 1,
+            "killed by a hill orc": 1,
+            "killed by a jackal": 1,
+            "killed by a kobold": 1,
+            "killed by a large mimic": 1,
+            "killed by a little dog": 1,
+            "killed by a newt": 1,
+            "killed by a paper golem": 1,
+            "killed by a rabid rat": 1,
+            "killed by a werejackal": 1,
+            "killed by an Uruk-hai": 1,
+            "killed by an owlbear": 1,
+            "killed by the Oracle": 1,
+            "poisoned by a soldier ant": 1
+          },
+          "hunger_at_death": {
+            "not_hungry": 40,
+            "fainting": 7,
+            "hungry": 2
+          },
+          "deaths_by_max_depth": {
+            "1": 1,
+            "2": 1,
+            "3": 2,
+            "4": 4,
+            "5": 14,
+            "6": 6,
+            "7": 6,
+            "8": 10,
+            "9": 5
+          },
+          "median_death_turn": 1699,
+          "median_max_depth": 5,
+          "median_final_experience_level": 4
+        }
+      },
+      "candidate": {
+        "report_file": "oracle-regression-v3-spot-commit-dev-0063-development-20261026T041122Z.json",
+        "report_sha256": "842965d3e8a07e408498e5d5d98928f505394e75161d6c1ed27f3ca0320e70b1",
+        "suite_id": "oracle-regression-v3-spot-commit-dev-0063",
+        "suite_sha256": "7eae74d95499da2acc61008425f76c6a80034b988127bb00ef7308c7557cf3aa",
+        "status": "complete",
+        "started_at": "2026-10-26T04:11:22+00:00",
+        "model": "scripted-development",
+        "policy_version": "hierarchical-survival-hp-prayer-burden-look-ration-explore-first-spotcommit-qual",
+        "knowledge_version": "survival-reviewed-v2+sha256:d5cb109e09e3d798a97f9521411a914c8fc2855916c6d4a6e3298e591e0fa19e",
+        "episodes": 67,
+        "objectives": 13,
+        "deaths": 48,
+        "truncations": 6,
+        "outcomes": {
+          "death": 48,
+          "objective_complete": 13,
+          "truncated": 6
+        },
+        "weak_or_worse_deaths": 4,
+        "deaths_without_hunger_evidence": 0,
+        "starvation_deaths": 0,
+        "quality": {
+          "invalid_actions": 0,
+          "gate_rejections": 0,
+          "integrity_failures": 0,
+          "incomplete_records": 0,
+          "errors": 0,
+          "decision_failures": 0
+        },
+        "conduct": {
+          "oracle_attacks": 0,
+          "peaceful_attacks": 0
+        },
+        "diagnostics": {
+          "death_causes": {
+            "killed by a giant ant": 2,
+            "killed by a giant bat": 2,
+            "killed by a giant beetle": 2,
+            "killed by a homunculus": 2,
+            "killed by a paper golem": 2,
+            "killed by a pony": 2,
+            "killed by a rothe": 2,
+            "killed by a soldier ant": 2,
+            "killed by a wererat": 2,
+            "killed by an ape": 2,
+            "killed by an imp": 2,
+            "poisoned by a killer bee": 2,
+            "poisoned by a rabid rat": 2,
+            "killed by a bat": 1,
+            "killed by a black unicorn": 1,
+            "killed by a bugbear": 1,
+            "killed by a dwarf king": 1,
+            "killed by a fire ant": 1,
+            "killed by a fox": 1,
+            "killed by a gas spore's explosion": 1,
+            "killed by a gnome king": 1,
+            "killed by a gnome mummy": 1,
+            "killed by a grid bug": 1,
+            "killed by a jackal": 1,
+            "killed by a kobold lord": 1,
+            "killed by a large mimic": 1,
+            "killed by a little dog": 1,
+            "killed by a rabid rat": 1,
+            "killed by a straw golem": 1,
+            "killed by a troll": 1,
+            "killed by a werejackal": 1,
+            "killed by an Uruk-hai": 1,
+            "killed by an owlbear": 1,
+            "killed by the Oracle": 1,
+            "poisoned by a soldier ant": 1
+          },
+          "hunger_at_death": {
+            "not_hungry": 42,
+            "fainting": 4,
+            "hungry": 2
+          },
+          "deaths_by_max_depth": {
+            "1": 1,
+            "3": 2,
+            "4": 4,
+            "5": 13,
+            "6": 6,
+            "7": 6,
+            "8": 11,
+            "9": 5
+          },
+          "median_death_turn": 1665.0,
+          "median_max_depth": 6,
+          "median_final_experience_level": 4
+        }
+      },
+      "transitions": {
+        "death->truncated": 1
+      },
+      "changed_seeds": [
+        {"case_id": "descend-d5-fresh-historical", "seed": 1887524929, "flags": ["cause_changed", "hunger_changed", "removed_weak_or_worse"], "baseline": {"outcome": "death", "death_cause": "killed by a pony", "hunger_at_death": "fainting", "game_turns": 3249, "max_depth": 5}, "candidate": {"outcome": "death", "death_cause": "killed by a kobold lord", "hunger_at_death": "hungry", "game_turns": 4429, "max_depth": 7}, "delta": {"game_turns": 1180, "max_depth": 2, "steps": 1007}},
+        {"case_id": "note-0035-probes", "seed": 1369, "flags": ["avoided_death", "removed_weak_or_worse"], "baseline": {"outcome": "death", "death_cause": "killed by a kobold", "hunger_at_death": "fainting", "game_turns": 10667, "max_depth": 2}, "candidate": {"outcome": "truncated", "death_cause": null, "hunger_at_death": null, "game_turns": 10898, "max_depth": 2}, "delta": {"game_turns": 231, "max_depth": 0, "steps": 567}},
+        {"case_id": "scout-historical", "seed": 900, "flags": ["cause_changed"], "baseline": {"outcome": "death", "death_cause": "killed by a hill orc", "hunger_at_death": "not_hungry", "game_turns": 1932, "max_depth": 5}, "candidate": {"outcome": "death", "death_cause": "killed by a straw golem", "hunger_at_death": "not_hungry", "game_turns": 3809, "max_depth": 5}, "delta": {"game_turns": 1877, "max_depth": 0, "steps": 1867}},
+        {"case_id": "scout-historical", "seed": 902, "flags": ["cause_changed", "hunger_changed"], "baseline": {"outcome": "death", "death_cause": "killed by a garter snake", "hunger_at_death": "hungry", "game_turns": 6387, "max_depth": 4}, "candidate": {"outcome": "death", "death_cause": "killed by a paper golem", "hunger_at_death": "not_hungry", "game_turns": 7063, "max_depth": 4}, "delta": {"game_turns": 676, "max_depth": 0, "steps": 400}},
+        {"case_id": "scout-historical", "seed": 904, "flags": ["cause_changed"], "baseline": {"outcome": "death", "death_cause": "killed by a rothe", "hunger_at_death": "fainting", "game_turns": 5041, "max_depth": 5}, "candidate": {"outcome": "death", "death_cause": "killed by a bugbear", "hunger_at_death": "fainting", "game_turns": 5109, "max_depth": 5}, "delta": {"game_turns": 68, "max_depth": 0, "steps": 17}},
+        {"case_id": "staircase-historical", "seed": 1, "flags": ["cause_changed", "hunger_changed", "removed_weak_or_worse"], "baseline": {"outcome": "death", "death_cause": "killed by a newt", "hunger_at_death": "fainting", "game_turns": 5190, "max_depth": 7}, "candidate": {"outcome": "death", "death_cause": "killed by a troll", "hunger_at_death": "not_hungry", "game_turns": 5388, "max_depth": 8}, "delta": {"game_turns": 198, "max_depth": 1, "steps": 359}},
+        {"case_id": "staircase-historical", "seed": 10, "flags": ["cause_changed"], "baseline": {"outcome": "death", "death_cause": "killed by a bugbear", "hunger_at_death": "not_hungry", "game_turns": 3575, "max_depth": 6}, "candidate": {"outcome": "death", "death_cause": "killed by a gnome king", "hunger_at_death": "not_hungry", "game_turns": 3528, "max_depth": 6}, "delta": {"game_turns": -47, "max_depth": 0, "steps": -64}}
+      ],
+      "seeds": [
+        {"case_id": "catalog-only-historical", "seed": 53, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "catalog-only-historical", "seed": 824, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 1003301977, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 1009099699, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 1063911084, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 1077361413, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 1195605202, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 1259450733, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 1354866613, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 1528054415, "baseline": "truncated", "candidate": "truncated", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 1703050900, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 1807224773, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 1840248764, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 1887524929, "baseline": "death", "candidate": "death", "changed": true},
+        {"case_id": "descend-d5-fresh-historical", "seed": 2014004543, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 2065672237, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 2094095407, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 2105401147, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 279714031, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 296200318, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 643863903, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "descend-d5-fresh-historical", "seed": 799362204, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "eat-historical", "seed": 920, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "eat-historical", "seed": 921, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "eat-historical", "seed": 922, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "eat-historical", "seed": 923, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "eat-historical", "seed": 924, "baseline": "truncated", "candidate": "truncated", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1360, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1361, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1362, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1363, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1364, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1365, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1366, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1367, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1368, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1369, "baseline": "death", "candidate": "truncated", "changed": true},
+        {"case_id": "note-0035-probes", "seed": 1370, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1371, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1372, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1373, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1374, "baseline": "truncated", "candidate": "truncated", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1375, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1376, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1377, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1378, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "note-0035-probes", "seed": 1379, "baseline": "truncated", "candidate": "truncated", "changed": false},
+        {"case_id": "scout-historical", "seed": 900, "baseline": "death", "candidate": "death", "changed": true},
+        {"case_id": "scout-historical", "seed": 901, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "scout-historical", "seed": 902, "baseline": "death", "candidate": "death", "changed": true},
+        {"case_id": "scout-historical", "seed": 903, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "scout-historical", "seed": 904, "baseline": "death", "candidate": "death", "changed": true},
+        {"case_id": "staircase-historical", "seed": 1, "baseline": "death", "candidate": "death", "changed": true},
+        {"case_id": "staircase-historical", "seed": 10, "baseline": "death", "candidate": "death", "changed": true},
+        {"case_id": "staircase-historical", "seed": 2, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "staircase-historical", "seed": 3, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "staircase-historical", "seed": 4, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "staircase-historical", "seed": 5, "baseline": "truncated", "candidate": "truncated", "changed": false},
+        {"case_id": "staircase-historical", "seed": 6, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "staircase-historical", "seed": 7, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "staircase-historical", "seed": 8, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "staircase-historical", "seed": 9, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "traversal-historical", "seed": 700, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "traversal-historical", "seed": 701, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "traversal-historical", "seed": 702, "baseline": "objective_complete", "candidate": "objective_complete", "changed": false},
+        {"case_id": "traversal-historical", "seed": 703, "baseline": "death", "candidate": "death", "changed": false},
+        {"case_id": "traversal-historical", "seed": 704, "baseline": "death", "candidate": "death", "changed": false}
+      ]
+    }
+  ]
+}

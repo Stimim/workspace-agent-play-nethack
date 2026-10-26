@@ -2,8 +2,9 @@
 
 Status and working notes for the next coding agent (for example Claude Code,
 `claude.exe`). Read this after `AGENTS.md`, `README.md`, `ARCHITECTURE.md` and
-`TODO_LIST.md`. Facts here were current on 2026-10-26 (note 0061 shipped);
-`TODO_LIST.md` and the notes stay authoritative when they disagree.
+`TODO_LIST.md`. Facts here were current on 2026-10-26 (notes 0063 and 0064
+recorded); `TODO_LIST.md` and the notes stay authoritative when they
+disagree.
 
 ## 1. Where the project stands
 
@@ -34,6 +35,13 @@ Status and working notes for the next coding agent (for example Claude Code,
   Its lost successes defer a shallow level whose target is behind a secret
   passage and then search the nearest range level without a bound. That is
   the next rule's class.
+- **0063 search-spot ping-pong and 0064 sessile blockers: both NOT
+  QUALIFIED** in development (notes 0063, 0064; no fresh seeds spent). Each
+  removed its waste of turns (spot switches down about 70%; blocker waits
+  from thousands to a few dozen), but stalled runs did not fall. The freed
+  turns became searches that do not find the exit, and Minetown
+  Weak-or-worse or starvation deaths rose. The bottleneck is where the hero
+  searches.
 - **What the earlier rule attempts showed:** every survival-only or
   escape-only rule moves deaths around instead of adding objectives.
   - 0052 slime-mold food: REJECTED. More food, but stalls still burn it.
@@ -58,12 +66,13 @@ Status and working notes for the next coding agent (for example Claude Code,
 1. **Next gameplay step: decided** (owner, 2026-10-25). Milestone 3A
    (ADR 0008): Phase 1 diagnosis done (note 0060). The first Phase 3 rule,
    explore-before-search, is shipped (note 0061; seeds 635-664 consumed).
-   Note 0062 diagnosed what remains. Next: rule 0063, search-spot
-   ping-pong; then rule 0064, never waiting on sessile blockers; then
-   search ranking, re-measured. The baseline arms at the shipped commit are
-   in `~/nethack-evidence/0062/base-*-reg` (worktree
-   `~/nethack-evidence/0062/baseline`). Candidate 0059 was recorded NOT QUALIFIED (note
-   0059). Fresh seeds 665-694 are the next unused range; check with
+   Note 0062 diagnosed what remains. Rules 0063 (search-spot ping-pong)
+   and 0064 (never waiting on sessile blockers) were NOT QUALIFIED in
+   development (notes 0063, 0064). Next: search ranking, starting from a
+   re-measure of note 0062's route classes. The baseline arms at the
+   shipped commit are in `~/nethack-evidence/0062/base-*-reg` (worktree
+   `~/nethack-evidence/0062/baseline`). Candidate 0059 was recorded NOT
+   QUALIFIED (note 0059). Fresh seeds 665-694 are the next unused range; check with
    `used_seeds` first.
 2. **Verification process: decided** (ADR 0008 §4, Phase 2): stall
    diagnostics (`stalls.py`, done) and long-cap Minetown/Oracle stall seeds in
@@ -86,8 +95,9 @@ Status and working notes for the next coding agent (for example Claude Code,
 ## 3. Work in flight (not in `main`)
 
 Candidate code lives in git worktrees outside the repository. Each branch is
-committed with a `Qualification-Exempt` trailer, and the five candidate
-branches below were pushed to `origin` on 2026-10-25.
+committed with a `Qualification-Exempt` trailer. The older candidate
+branches were pushed to `origin` on 2026-10-25; the 0063 and 0064 branches
+are not pushed yet.
 
 The baseline for the next qualifications is `~/nethack-evidence/0062/baseline`,
 detached at `9783a7e`, with regression arms on `*-regression-v3` and
@@ -97,6 +107,8 @@ describe the old policy.
 
 | Worktree | Branch (base `22d0a5f`) | State | Record |
 | --- | --- | --- | --- |
+| `~/nethack-evidence/0064/candidate` | `rule-0064-sessile-blockers` (base `e9dde72`, `8480bb1`) | NOT QUALIFIED after 1 development pass; may be re-measured on top of search ranking | note 0064 |
+| `~/nethack-evidence/0063/candidate` | `rule-0063-search-spot-commitment` (base `e9dde72`; passes `b69f4eb`, `2781989`, `6a210f5`) | NOT QUALIFIED after 3 development passes | note 0063, `~/nethack-evidence/0063/DEV.md` |
 | `~/nethack-evidence/0061/candidate` | `rule-0061-explore-before-search` (base `e1a232b`) | QUALIFIED; shipped to `main` as one commit with the shipped label | note 0061, `~/nethack-evidence/0061q/` |
 | `~/nethack-evidence/0057/candidate` | `rule-0057-elbereth-disengage` | rejected, frozen | note 0057 |
 | `~/nethack-evidence/0059-rest-stall/candidate` | `rule-0059-rest-plus-stall-budget` (0054 + 0057, then fixes to `afc3282`) | NOT QUALIFIED after 3 development passes | note 0059, `~/nethack-evidence/0059-rest-stall/DEV.md` |
@@ -180,7 +192,12 @@ uv run ruff check . && uv run ruff format --check . && uv run pytest -q
   idle analysis kernel holding 2.2 GB, pushed it into swap. Run at most 5 arms
   at once with 2 workers each. Close SQLite connections and reset Python
   kernels after analysis. Each step event is about 22 KiB, so a 67-seed arm
-  is a database of about 2 GB; `~/nethack-evidence` holds roughly 100 GB.
+  is a database of 2-4 GB; `~/nethack-evidence` holds roughly 100 GB.
+- **`/tmp` is a RAM-backed tmpfs (7.8 GB)** on this host, so files there use
+  memory. Keep evaluation data, databases and detached state under
+  `~/nethack-evidence/`, never in `/tmp` or a session scratchpad. The host
+  hung on 2026-10-26 with about 15 GB in use (cause unconfirmed; earlyoom is
+  now installed).
 - **`/tmp` is cleared by restarts.** A restart killed the first 0051 runs. The
   NetHack 3.6.7 source used for citations is at `/tmp/nethack-3.6.7-src` (the
   `NetHack-3.6.7_Released` GitHub tag), and NLE 1.3.0 source at

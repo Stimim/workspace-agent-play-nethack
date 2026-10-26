@@ -1,0 +1,79 @@
+{
+ "header": {
+  "schema_version": 1,
+  "tool": "_agents/skills/evidence-record/stalls.py",
+  "stall_turns": 1000,
+  "fallback_loop_steps": 100
+ },
+ "pairs": [
+  {
+   "name": "minetown",
+   "comparability_problems": [],
+   "baseline": {
+    "database": "/home/stimim/nethack-evidence/0062/base-mt-reg/runs.sqlite3",
+    "runs": 67,
+    "stalled_runs": 26,
+    "median_longest_stay_turns": 610,
+    "fallback_loop_runs": 2,
+    "arrive_then_leave_events": 7,
+    "arrive_then_leave_runs": 6
+   },
+   "candidate": {
+    "database": "dev3-mt/runs.sqlite3",
+    "runs": 67,
+    "stalled_runs": 26,
+    "median_longest_stay_turns": 610,
+    "fallback_loop_runs": 0,
+    "arrive_then_leave_events": 10,
+    "arrive_then_leave_runs": 7
+   },
+   "changed_seeds": []
+  },
+  {
+   "name": "oracle",
+   "comparability_problems": [],
+   "baseline": {
+    "database": "/home/stimim/nethack-evidence/0062/base-or-reg/runs.sqlite3",
+    "runs": 67,
+    "stalled_runs": 25,
+    "median_longest_stay_turns": 633,
+    "fallback_loop_runs": 2,
+    "arrive_then_leave_events": 2,
+    "arrive_then_leave_runs": 2
+   },
+   "candidate": {
+    "database": "dev3-or/runs.sqlite3",
+    "runs": 67,
+    "stalled_runs": 25,
+    "median_longest_stay_turns": 633,
+    "fallback_loop_runs": 1,
+    "arrive_then_leave_events": 6,
+    "arrive_then_leave_runs": 4
+   },
+   "changed_seeds": []
+  },
+  {
+   "name": "d5",
+   "comparability_problems": [],
+   "baseline": {
+    "database": "/home/stimim/nethack-evidence/0062/base-d5-reg/runs.sqlite3",
+    "runs": 67,
+    "stalled_runs": 11,
+    "median_longest_stay_turns": 329,
+    "fallback_loop_runs": 1,
+    "arrive_then_leave_events": 1,
+    "arrive_then_leave_runs": 1
+   },
+   "candidate": {
+    "database": "dev3-d5/runs.sqlite3",
+    "runs": 67,
+    "stalled_runs": 11,
+    "median_longest_stay_turns": 329,
+    "fallback_loop_runs": 1,
+    "arrive_then_leave_events": 2,
+    "arrive_then_leave_runs": 2
+   },
+   "changed_seeds": []
+  }
+ ]
+}

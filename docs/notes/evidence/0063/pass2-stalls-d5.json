@@ -1,0 +1,64 @@
+{
+ "header": {
+  "schema_version": 1,
+  "tool": "_agents/skills/evidence-record/stalls.py",
+  "stall_turns": 1000,
+  "fallback_loop_steps": 100
+ },
+ "pairs": [
+  {
+   "name": "d5",
+   "comparability_problems": [],
+   "baseline": {
+    "database": "/home/stimim/nethack-evidence/0062/base-d5-reg/runs.sqlite3",
+    "runs": 67,
+    "stalled_runs": 11,
+    "median_longest_stay_turns": 329,
+    "fallback_loop_runs": 1,
+    "arrive_then_leave_events": 1,
+    "arrive_then_leave_runs": 1
+   },
+   "candidate": {
+    "database": "dev2-d5/runs.sqlite3",
+    "runs": 67,
+    "stalled_runs": 10,
+    "median_longest_stay_turns": 329,
+    "fallback_loop_runs": 0,
+    "arrive_then_leave_events": 1,
+    "arrive_then_leave_runs": 1
+   },
+   "changed_seeds": [
+    {
+     "seed": 1,
+     "flags": [
+      "removed_stall"
+     ],
+     "baseline": {
+      "run_id": "6c47e262-1eea-41fd-a5eb-297f8182ac55",
+      "outcome": "truncated",
+      "longest_stay_turns": 1275,
+      "longest_stay_level": {
+       "dungeon_number": 0,
+       "dungeon_level": 4
+      },
+      "stalled": true,
+      "model_fallback_steps": 10,
+      "arrive_then_leave": 0
+     },
+     "candidate": {
+      "run_id": "5ba89f1e-838a-43a9-8756-14d914169415",
+      "outcome": "objective_complete",
+      "longest_stay_turns": 915,
+      "longest_stay_level": {
+       "dungeon_number": 0,
+       "dungeon_level": 1
+      },
+      "stalled": false,
+      "model_fallback_steps": 10,
+      "arrive_then_leave": 0
+     }
+    }
+   ]
+  }
+ ]
+}

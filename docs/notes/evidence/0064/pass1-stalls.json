@@ -1,0 +1,413 @@
+{
+ "header": {
+  "schema_version": 1,
+  "tool": "_agents/skills/evidence-record/stalls.py",
+  "stall_turns": 1000,
+  "fallback_loop_steps": 100
+ },
+ "pairs": [
+  {
+   "name": "minetown",
+   "comparability_problems": [],
+   "baseline": {
+    "database": "/home/stimim/nethack-evidence/0062/base-mt-reg/runs.sqlite3",
+    "runs": 67,
+    "stalled_runs": 26,
+    "median_longest_stay_turns": 610,
+    "fallback_loop_runs": 2,
+    "arrive_then_leave_events": 7,
+    "arrive_then_leave_runs": 6
+   },
+   "candidate": {
+    "database": "dev1-mt/runs.sqlite3",
+    "runs": 67,
+    "stalled_runs": 26,
+    "median_longest_stay_turns": 521,
+    "fallback_loop_runs": 0,
+    "arrive_then_leave_events": 8,
+    "arrive_then_leave_runs": 7
+   },
+   "changed_seeds": [
+    {
+     "seed": 703,
+     "flags": [
+      "removed_stall"
+     ],
+     "baseline": {
+      "run_id": "1e8dad64-37f0-4f02-83c3-309636d480cd",
+      "outcome": "death",
+      "longest_stay_turns": 2949,
+      "longest_stay_level": {
+       "dungeon_number": 2,
+       "dungeon_level": 4
+      },
+      "stalled": true,
+      "model_fallback_steps": 0,
+      "arrive_then_leave": 0
+     },
+     "candidate": {
+      "run_id": "bbd3b026-110a-41b3-b696-1daa52a25de2",
+      "outcome": "death",
+      "longest_stay_turns": 312,
+      "longest_stay_level": {
+       "dungeon_number": 0,
+       "dungeon_level": 2
+      },
+      "stalled": false,
+      "model_fallback_steps": 0,
+      "arrive_then_leave": 0
+     }
+    },
+    {
+     "seed": 1077361413,
+     "flags": [
+      "new_stall"
+     ],
+     "baseline": {
+      "run_id": "ee957a05-5d94-4707-ac47-f0165a3ca50b",
+      "outcome": "death",
+      "longest_stay_turns": 713,
+      "longest_stay_level": {
+       "dungeon_number": 0,
+       "dungeon_level": 5
+      },
+      "stalled": false,
+      "model_fallback_steps": 0,
+      "arrive_then_leave": 0
+     },
+     "candidate": {
+      "run_id": "932888d0-c0ef-466a-b918-062249f79e18",
+      "outcome": "death",
+      "longest_stay_turns": 5677,
+      "longest_stay_level": {
+       "dungeon_number": 0,
+       "dungeon_level": 3
+      },
+      "stalled": true,
+      "model_fallback_steps": 0,
+      "arrive_then_leave": 0
+     }
+    }
+   ]
+  },
+  {
+   "name": "oracle",
+   "comparability_problems": [],
+   "baseline": {
+    "database": "/home/stimim/nethack-evidence/0062/base-or-reg/runs.sqlite3",
+    "runs": 67,
+    "stalled_runs": 25,
+    "median_longest_stay_turns": 633,
+    "fallback_loop_runs": 2,
+    "arrive_then_leave_events": 2,
+    "arrive_then_leave_runs": 2
+   },
+   "candidate": {
+    "database": "dev1-or/runs.sqlite3",
+    "runs": 67,
+    "stalled_runs": 20,
+    "median_longest_stay_turns": 551,
+    "fallback_loop_runs": 2,
+    "arrive_then_leave_events": 4,
+    "arrive_then_leave_runs": 4
+   },
+   "changed_seeds": [
+    {
+     "seed": 6,
+     "flags": [
+      "removed_stall",
+      "new_fallback_loop"
+     ],
+     "baseline": {
+      "run_id": "cf5250cd-9bcd-4d35-8a45-d90fca61ae03",
+      "outcome": "death",
+      "longest_stay_turns": 3995,
+      "longest_stay_level": {
+       "dungeon_number": 0,
+       "dungeon_level": 5
+      },
+      "stalled": true,
+      "model_fallback_steps": 0,
+      "arrive_then_leave": 0
+     },
+     "candidate": {
+      "run_id": "e2ceef30-779a-4298-b4a0-7edbc928aca0",
+      "outcome": "death",
+      "longest_stay_turns": 535,
+      "longest_stay_level": {
+       "dungeon_number": 0,
+       "dungeon_level": 5
+      },
+      "stalled": false,
+      "model_fallback_steps": 287,
+      "arrive_then_leave": 0
+     }
+    },
+    {
+     "seed": 700,
+     "flags": [
+      "removed_stall"
+     ],
+     "baseline": {
+      "run_id": "00c89886-6d75-4031-a99a-7e65b5b4f3d1",
+      "outcome": "objective_complete",
+      "longest_stay_turns": 1077,
+      "longest_stay_level": {
+       "dungeon_number": 0,
+       "dungeon_level": 6
+      },
+      "stalled": true,
+      "model_fallback_steps": 0,
+      "arrive_then_leave": 0
+     },
+     "candidate": {
+      "run_id": "cb031a31-5c9e-44e5-89a7-d8b5e066d170",
+      "outcome": "objective_complete",
+      "longest_stay_turns": 958,
+      "longest_stay_level": {
+       "dungeon_number": 0,
+       "dungeon_level": 6
+      },
+      "stalled": false,
+      "model_fallback_steps": 0,
+      "arrive_then_leave": 0
+     }
+    },
+    {
+     "seed": 904,
+     "flags": [
+      "removed_stall"
+     ],
+     "baseline": {
+      "run_id": "a12b06ad-b955-460c-9df4-6a0cf939d6bf",
+      "outcome": "death",
+      "longest_stay_turns": 4493,
+      "longest_stay_level": {
+       "dungeon_number": 0,
+       "dungeon_level": 5
+      },
+      "stalled": true,
+      "model_fallback_steps": 0,
+      "arrive_then_leave": 0
+     },
+     "candidate": {
+      "run_id": "e1ba261a-204a-4225-bace-3f5356fb35a7",
+      "outcome": "death",
+      "longest_stay_turns": 348,
+      "longest_stay_level": {
+       "dungeon_number": 0,
+       "dungeon_level": 7
+      },
+      "stalled": false,
+      "model_fallback_steps": 0,
+      "arrive_then_leave": 0
+     }
+    },
+    {
+     "seed": 1361,
+     "flags": [
+      "new_stall"
+     ],
+     "baseline": {
+      "run_id": "684c6fc6-6eab-4f6c-b359-c5ffd6d09e6d",
+      "outcome": "death",
+      "longest_stay_turns": 353,
+      "longest_stay_level": {
+       "dungeon_number": 0,
+       "dungeon_level": 5
+      },
+      "stalled": false,
+      "model_fallback_steps": 0,
+      "arrive_then_leave": 0
+     },
+     "candidate": {
+      "run_id": "3f63e2a1-d675-40a7-bfb7-8fbede6c10a7",
+      "outcome": "death",
+      "longest_stay_turns": 1127,
+      "longest_stay_level": {
+       "dungeon_number": 0,
+       "dungeon_level": 7
+      },
+      "stalled": true,
+      "model_fallback_steps": 0,
+      "arrive_then_leave": 0
+     }
+    },
+    {
+     "seed": 1375,
+     "flags": [
+      "removed_stall"
+     ],
+     "baseline": {
+      "run_id": "d5567a97-3e51-4717-a974-8357f100bcf6",
+      "outcome": "death",
+      "longest_stay_turns": 1191,
+      "longest_stay_level": {
+       "dungeon_number": 0,
+       "dungeon_level": 7
+      },
+      "stalled": true,
+      "model_fallback_steps": 0,
+      "arrive_then_leave": 0
+     },
+     "candidate": {
+      "run_id": "44acd8fa-8d55-4352-91d3-d92ce23e3197",
+      "outcome": "objective_complete",
+      "longest_stay_turns": 539,
+      "longest_stay_level": {
+       "dungeon_number": 0,
+       "dungeon_level": 6
+      },
+      "stalled": false,
+      "model_fallback_steps": 0,
+      "arrive_then_leave": 0
+     }
+    },
+    {
+     "seed": 1887524929,
+     "flags": [
+      "removed_stall"
+     ],
+     "baseline": {
+      "run_id": "df141338-5350-46c4-920d-debdc99d8799",
+      "outcome": "death",
+      "longest_stay_turns": 2105,
+      "longest_stay_level": {
+       "dungeon_number": 0,
+       "dungeon_level": 5
+      },
+      "stalled": true,
+      "model_fallback_steps": 0,
+      "arrive_then_leave": 0
+     },
+     "candidate": {
+      "run_id": "a7a38adb-5cbf-4140-90a7-ce0ce5f1407f",
+      "outcome": "death",
+      "longest_stay_turns": 641,
+      "longest_stay_level": {
+       "dungeon_number": 0,
+       "dungeon_level": 4
+      },
+      "stalled": false,
+      "model_fallback_steps": 0,
+      "arrive_then_leave": 0
+     }
+    },
+    {
+     "seed": 2094095407,
+     "flags": [
+      "removed_stall"
+     ],
+     "baseline": {
+      "run_id": "a7c00fb2-3e5a-4fdf-8281-59a8a2cc1a6c",
+      "outcome": "objective_complete",
+      "longest_stay_turns": 1436,
+      "longest_stay_level": {
+       "dungeon_number": 0,
+       "dungeon_level": 5
+      },
+      "stalled": true,
+      "model_fallback_steps": 0,
+      "arrive_then_leave": 0
+     },
+     "candidate": {
+      "run_id": "ad4363aa-a6cf-4f87-93af-68a704469610",
+      "outcome": "death",
+      "longest_stay_turns": 877,
+      "longest_stay_level": {
+       "dungeon_number": 0,
+       "dungeon_level": 5
+      },
+      "stalled": false,
+      "model_fallback_steps": 0,
+      "arrive_then_leave": 0
+     }
+    }
+   ]
+  },
+  {
+   "name": "d5",
+   "comparability_problems": [],
+   "baseline": {
+    "database": "/home/stimim/nethack-evidence/0062/base-d5-reg/runs.sqlite3",
+    "runs": 67,
+    "stalled_runs": 11,
+    "median_longest_stay_turns": 329,
+    "fallback_loop_runs": 1,
+    "arrive_then_leave_events": 1,
+    "arrive_then_leave_runs": 1
+   },
+   "candidate": {
+    "database": "dev1-d5/runs.sqlite3",
+    "runs": 67,
+    "stalled_runs": 11,
+    "median_longest_stay_turns": 319,
+    "fallback_loop_runs": 1,
+    "arrive_then_leave_events": 0,
+    "arrive_then_leave_runs": 0
+   },
+   "changed_seeds": [
+    {
+     "seed": 1374,
+     "flags": [
+      "new_stall"
+     ],
+     "baseline": {
+      "run_id": "d6a924fa-0d23-4872-b785-f4bff8b421ca",
+      "outcome": "objective_complete",
+      "longest_stay_turns": 490,
+      "longest_stay_level": {
+       "dungeon_number": 0,
+       "dungeon_level": 2
+      },
+      "stalled": false,
+      "model_fallback_steps": 0,
+      "arrive_then_leave": 0
+     },
+     "candidate": {
+      "run_id": "936e857f-5074-4ad8-94b7-67daeb87fa46",
+      "outcome": "objective_complete",
+      "longest_stay_turns": 1700,
+      "longest_stay_level": {
+       "dungeon_number": 0,
+       "dungeon_level": 4
+      },
+      "stalled": true,
+      "model_fallback_steps": 0,
+      "arrive_then_leave": 0
+     }
+    },
+    {
+     "seed": 1887524929,
+     "flags": [
+      "removed_stall"
+     ],
+     "baseline": {
+      "run_id": "53610f6d-ebc3-45cc-9dbb-08223fb54b7f",
+      "outcome": "truncated",
+      "longest_stay_turns": 2473,
+      "longest_stay_level": {
+       "dungeon_number": 0,
+       "dungeon_level": 4
+      },
+      "stalled": true,
+      "model_fallback_steps": 0,
+      "arrive_then_leave": 0
+     },
+     "candidate": {
+      "run_id": "6e80a61e-c017-4c29-bed2-2d86b1d25fc8",
+      "outcome": "objective_complete",
+      "longest_stay_turns": 714,
+      "longest_stay_level": {
+       "dungeon_number": 0,
+       "dungeon_level": 4
+      },
+      "stalled": false,
+      "model_fallback_steps": 0,
+      "arrive_then_leave": 0
+     }
+    }
+   ]
+  }
+ ]
+}

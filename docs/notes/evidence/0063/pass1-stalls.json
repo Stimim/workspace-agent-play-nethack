@@ -1,0 +1,208 @@
+{
+ "header": {
+  "schema_version": 1,
+  "tool": "_agents/skills/evidence-record/stalls.py",
+  "stall_turns": 1000,
+  "fallback_loop_steps": 100
+ },
+ "pairs": [
+  {
+   "name": "minetown",
+   "comparability_problems": [],
+   "baseline": {
+    "database": "/home/stimim/nethack-evidence/0062/base-mt-reg/runs.sqlite3",
+    "runs": 67,
+    "stalled_runs": 26,
+    "median_longest_stay_turns": 610,
+    "fallback_loop_runs": 2,
+    "arrive_then_leave_events": 7,
+    "arrive_then_leave_runs": 6
+   },
+   "candidate": {
+    "database": "dev1-mt/runs.sqlite3",
+    "runs": 67,
+    "stalled_runs": 25,
+    "median_longest_stay_turns": 633,
+    "fallback_loop_runs": 0,
+    "arrive_then_leave_events": 11,
+    "arrive_then_leave_runs": 6
+   },
+   "changed_seeds": [
+    {
+     "seed": 2,
+     "flags": [
+      "removed_stall"
+     ],
+     "baseline": {
+      "run_id": "70650f2e-71f8-4988-9d8f-1889749b7e0b",
+      "outcome": "objective_complete",
+      "longest_stay_turns": 1316,
+      "longest_stay_level": {
+       "dungeon_number": 0,
+       "dungeon_level": 3
+      },
+      "stalled": true,
+      "model_fallback_steps": 1,
+      "arrive_then_leave": 0
+     },
+     "candidate": {
+      "run_id": "d2cdb0a3-8b99-4933-a8ba-f2ecb6de6ac6",
+      "outcome": "death",
+      "longest_stay_turns": 997,
+      "longest_stay_level": {
+       "dungeon_number": 0,
+       "dungeon_level": 3
+      },
+      "stalled": false,
+      "model_fallback_steps": 0,
+      "arrive_then_leave": 0
+     }
+    },
+    {
+     "seed": 1374,
+     "flags": [
+      "removed_stall"
+     ],
+     "baseline": {
+      "run_id": "d923d5bf-f0b3-4637-94a0-03be91833fe2",
+      "outcome": "truncated",
+      "longest_stay_turns": 11006,
+      "longest_stay_level": {
+       "dungeon_number": 0,
+       "dungeon_level": 3
+      },
+      "stalled": true,
+      "model_fallback_steps": 0,
+      "arrive_then_leave": 1
+     },
+     "candidate": {
+      "run_id": "73b9b283-37d1-4530-9ae9-5fa0a27af189",
+      "outcome": "death",
+      "longest_stay_turns": 661,
+      "longest_stay_level": {
+       "dungeon_number": 0,
+       "dungeon_level": 3
+      },
+      "stalled": false,
+      "model_fallback_steps": 0,
+      "arrive_then_leave": 0
+     }
+    },
+    {
+     "seed": 2105401147,
+     "flags": [
+      "new_stall"
+     ],
+     "baseline": {
+      "run_id": "789783f5-00db-49b9-9be9-19d8164162a3",
+      "outcome": "death",
+      "longest_stay_turns": 263,
+      "longest_stay_level": {
+       "dungeon_number": 0,
+       "dungeon_level": 3
+      },
+      "stalled": false,
+      "model_fallback_steps": 0,
+      "arrive_then_leave": 0
+     },
+     "candidate": {
+      "run_id": "303ee100-ea5e-4b02-be97-4696f1cf2dbb",
+      "outcome": "death",
+      "longest_stay_turns": 8727,
+      "longest_stay_level": {
+       "dungeon_number": 2,
+       "dungeon_level": 3
+      },
+      "stalled": true,
+      "model_fallback_steps": 0,
+      "arrive_then_leave": 0
+     }
+    }
+   ]
+  },
+  {
+   "name": "oracle",
+   "comparability_problems": [],
+   "baseline": {
+    "database": "/home/stimim/nethack-evidence/0062/base-or-reg/runs.sqlite3",
+    "runs": 67,
+    "stalled_runs": 25,
+    "median_longest_stay_turns": 633,
+    "fallback_loop_runs": 2,
+    "arrive_then_leave_events": 2,
+    "arrive_then_leave_runs": 2
+   },
+   "candidate": {
+    "database": "dev1-or/runs.sqlite3",
+    "runs": 67,
+    "stalled_runs": 25,
+    "median_longest_stay_turns": 643,
+    "fallback_loop_runs": 0,
+    "arrive_then_leave_events": 5,
+    "arrive_then_leave_runs": 2
+   },
+   "changed_seeds": [
+    {
+     "seed": 900,
+     "flags": [
+      "new_stall"
+     ],
+     "baseline": {
+      "run_id": "c7366cc5-0fb6-4357-be7e-069fd0af36e2",
+      "outcome": "death",
+      "longest_stay_turns": 800,
+      "longest_stay_level": {
+       "dungeon_number": 0,
+       "dungeon_level": 4
+      },
+      "stalled": false,
+      "model_fallback_steps": 0,
+      "arrive_then_leave": 0
+     },
+     "candidate": {
+      "run_id": "2ecd69e9-0352-491c-9313-3c47495bf951",
+      "outcome": "death",
+      "longest_stay_turns": 2597,
+      "longest_stay_level": {
+       "dungeon_number": 0,
+       "dungeon_level": 5
+      },
+      "stalled": true,
+      "model_fallback_steps": 0,
+      "arrive_then_leave": 0
+     }
+    },
+    {
+     "seed": 1374,
+     "flags": [
+      "removed_stall"
+     ],
+     "baseline": {
+      "run_id": "84e16cc0-c9f6-4374-a301-ad0de43e994b",
+      "outcome": "truncated",
+      "longest_stay_turns": 11006,
+      "longest_stay_level": {
+       "dungeon_number": 0,
+       "dungeon_level": 3
+      },
+      "stalled": true,
+      "model_fallback_steps": 0,
+      "arrive_then_leave": 1
+     },
+     "candidate": {
+      "run_id": "bbaad31c-9fee-4b9e-b530-a61f876cbcb4",
+      "outcome": "objective_complete",
+      "longest_stay_turns": 661,
+      "longest_stay_level": {
+       "dungeon_number": 0,
+       "dungeon_level": 3
+      },
+      "stalled": false,
+      "model_fallback_steps": 0,
+      "arrive_then_leave": 0
+     }
+    }
+   ]
+  }
+ ]
+}
