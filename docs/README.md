@@ -30,6 +30,7 @@
 - Roadmap consolidation and preserved roadmap-only facts, diagnosis, and deferred-work dispositions: [note 0056](notes/0056-roadmap-consolidation.md).
 - Milestone 3 Phase 3: the rejected combat-only Elbereth disengage rule, its development history, consumed fresh sample and per-seed evidence: [note 0057](notes/0057-elbereth-disengage-qualification.md).
 - Milestone 3 Phase 2: branch-stair identity diagnosis, closed without a rule (the Mines `>` detour costs 2 turns): [note 0058](notes/0058-branch-stair-identity-diagnosis.md).
+- Milestone 3A Phase 3: what hidden-passage search cannot solve (stall turns by final cause; search ranking addresses 8%): [note 0065](notes/0065-what-search-cannot-solve.md).
 - Milestone 3A Phase 3: never waiting on a sessile blocker, NOT QUALIFIED after one development pass (Minetown Weak-or-worse 10 -> 12; no fresh seeds): [note 0064](notes/0064-sessile-blockers-development.md).
 - Milestone 3A Phase 3: search-spot commitment (ping-pong), NOT QUALIFIED after three development passes (no fresh seeds): [note 0063](notes/0063-search-spot-commitment-development.md).
 - Milestone 3A Phase 3: remaining stall mechanisms after explore-before-search (search-spot ping-pong, waits for sessile blockers, search ranking): [note 0062](notes/0062-remaining-stall-mechanisms.md).

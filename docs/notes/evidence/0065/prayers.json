@@ -1,0 +1,69 @@
+{
+ "mt": {
+  "totals": {
+   "fixed": 87,
+   "other": 2,
+   "too_soon": 1
+  },
+  "not_fixed": {
+   "1364": [
+    [
+     3018,
+     3063,
+     4,
+     "other",
+     "Pray for major HP trouble or Weak+ hunger after the conserva",
+     "Your movements are now unencumbered. | You miss the giant ant.  The giant ant bites!  The giant ant bites! | You miss the giant ant.  The giant ant bites! | You"
+    ]
+   ],
+   "1368": [
+    [
+     2552,
+     2540,
+     3,
+     "too_soon",
+     "Pray for major HP trouble or Weak+ hunger after the conserva",
+     "\"Thou must relearn thy lessons!\"  You feel foolish! | You hit the dwarf mummy.  The dwarf mummy hits! | You hit the dwarf mummy!  The dwarf mummy hits! | You de"
+    ]
+   ],
+   "1077361413": [
+    [
+     1430,
+     1481,
+     5,
+     "other",
+     "Pray for major HP trouble or Weak+ hunger after the conserva",
+     "The fox bites! | You miss the fox.  The fox bites!  The fox misses! | You miss the fox.  The fox bites!  The fox bites! | You miss the fox.  The fox bites!  The"
+    ]
+   ]
+  }
+ },
+ "or": {
+  "totals": {
+   "fixed": 100,
+   "other": 2
+  },
+  "not_fixed": {
+   "5": [
+    [
+     2980,
+     3164,
+     4,
+     "other",
+     "Pray for major HP trouble or Weak+ hunger after the conserva",
+     "You return to dwarven form!"
+    ]
+   ],
+   "924": [
+    [
+     9342,
+     7615,
+     4,
+     "other",
+     "Pray for major HP trouble or Weak+ hunger after the conserva",
+     "You can hear again. | You see here a dart."
+    ]
+   ]
+  }
+ }
+}

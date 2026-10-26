@@ -1,0 +1,685 @@
+{
+ "total_turns": 182764,
+ "groups": {
+  "monster_on_route": {
+   "stays": 10,
+   "turns": 78912,
+   "records": [
+    {
+     "arm": "mt",
+     "seed": 1528054415,
+     "level": [
+      0,
+      3
+     ],
+     "turns": 11581,
+     "searches": 7989,
+     "blocker_waits": 9,
+     "searches_one_candidate": 3622,
+     "searches_round_10_plus": 7279,
+     "most_searches_one_stand": 3409
+    },
+    {
+     "arm": "mt",
+     "seed": 1376,
+     "level": [
+      0,
+      3
+     ],
+     "turns": 11417,
+     "searches": 1,
+     "blocker_waits": 6084,
+     "searches_one_candidate": 0,
+     "searches_round_10_plus": 0,
+     "most_searches_one_stand": 1
+    },
+    {
+     "arm": "mt",
+     "seed": 1374,
+     "level": [
+      0,
+      3
+     ],
+     "turns": 11006,
+     "searches": 8731,
+     "blocker_waits": 24,
+     "searches_one_candidate": 8064,
+     "searches_round_10_plus": 7983,
+     "most_searches_one_stand": 8084
+    },
+    {
+     "arm": "or",
+     "seed": 1379,
+     "level": [
+      0,
+      3
+     ],
+     "turns": 10926,
+     "searches": 4452,
+     "blocker_waits": 4595,
+     "searches_one_candidate": 2176,
+     "searches_round_10_plus": 4410,
+     "most_searches_one_stand": 2012
+    },
+    {
+     "arm": "mt",
+     "seed": 1377,
+     "level": [
+      0,
+      3
+     ],
+     "turns": 7678,
+     "searches": 6049,
+     "blocker_waits": 0,
+     "searches_one_candidate": 5882,
+     "searches_round_10_plus": 5787,
+     "most_searches_one_stand": 5888
+    },
+    {
+     "arm": "or",
+     "seed": 924,
+     "level": [
+      0,
+      4
+     ],
+     "turns": 6938,
+     "searches": 720,
+     "blocker_waits": 599,
+     "searches_one_candidate": 720,
+     "searches_round_10_plus": 620,
+     "most_searches_one_stand": 720
+    },
+    {
+     "arm": "or",
+     "seed": 701,
+     "level": [
+      0,
+      3
+     ],
+     "turns": 6760,
+     "searches": 64,
+     "blocker_waits": 4050,
+     "searches_one_candidate": 0,
+     "searches_round_10_plus": 0,
+     "most_searches_one_stand": 10
+    },
+    {
+     "arm": "or",
+     "seed": 904,
+     "level": [
+      0,
+      5
+     ],
+     "turns": 4493,
+     "searches": 53,
+     "blocker_waits": 358,
+     "searches_one_candidate": 33,
+     "searches_round_10_plus": 32,
+     "most_searches_one_stand": 32
+    },
+    {
+     "arm": "mt",
+     "seed": 9,
+     "level": [
+      0,
+      4
+     ],
+     "turns": 4118,
+     "searches": 541,
+     "blocker_waits": 1813,
+     "searches_one_candidate": 0,
+     "searches_round_10_plus": 0,
+     "most_searches_one_stand": 10
+    },
+    {
+     "arm": "or",
+     "seed": 6,
+     "level": [
+      0,
+      5
+     ],
+     "turns": 3995,
+     "searches": 16,
+     "blocker_waits": 3414,
+     "searches_one_candidate": 6,
+     "searches_round_10_plus": 0,
+     "most_searches_one_stand": 10
+    }
+   ]
+  },
+  "mines_level": {
+   "stays": 11,
+   "turns": 38187,
+   "records": [
+    {
+     "arm": "mt",
+     "seed": 643863903,
+     "level": [
+      2,
+      6
+     ],
+     "turns": 8963,
+     "searches": 5138,
+     "blocker_waits": 0,
+     "searches_one_candidate": 517,
+     "searches_round_10_plus": 3858,
+     "most_searches_one_stand": 340
+    },
+    {
+     "arm": "mt",
+     "seed": 1703050900,
+     "level": [
+      2,
+      5
+     ],
+     "turns": 5761,
+     "searches": 3149,
+     "blocker_waits": 1,
+     "searches_one_candidate": 98,
+     "searches_round_10_plus": 416,
+     "most_searches_one_stand": 120
+    },
+    {
+     "arm": "mt",
+     "seed": 1195605202,
+     "level": [
+      2,
+      5
+     ],
+     "turns": 5485,
+     "searches": 3590,
+     "blocker_waits": 0,
+     "searches_one_candidate": 10,
+     "searches_round_10_plus": 2590,
+     "most_searches_one_stand": 360
+    },
+    {
+     "arm": "mt",
+     "seed": 5,
+     "level": [
+      2,
+      6
+     ],
+     "turns": 5294,
+     "searches": 2103,
+     "blocker_waits": 41,
+     "searches_one_candidate": 0,
+     "searches_round_10_plus": 0,
+     "most_searches_one_stand": 40
+    },
+    {
+     "arm": "mt",
+     "seed": 703,
+     "level": [
+      2,
+      7
+     ],
+     "turns": 2949,
+     "searches": 2572,
+     "blocker_waits": 0,
+     "searches_one_candidate": 108,
+     "searches_round_10_plus": 2272,
+     "most_searches_one_stand": 570
+    },
+    {
+     "arm": "mt",
+     "seed": 1367,
+     "level": [
+      2,
+      5
+     ],
+     "turns": 2857,
+     "searches": 1480,
+     "blocker_waits": 0,
+     "searches_one_candidate": 50,
+     "searches_round_10_plus": 0,
+     "most_searches_one_stand": 60
+    },
+    {
+     "arm": "mt",
+     "seed": 1009099699,
+     "level": [
+      2,
+      6
+     ],
+     "turns": 1652,
+     "searches": 710,
+     "blocker_waits": 0,
+     "searches_one_candidate": 0,
+     "searches_round_10_plus": 0,
+     "most_searches_one_stand": 20
+    },
+    {
+     "arm": "mt",
+     "seed": 1354866613,
+     "level": [
+      2,
+      5
+     ],
+     "turns": 1427,
+     "searches": 1016,
+     "blocker_waits": 0,
+     "searches_one_candidate": 0,
+     "searches_round_10_plus": 316,
+     "most_searches_one_stand": 150
+    },
+    {
+     "arm": "mt",
+     "seed": 901,
+     "level": [
+      2,
+      5
+     ],
+     "turns": 1376,
+     "searches": 505,
+     "blocker_waits": 0,
+     "searches_one_candidate": 0,
+     "searches_round_10_plus": 0,
+     "most_searches_one_stand": 10
+    },
+    {
+     "arm": "mt",
+     "seed": 1003301977,
+     "level": [
+      2,
+      4
+     ],
+     "turns": 1327,
+     "searches": 715,
+     "blocker_waits": 0,
+     "searches_one_candidate": 117,
+     "searches_round_10_plus": 245,
+     "most_searches_one_stand": 165
+    },
+    {
+     "arm": "mt",
+     "seed": 1365,
+     "level": [
+      2,
+      4
+     ],
+     "turns": 1096,
+     "searches": 565,
+     "blocker_waits": 0,
+     "searches_one_candidate": 20,
+     "searches_round_10_plus": 0,
+     "most_searches_one_stand": 55
+    }
+   ]
+  },
+  "locked_or_closed_door": {
+   "stays": 4,
+   "turns": 19773,
+   "records": [
+    {
+     "arm": "or",
+     "seed": 5,
+     "level": [
+      0,
+      4
+     ],
+     "turns": 11402,
+     "searches": 740,
+     "blocker_waits": 0,
+     "searches_one_candidate": 1,
+     "searches_round_10_plus": 0,
+     "most_searches_one_stand": 30
+    },
+    {
+     "arm": "or",
+     "seed": 1377,
+     "level": [
+      0,
+      1
+     ],
+     "turns": 3209,
+     "searches": 1418,
+     "blocker_waits": 0,
+     "searches_one_candidate": 20,
+     "searches_round_10_plus": 0,
+     "most_searches_one_stand": 38
+    },
+    {
+     "arm": "mt",
+     "seed": 1,
+     "level": [
+      0,
+      2
+     ],
+     "turns": 2835,
+     "searches": 1204,
+     "blocker_waits": 0,
+     "searches_one_candidate": 0,
+     "searches_round_10_plus": 0,
+     "most_searches_one_stand": 31
+    },
+    {
+     "arm": "or",
+     "seed": 1370,
+     "level": [
+      0,
+      5
+     ],
+     "turns": 2327,
+     "searches": 859,
+     "blocker_waits": 1,
+     "searches_one_candidate": 10,
+     "searches_round_10_plus": 0,
+     "most_searches_one_stand": 20
+    }
+   ]
+  },
+  "target_not_on_level": {
+   "stays": 11,
+   "turns": 16934,
+   "records": [
+    {
+     "arm": "mt",
+     "seed": 1364,
+     "level": [
+      0,
+      4
+     ],
+     "turns": 2464,
+     "searches": 823,
+     "blocker_waits": 0,
+     "searches_one_candidate": 2,
+     "searches_round_10_plus": 0,
+     "most_searches_one_stand": 10
+    },
+    {
+     "arm": "or",
+     "seed": 1368,
+     "level": [
+      0,
+      6
+     ],
+     "turns": 1931,
+     "searches": 707,
+     "blocker_waits": 0,
+     "searches_one_candidate": 0,
+     "searches_round_10_plus": 0,
+     "most_searches_one_stand": 10
+    },
+    {
+     "arm": "or",
+     "seed": 1371,
+     "level": [
+      0,
+      5
+     ],
+     "turns": 1824,
+     "searches": 698,
+     "blocker_waits": 0,
+     "searches_one_candidate": 0,
+     "searches_round_10_plus": 0,
+     "most_searches_one_stand": 10
+    },
+    {
+     "arm": "mt",
+     "seed": 6,
+     "level": [
+      0,
+      4
+     ],
+     "turns": 1552,
+     "searches": 409,
+     "blocker_waits": 1,
+     "searches_one_candidate": 5,
+     "searches_round_10_plus": 0,
+     "most_searches_one_stand": 10
+    },
+    {
+     "arm": "or",
+     "seed": 903,
+     "level": [
+      0,
+      5
+     ],
+     "turns": 1490,
+     "searches": 587,
+     "blocker_waits": 0,
+     "searches_one_candidate": 10,
+     "searches_round_10_plus": 0,
+     "most_searches_one_stand": 10
+    },
+    {
+     "arm": "or",
+     "seed": 2094095407,
+     "level": [
+      0,
+      5
+     ],
+     "turns": 1436,
+     "searches": 410,
+     "blocker_waits": 16,
+     "searches_one_candidate": 10,
+     "searches_round_10_plus": 0,
+     "most_searches_one_stand": 10
+    },
+    {
+     "arm": "or",
+     "seed": 704,
+     "level": [
+      0,
+      5
+     ],
+     "turns": 1380,
+     "searches": 401,
+     "blocker_waits": 0,
+     "searches_one_candidate": 0,
+     "searches_round_10_plus": 0,
+     "most_searches_one_stand": 10
+    },
+    {
+     "arm": "mt",
+     "seed": 2,
+     "level": [
+      0,
+      3
+     ],
+     "turns": 1316,
+     "searches": 191,
+     "blocker_waits": 24,
+     "searches_one_candidate": 0,
+     "searches_round_10_plus": 0,
+     "most_searches_one_stand": 10
+    },
+    {
+     "arm": "mt",
+     "seed": 2094095407,
+     "level": [
+      0,
+      4
+     ],
+     "turns": 1248,
+     "searches": 302,
+     "blocker_waits": 0,
+     "searches_one_candidate": 0,
+     "searches_round_10_plus": 0,
+     "most_searches_one_stand": 10
+    },
+    {
+     "arm": "or",
+     "seed": 53,
+     "level": [
+      0,
+      5
+     ],
+     "turns": 1237,
+     "searches": 473,
+     "blocker_waits": 0,
+     "searches_one_candidate": 0,
+     "searches_round_10_plus": 0,
+     "most_searches_one_stand": 10
+    },
+    {
+     "arm": "mt",
+     "seed": 279714031,
+     "level": [
+      0,
+      4
+     ],
+     "turns": 1056,
+     "searches": 320,
+     "blocker_waits": 0,
+     "searches_one_candidate": 0,
+     "searches_round_10_plus": 0,
+     "most_searches_one_stand": 10
+    }
+   ]
+  },
+  "hidden_passage_not_found": {
+   "stays": 4,
+   "turns": 15038,
+   "records": [
+    {
+     "arm": "mt",
+     "seed": 1369,
+     "level": [
+      0,
+      2
+     ],
+     "turns": 10619,
+     "searches": 987,
+     "blocker_waits": 0,
+     "searches_one_candidate": 10,
+     "searches_round_10_plus": 0,
+     "most_searches_one_stand": 30
+    },
+    {
+     "arm": "mt",
+     "seed": 10,
+     "level": [
+      0,
+      1
+     ],
+     "turns": 2080,
+     "searches": 714,
+     "blocker_waits": 0,
+     "searches_one_candidate": 0,
+     "searches_round_10_plus": 0,
+     "most_searches_one_stand": 20
+    },
+    {
+     "arm": "or",
+     "seed": 1375,
+     "level": [
+      0,
+      7
+     ],
+     "turns": 1191,
+     "searches": 373,
+     "blocker_waits": 0,
+     "searches_one_candidate": 0,
+     "searches_round_10_plus": 0,
+     "most_searches_one_stand": 10
+    },
+    {
+     "arm": "mt",
+     "seed": 701,
+     "level": [
+      0,
+      3
+     ],
+     "turns": 1148,
+     "searches": 329,
+     "blocker_waits": 0,
+     "searches_one_candidate": 0,
+     "searches_round_10_plus": 0,
+     "most_searches_one_stand": 20
+    }
+   ]
+  },
+  "route_open_or_other": {
+   "stays": 6,
+   "turns": 13920,
+   "records": [
+    {
+     "arm": "or",
+     "seed": 902,
+     "level": [
+      0,
+      4
+     ],
+     "turns": 5994,
+     "searches": 3690,
+     "blocker_waits": 22,
+     "searches_one_candidate": 2226,
+     "searches_round_10_plus": 2139,
+     "most_searches_one_stand": 2240
+    },
+    {
+     "arm": "or",
+     "seed": 296200318,
+     "level": [
+      0,
+      5
+     ],
+     "turns": 2387,
+     "searches": 784,
+     "blocker_waits": 40,
+     "searches_one_candidate": 41,
+     "searches_round_10_plus": 0,
+     "most_searches_one_stand": 53
+    },
+    {
+     "arm": "or",
+     "seed": 1887524929,
+     "level": [
+      0,
+      5
+     ],
+     "turns": 2105,
+     "searches": 844,
+     "blocker_waits": 0,
+     "searches_one_candidate": 0,
+     "searches_round_10_plus": 0,
+     "most_searches_one_stand": 20
+    },
+    {
+     "arm": "or",
+     "seed": 7,
+     "level": [
+      0,
+      6
+     ],
+     "turns": 1355,
+     "searches": 443,
+     "blocker_waits": 0,
+     "searches_one_candidate": 0,
+     "searches_round_10_plus": 0,
+     "most_searches_one_stand": 30
+    },
+    {
+     "arm": "or",
+     "seed": 700,
+     "level": [
+      0,
+      6
+     ],
+     "turns": 1077,
+     "searches": 421,
+     "blocker_waits": 16,
+     "searches_one_candidate": 0,
+     "searches_round_10_plus": 0,
+     "most_searches_one_stand": 10
+    },
+    {
+     "arm": "mt",
+     "seed": 704,
+     "level": [
+      0,
+      1
+     ],
+     "turns": 1002,
+     "searches": 210,
+     "blocker_waits": 0,
+     "searches_one_candidate": 0,
+     "searches_round_10_plus": 0,
+     "most_searches_one_stand": 10
+    }
+   ]
+  }
+ }
+}

@@ -40,8 +40,9 @@ disagree.
   removed its waste of turns (spot switches down about 70%; blocker waits
   from thousands to a few dozen), but stalled runs did not fall. The freed
   turns became searches that do not find the exit, and Minetown
-  Weak-or-worse or starvation deaths rose. The bottleneck is where the hero
-  searches.
+  Weak-or-worse or starvation deaths rose. Note 0065: in most stalled stays
+  the search has nothing left to find; a monster (43% of stall turns), the
+  Minetown temple (21%) or a locked door (11%) blocks the route.
 - **What the earlier rule attempts showed:** every survival-only or
   escape-only rule moves deaths around instead of adding objectives.
   - 0052 slime-mold food: REJECTED. More food, but stalls still burn it.
@@ -68,8 +69,9 @@ disagree.
    explore-before-search, is shipped (note 0061; seeds 635-664 consumed).
    Note 0062 diagnosed what remains. Rules 0063 (search-spot ping-pong)
    and 0064 (never waiting on sessile blockers) were NOT QUALIFIED in
-   development (notes 0063, 0064). Next: search ranking, starting from a
-   re-measure of note 0062's route classes. The baseline arms at the
+   development (notes 0063, 0064). Note 0065 found that search ranking
+   addresses only 8% of stall turns; a monster on the route blocks 43%.
+   **Open:** the owner chooses the next rule from note 0065's candidates. The baseline arms at the
    shipped commit are in `~/nethack-evidence/0062/base-*-reg` (worktree
    `~/nethack-evidence/0062/baseline`). Candidate 0059 was recorded NOT
    QUALIFIED (note 0059). Fresh seeds 665-694 are the next unused range; check with
